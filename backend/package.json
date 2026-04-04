@@ -6,9 +6,13 @@
   "type": "module",
   "scripts": {
     "start": "wrangler dev",
+    "dev": "wrangler dev",
     "build": "tsc && npm run build:wasm",
     "build:wasm": "echo 'Building WASM...'",
     "deploy": "wrangler deploy",
+    "cf:bootstrap": "node ./scripts/bootstrap-cloudflare.mjs",
+    "db:migrate": "wrangler d1 execute minerhub-db --file=./db/schema.sql",
+    "db:migrate:local": "wrangler d1 execute minerhub-db --local --file=./db/schema.sql",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"
