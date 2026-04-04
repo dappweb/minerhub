@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createClaim, createUser, registerDevice } from './services/api';
+import { claimRewardOnChain, getWalletAddress, registerMinerOnChain, swapMmToUsdtOnChain } from './services/blockchain';
 
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
+  const [mmAmount, setMmAmount] = useState<string>('10');
   const [status, setStatus] = useState<string>('等待连接钱包');
 
   const shortAddress = useMemo(() => {
@@ -12,39 +14,62 @@ export default function App() {
     return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
   }, [walletAddress]);
 
-  const mockConnectWallet = async () => {
-    setStatus('钱包连接中...');
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const demoAddress = '0x9c2Ff52A2185f3eA7f7d6A1CE8D2940E42bAA123';
-    setWalletAddress(demoAddress);
+  const connectWallet = async () => {
+    setStatus('读取链上钱包中...');
     try {
-      const user = await createUser(demoAddress);
+      const address = getWalletAddress();
+      setWalletAddress(address);
+      const user = await createUser(address);
       setUserId(user.id);
       setStatus('钱包已连接，后台账户已创建');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '创建用户失败';
-      setStatus(`钱包已连接，但后台初始化失败：${message}`);
+      const message = error instanceof Error ? error.message : '钱包连接失败';
+      setStatus(`钱包初始化失败：${message}`);
     }
   };
 
-  const mockStartMining = async () => {
+  const startMining = async () => {
     if (!walletAddress || !userId) {
       setStatus('请先连接钱包并初始化账户');
       return;
     }
-    setStatus('提交矿机注册中...');
+    setStatus('提交链上矿机注册中...');
     try {
+      const deviceId = `mobile-${Date.now()}`;
+      const txHash = await registerMinerOnChain(1000, deviceId);
       const device = await registerDevice({
         userId,
-        deviceId: `mobile-${Date.now()}`,
+        deviceId,
         hashrate: 1000,
       });
 
       await createClaim({ userId, amount: '10' });
-      setStatus(`矿机注册成功（${device.id}），已创建收益记录`);
+      setStatus(`链上矿机注册成功（${txHash.slice(0, 10)}...），设备ID ${device.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '启动挖矿失败';
       setStatus(`启动挖矿失败：${message}`);
+    }
+  };
+
+  const claimReward = async () => {
+    setStatus('提交链上领取交易...');
+    try {
+      const txHash = await claimRewardOnChain();
+      setStatus(`领取成功：${txHash.slice(0, 10)}...`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '领取失败';
+      setStatus(`领取失败：${message}`);
+    }
+  };
+
+  const swapMm = async () => {
+    setStatus('提交链上兑换交易...');
+    try {
+      const txHash = await swapMmToUsdtOnChain(mmAmount);
+      setStatus(`兑换成功：${txHash.slice(0, 10)}...`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '兑换失败';
+      setStatus(`兑换失败：${message}`);
     }
   };
 
@@ -65,13 +90,32 @@ export default function App() {
           <Text style={styles.value}>{userId || '未初始化'}</Text>
         </View>
 
-        <TouchableOpacity style={styles.primaryBtn} onPress={mockConnectWallet}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={connectWallet}>
           <Text style={styles.primaryBtnText}>{walletAddress ? '重新连接钱包' : '连接钱包'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryBtn} onPress={mockStartMining}>
+        <TouchableOpacity style={styles.secondaryBtn} onPress={startMining}>
           <Text style={styles.secondaryBtnText}>开始挖矿</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryBtn} onPress={claimReward}>
+          <Text style={styles.secondaryBtnText}>领取收益</Text>
+        </TouchableOpacity>
+
+        <View style={styles.swapBox}>
+          <Text style={styles.label}>兑换 MM 数量</Text>
+          <TextInput
+            style={styles.input}
+            value={mmAmount}
+            onChangeText={setMmAmount}
+            keyboardType="decimal-pad"
+            placeholder="输入 MM 数量"
+            placeholderTextColor="#475569"
+          />
+          <TouchableOpacity style={styles.secondaryBtn} onPress={swapMm}>
+            <Text style={styles.secondaryBtnText}>兑换为 USDT</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.status}>{status}</Text>
       </View>
@@ -141,6 +185,19 @@ const styles = StyleSheet.create({
     color: '#e2e8f0',
     fontSize: 16,
     fontWeight: '600',
+  },
+  swapBox: {
+    gap: 8,
+  },
+  input: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#020617',
+    color: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
   },
   status: {
     color: '#94a3b8',
