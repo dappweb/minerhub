@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { createClaim, createUser, registerDevice } from './services/api';
 
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
   const [status, setStatus] = useState<string>('等待连接钱包');
 
   const shortAddress = useMemo(() => {
@@ -15,17 +17,35 @@ export default function App() {
     await new Promise((resolve) => setTimeout(resolve, 600));
     const demoAddress = '0x9c2Ff52A2185f3eA7f7d6A1CE8D2940E42bAA123';
     setWalletAddress(demoAddress);
-    setStatus('钱包已连接，可开始挖矿');
+    try {
+      const user = await createUser(demoAddress);
+      setUserId(user.id);
+      setStatus('钱包已连接，后台账户已创建');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '创建用户失败';
+      setStatus(`钱包已连接，但后台初始化失败：${message}`);
+    }
   };
 
   const mockStartMining = async () => {
-    if (!walletAddress) {
-      setStatus('请先连接钱包');
+    if (!walletAddress || !userId) {
+      setStatus('请先连接钱包并初始化账户');
       return;
     }
-    setStatus('提交链上挖矿交易中...');
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setStatus('挖矿交易已确认');
+    setStatus('提交矿机注册中...');
+    try {
+      const device = await registerDevice({
+        userId,
+        deviceId: `mobile-${Date.now()}`,
+        hashrate: 1000,
+      });
+
+      await createClaim({ userId, amount: '10' });
+      setStatus(`矿机注册成功（${device.id}），已创建收益记录`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '启动挖矿失败';
+      setStatus(`启动挖矿失败：${message}`);
+    }
   };
 
   return (
@@ -38,6 +58,11 @@ export default function App() {
         <View style={styles.section}>
           <Text style={styles.label}>钱包地址</Text>
           <Text style={styles.value}>{shortAddress}</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>后台用户ID</Text>
+          <Text style={styles.value}>{userId || '未初始化'}</Text>
         </View>
 
         <TouchableOpacity style={styles.primaryBtn} onPress={mockConnectWallet}>

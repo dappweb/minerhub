@@ -12,14 +12,17 @@ declare global {
 const minerAbi = [
   {
     type: 'function',
-    name: 'startMining',
+    name: 'registerMiner',
     stateMutability: 'nonpayable',
-    inputs: [],
+    inputs: [
+      { name: '_hashrate', type: 'uint256' },
+      { name: '_deviceId', type: 'string' },
+    ],
     outputs: [],
   },
   {
     type: 'function',
-    name: 'claimRewards',
+    name: 'claimReward',
     stateMutability: 'nonpayable',
     inputs: [],
     outputs: [],
@@ -53,8 +56,12 @@ const chain = defineChain({
   },
 });
 
-const minerContractAddress = import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined;
-const swapContractAddress = import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined;
+const minerContractAddress =
+  (import.meta.env.VITE_MINING_POOL_ADDRESS as Address | undefined) ??
+  (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined);
+const swapContractAddress =
+  (import.meta.env.VITE_SWAP_ROUTER_ADDRESS as Address | undefined) ??
+  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined);
 
 function getWalletClient() {
   if (!window.ethereum) {
@@ -100,7 +107,7 @@ export async function connectWallet() {
 
 export async function startMiningOnChain() {
   if (!minerContractAddress) {
-    throw new Error('缺少 VITE_MINER_CONTRACT_ADDRESS 配置。');
+    throw new Error('缺少 VITE_MINING_POOL_ADDRESS（或 VITE_MINER_CONTRACT_ADDRESS）配置。');
   }
 
   const account = await ensureConnectedAddress();
@@ -111,7 +118,8 @@ export async function startMiningOnChain() {
     account,
     address: minerContractAddress,
     abi: minerAbi,
-    functionName: 'startMining',
+    functionName: 'registerMiner',
+    args: [1000n, `web-${Date.now()}`],
   });
 
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
@@ -120,7 +128,7 @@ export async function startMiningOnChain() {
 
 export async function claimRewardsOnChain() {
   if (!minerContractAddress) {
-    throw new Error('缺少 VITE_MINER_CONTRACT_ADDRESS 配置。');
+    throw new Error('缺少 VITE_MINING_POOL_ADDRESS（或 VITE_MINER_CONTRACT_ADDRESS）配置。');
   }
 
   const account = await ensureConnectedAddress();
@@ -131,7 +139,7 @@ export async function claimRewardsOnChain() {
     account,
     address: minerContractAddress,
     abi: minerAbi,
-    functionName: 'claimRewards',
+    functionName: 'claimReward',
   });
 
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
@@ -140,7 +148,7 @@ export async function claimRewardsOnChain() {
 
 export async function swapMmToUsdtOnChain(mmAmount: string) {
   if (!swapContractAddress) {
-    throw new Error('缺少 VITE_SWAP_CONTRACT_ADDRESS 配置。');
+    throw new Error('缺少 VITE_SWAP_ROUTER_ADDRESS（或 VITE_SWAP_CONTRACT_ADDRESS）配置。');
   }
 
   const parsedAmount = Number(mmAmount);
