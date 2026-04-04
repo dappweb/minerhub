@@ -22,6 +22,7 @@ MinerHub 是一个包含三端视图的 Web 项目：
 - [**后台管理系统设计** - Admin System](./docs/admin-system-design.md)：6 大管理模块、20+ REST API、MongoDB + Redis 架构、风险控制系统、多签治理机制
 - [**系统集成与部署路线** - Integration Roadmap](./docs/system-integration-roadmap.md)：完整用户旅程、合约部署清单、测试计划（Sepolia / Base Mainnet）、发布时间表（4 月-7 月）
 - [**开发周期与预期费用** - Costs & Timeline](./docs/development-timeline-and-costs.md)：人力成本 ($375K)、基础设施 ($8K)、融资建议 ($600K-$800K)、ROI 预测与风险评估
+- [**投资决策速查表** - Quick Reference](./docs/investment-quickref.md)：融资规模、成本构成、月度投入、ROI 预测、决策检查清单
 
 ## 本地运行
 
