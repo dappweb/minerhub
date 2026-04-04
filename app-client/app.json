@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "MinerHub",
+    "slug": "minerhub-mobile",
+    "scheme": "minerhub",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "bundleIdentifier": "com.minerhub.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.minerhub.mobile"
+    },
+    "extra": {
+      "rpcUrl": "https://mainnet.base.org",
+      "chainId": 8453,
+      "minerContractAddress": "0x0000000000000000000000000000000000000000",
+      "swapContractAddress": "0x0000000000000000000000000000000000000000"
+    }
+  }
+}

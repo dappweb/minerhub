@@ -61,16 +61,16 @@ export default function AppPreview() {
               viewport={{ once: true }}
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-sm font-medium mb-6"
             >
-              Android 客户端已就绪
+              Android / iOS 客户端已就绪
             </motion.div>
-            <h2 className="text-3xl md:text-4xl font-bold mb-6">专属 Android 挖矿钱包</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">双端兼容挖矿钱包</h2>
             <p className="text-slate-400 text-lg mb-10 leading-relaxed">
-              用户只需在安卓手机上安装 MinerHub App，即可一键生成本地加密钱包。利用手机闲置算力进行静默挖矿，产出的 MM 代币可直接在 App 内兑换为 USDT 并提现。
+              用户只需在 Android 或 iOS 手机上安装 MinerHub App，即可一键生成本地加密钱包。利用手机闲置算力进行静默挖矿，产出的 MM 代币可直接在 App 内兑换为 USDT 并提现。
             </p>
             
             <div className="space-y-8">
               {[
-                { step: '01', title: '安装与生成钱包', desc: '下载 Android 客户端，一键生成基于 TEE 保护的本地非托管钱包，私钥完全由用户掌控。' },
+                { step: '01', title: '安装与生成钱包', desc: '下载双端客户端，一键生成基于 TEE 保护的本地非托管钱包，私钥完全由用户掌控。' },
                 { step: '02', title: '一键开启挖矿', desc: '点击启动，后台智能调度算力，自动控制温度与功耗，完全不影响手机日常使用。' },
                 { step: '03', title: '随时兑换 USDT', desc: '挖矿收益实时到账，内置 Swap 功能，可随时将 MM 代币兑换为 USDT 并提现至交易所。' }
               ].map((item, i) => (

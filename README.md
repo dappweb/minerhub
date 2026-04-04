@@ -6,6 +6,12 @@ MinerHub 是一个包含三端视图的 Web 项目：
 - 后台管理系统
 - 挖矿 App（钱包连接、链上挖矿、链上兑换）
 
+当前官网已增加：
+
+- 钱包登录进入后台管理系统入口
+- Android / iOS 挖矿 App 下载入口
+- 双端客户端工程（React Native Expo）：`app-client/`
+
 ## 本地运行
 
 1. 安装依赖
@@ -26,6 +32,8 @@ cp .env.example .env.local
 - `VITE_RPC_URL`
 - `VITE_MINER_CONTRACT_ADDRESS`
 - `VITE_SWAP_CONTRACT_ADDRESS`
+- `VITE_ANDROID_DOWNLOAD_URL`
+- `VITE_IOS_DOWNLOAD_URL`
 
 4. 启动开发环境
 
@@ -68,3 +76,16 @@ npm run deploy:cf
 ```
 
 `wrangler.toml` 已包含基础配置，适用于当前静态站点部署。
+
+## App 客户端（双端兼容）
+
+`app-client/` 已调整为 React Native Expo 工程，支持 Android 与 iOS。
+
+```bash
+cd app-client
+npm install
+npm run start
+```
+
+- Android 调试：`npm run android`
+- iOS 调试：`npm run ios`

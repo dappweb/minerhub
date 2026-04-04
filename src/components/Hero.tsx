@@ -17,7 +17,7 @@ export default function Hero() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
             </span>
-            Android 挖矿客户端已发布
+            Android / iOS 挖矿客户端已发布
           </motion.div>
           
           <motion.h1 
@@ -35,7 +35,7 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-xl text-slate-400 mb-10 leading-relaxed"
           >
-            安装 Android 客户端，一键生成本地钱包。将手机从"消费电子"升级为"生产力工具"，利用闲置算力挖矿，随时随地兑换 USDT 收益。
+            安装 Android / iOS 客户端，一键生成本地钱包。将手机从"消费电子"升级为"生产力工具"，利用闲置算力挖矿，随时随地兑换 USDT 收益。
           </motion.p>
           
           <motion.div 
@@ -46,7 +46,7 @@ export default function Hero() {
           >
             <button className="px-8 py-4 rounded-full bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shadow-[0_0_30px_-5px_rgba(6,182,212,0.5)] flex items-center gap-2">
               <Download size={20} />
-              下载 Android 客户端
+              下载双端客户端
             </button>
             <button className="px-8 py-4 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors border border-slate-700">
               查看操作指南
@@ -61,7 +61,7 @@ export default function Hero() {
           className="mt-24 grid grid-cols-1 md:grid-cols-4 gap-6"
         >
           {[
-            { icon: Smartphone, title: 'Android 专属', desc: '一键安装，极简体验' },
+            { icon: Smartphone, title: '双端兼容', desc: 'Android / iOS 一致体验' },
             { icon: Zap, title: '智能挖矿', desc: '后台静默运行' },
             { icon: Shield, title: 'TEE安全', desc: '本地钱包私钥保护' },
             { icon: Coins, title: '一键兑换', desc: 'MM 随时兑换 USDT' },
