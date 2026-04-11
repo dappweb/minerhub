@@ -1,7 +1,7 @@
 {
-  "name": "minerhub-backend",
+  "name": "coin-planet-backend",
   "version": "1.0.0",
-  "description": "MinerHub backend API - Cloudflare Workers",
+  "description": "Coin Planet backend API - Cloudflare Workers",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "build:wasm": "echo 'Building WASM...'",
     "deploy": "wrangler deploy",
     "cf:bootstrap": "node ./scripts/bootstrap-cloudflare.mjs",
-    "db:migrate": "wrangler d1 execute minerhub-db --file=./db/schema.sql",
-    "db:migrate:local": "wrangler d1 execute minerhub-db --local --file=./db/schema.sql",
+    "db:migrate": "wrangler d1 execute coin-planet-db --file=./db/schema.sql",
+    "db:migrate:local": "wrangler d1 execute coin-planet-db --local --file=./db/schema.sql",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"

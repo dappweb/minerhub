@@ -1,11 +1,23 @@
 import { createId, nowIso } from "../lib/id";
-import { badRequest, json } from "../lib/response";
+import { badRequest, json, unauthorized } from "../lib/response";
+import { extractAndVerifyAuth } from "../lib/auth";
 import type { Env } from "../types/env";
 
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
-    const body = (await request.json().catch(() => null)) as { userId?: string; amount?: string } | null;
+    // 验证签名
+    const authResult = await extractAndVerifyAuth(request);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { userId?: string; amount?: string; wallet?: string } | null;
     if (!body?.userId || !body.amount) return badRequest("userId and amount are required");
+
+    // 验证用户钱包一致性
+    if (body.wallet && body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch");
+    }
 
     const id = createId("clm");
     const now = nowIso();

@@ -1,0 +1,19 @@
+{
+  "network": "sepolia",
+  "timestamp": "2026-04-10T15:48:14.836Z",
+  "deployer": "0x744447d8580EB900b199e852C132F626247a36F7",
+  "contracts": {
+    "SUPER": "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357",
+    "USDT_Mock": "0x38AEe19aC5f2DdCFc4D6464FD2E96365116CC676",
+    "MiningPool": "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE",
+    "SwapRouter": "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
+  },
+  "initialization": {
+    "liquiditySuper": "50000000.0",
+    "liquidityUSDT": "50000.0",
+    "superMinters": [
+      "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE",
+      "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
+    ]
+  }
+}

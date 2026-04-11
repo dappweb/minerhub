@@ -1,15 +1,27 @@
 import { createId, nowIso } from "../lib/id";
-import { badRequest, json } from "../lib/response";
+import { badRequest, json, unauthorized } from "../lib/response";
+import { extractAndVerifyAuth } from "../lib/auth";
 import type { Env } from "../types/env";
 
 export async function handleDevices(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
+    // 验证签名
+    const authResult = await extractAndVerifyAuth(request);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
     const body = (await request.json().catch(() => null)) as
-      | { userId?: string; deviceId?: string; hashrate?: number }
+      | { userId?: string; deviceId?: string; hashrate?: number; wallet?: string }
       | null;
 
     if (!body?.userId || !body.deviceId || typeof body.hashrate !== "number") {
       return badRequest("userId, deviceId, hashrate are required");
+    }
+
+    // 验证用户钱包一致性（可选，增强安全）
+    if (body.wallet && body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch");
     }
 
     const id = createId("dev");

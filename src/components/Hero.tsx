@@ -1,5 +1,5 @@
-import { motion } from 'motion/react';
-import { Smartphone, Zap, Shield, Coins, Download } from 'lucide-react';
+﻿import { motion } from 'motion/react';
+import { Smartphone, Zap, Shield, Coins, ArrowRight } from 'lucide-react';
 
 export default function Hero() {
   return (
@@ -26,7 +26,7 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-cyan-100 to-cyan-400"
           >
-            这部手机会自己赚钱
+            手机即节点，链上即收益
           </motion.h1>
           
           <motion.p 
@@ -35,7 +35,7 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-xl text-slate-400 mb-10 leading-relaxed"
           >
-            安装 Android / iOS 客户端，一键生成本地钱包。将手机从"消费电子"升级为"生产力工具"，利用闲置算力挖矿，随时随地兑换 USDT 收益。
+            连接管理员钱包后可直接进入数据面板，实时查看矿工状态、全网算力与链上收益发放。下载客户端即可开始设备注册和算力同步。
           </motion.p>
           
           <motion.div 
@@ -44,13 +44,13 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex flex-wrap items-center justify-center gap-4"
           >
-            <button className="px-8 py-4 rounded-full bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shadow-[0_0_30px_-5px_rgba(6,182,212,0.5)] flex items-center gap-2">
-              <Download size={20} />
-              下载双端客户端
-            </button>
-            <button className="px-8 py-4 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors border border-slate-700">
-              查看操作指南
-            </button>
+            <a href="#quick-entry" className="px-8 py-4 rounded-full bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shadow-[0_0_30px_-5px_rgba(6,182,212,0.5)] inline-flex items-center gap-2">
+              连接钱包进入后台
+              <ArrowRight size={18} />
+            </a>
+            <a href="#flow-steps" className="px-8 py-4 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors border border-slate-700 inline-flex items-center gap-2">
+              查看上手流程
+            </a>
           </motion.div>
         </div>
 
@@ -63,8 +63,8 @@ export default function Hero() {
           {[
             { icon: Smartphone, title: '双端兼容', desc: 'Android / iOS 一致体验' },
             { icon: Zap, title: '智能挖矿', desc: '后台静默运行' },
-            { icon: Shield, title: 'TEE安全', desc: '本地钱包私钥保护' },
-            { icon: Coins, title: '一键兑换', desc: 'MM 随时兑换 USDT' },
+            { icon: Shield, title: 'TEE 安全', desc: '本地钱包私钥保护' },
+            { icon: Coins, title: '一键兑换', desc: 'SUPER 随时兑换 USDT' },
           ].map((item, i) => (
             <div key={i} className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm">
               <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 mb-4">
@@ -79,3 +79,4 @@ export default function Hero() {
     </section>
   );
 }
+

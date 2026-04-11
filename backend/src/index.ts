@@ -18,7 +18,7 @@ export default {
     try {
       const parts = getPathParts(request.url);
       if (parts.length === 0) {
-        return json({ service: "minerhub-api", status: "ok", timestamp: new Date().toISOString() });
+        return json({ service: "coin-planet-api", status: "ok", timestamp: new Date().toISOString() });
       }
 
       if (parts[0] !== "api") return notFound();

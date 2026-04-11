@@ -1,273 +1,273 @@
-# MinerHub 智能合约
+﻿# Coin Planet 鏅鸿兘鍚堢害
 
-完整的 MinerHub 挖矿生态智能合约套件。
+瀹屾暣鐨?Coin Planet 鎸栫熆鐢熸€佹櫤鑳藉悎绾﹀浠躲€?
 
-## 📋 合约清单
+## 馃搵 鍚堢害娓呭崟
 
-| 合约 | 功能 | 行数 |
+| 鍚堢害 | 鍔熻兘 | 琛屾暟 |
 |------|------|------|
-| **MM.sol** | ERC20 代币，支持铸造和销毁 | ~150 |
-| **USDT_Mock.sol** | Sepolia 测试网模拟 USDT | ~30 |
-| **MiningPool.sol** | 核心挖矿逻辑，奖励计算分配 | ~400 |
-| **SwapRouter.sol** | AMM 流动性交换 (MM ↔ USDT) | ~500 |
+| **SUPER.sol** | ERC20 浠ｅ竵锛屾敮鎸侀摳閫犲拰閿€姣?| ~150 |
+| **USDT_Mock.sol** | Sepolia 娴嬭瘯缃戞ā鎷?USDT | ~30 |
+| **MiningPool.sol** | 鏍稿績鎸栫熆閫昏緫锛屽鍔辫绠楀垎閰?| ~400 |
+| **SwapRouter.sol** | AMM 娴佸姩鎬т氦鎹?(SUPER 鈫?USDT) | ~500 |
 
-**总计**：~1080 行 Solidity 代码
+**鎬昏**锛殈1080 琛?Solidity 浠ｇ爜
 
 ---
 
-## 🚀 快速开始
+## 馃殌 蹇€熷紑濮?
 
-### 1. 安装依赖
+### 1. 瀹夎渚濊禆
 
 ```bash
 cd contracts
 npm install
 ```
 
-### 2. 配置环境变量
+### 2. 閰嶇疆鐜鍙橀噺
 
-创建 `.env` 文件：
+鍒涘缓 `.env` 鏂囦欢锛?
 
 ```env
 SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
 DEPLOYER_PRIVATE_KEY=0x...
-ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY (可选)
+ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY (鍙€?
 ```
 
-**获取这些值：**
-- **SEPOLIA_RPC_URL**：访问 [Infura](https://www.infura.io/) 或 [Alchemy](https://www.alchemy.com/) 获取免费 API Key
-- **DEPLOYER_PRIVATE_KEY**：从 MetaMask 导出私钥（需要有 Sepolia ETH 余额）
-- **ETHERSCAN_API_KEY**：访问 [Etherscan](https://etherscan.io/apis) 获取 (用于合约验证)
+**鑾峰彇杩欎簺鍊硷細**
+- **SEPOLIA_RPC_URL**锛氳闂?[Infura](https://www.infura.io/) 鎴?[Alchemy](https://www.alchemy.com/) 鑾峰彇鍏嶈垂 API Key
+- **DEPLOYER_PRIVATE_KEY**锛氫粠 MetaMask 瀵煎嚭绉侀挜锛堥渶瑕佹湁 Sepolia ETH 浣欓锛?
+- **ETHERSCAN_API_KEY**锛氳闂?[Etherscan](https://etherscan.io/apis) 鑾峰彇 (鐢ㄤ簬鍚堢害楠岃瘉)
 
-### 3. 编译合约
+### 3. 缂栬瘧鍚堢害
 
 ```bash
 npm run compile
 ```
 
-输出：
+杈撳嚭锛?
 ```
 Compiled 4 Solidity contracts successfully
 ```
 
-### 4. 运行测试
+### 4. 杩愯娴嬭瘯
 
 ```bash
 npm test
 ```
 
-输出：
+杈撳嚭锛?
 ```
-MinerHub Contracts
-  MM Token
-    ✓ Should have correct initial state
-    ✓ Should allow minting only by minter
+Coin Planet Contracts
+  SUPER Token
+    鉁?Should have correct initial state
+    鉁?Should allow minting only by minter
   MiningPool
-    ✓ Should allow miner registration
+    鉁?Should allow miner registration
     ...
 ```
 
-### 5. 部署到 Sepolia
+### 5. 閮ㄧ讲鍒?Sepolia
 
 ```bash
 npm run deploy:sepolia
 ```
 
-输出：
+杈撳嚭锛?
 ```
-🚀 MinerHub Smart Contracts Deployment Started
-✓ Deployer Address: 0x...
-✓ Deployer Balance: 0.5 ETH
+馃殌 Coin Planet Smart Contracts Deployment Started
+鉁?Deployer Address: 0x...
+鉁?Deployer Balance: 0.5 ETH
 
-📦 Deploying MM Token...
-✓ MM Token deployed: 0x...
+馃摝 Deploying SUPER Token...
+鉁?SUPER Token deployed: 0x...
 
-📦 Deploying USDT Mock...
-✓ USDT Mock deployed: 0x...
+馃摝 Deploying USDT Mock...
+鉁?USDT Mock deployed: 0x...
 
-📦 Deploying MiningPool...
-✓ MiningPool deployed: 0x...
+馃摝 Deploying MiningPool...
+鉁?MiningPool deployed: 0x...
 
-📦 Deploying SwapRouter...
-✓ SwapRouter deployed: 0x...
+馃摝 Deploying SwapRouter...
+鉁?SwapRouter deployed: 0x...
 
-✅ Add these to your .env.local:
-VITE_MM_ADDRESS=0x...
+鉁?Add these to your .env.local:
+VITE_SUPER_ADDRESS=0x...
 VITE_MINING_POOL_ADDRESS=0x...
 VITE_SWAP_ROUTER_ADDRESS=0x...
 ```
 
 ---
 
-## 📚 合约详解
+## 馃摎 鍚堢害璇﹁В
 
-### MM Token
+### SUPER Token
 
 ```solidity
-IERC20 标准 + 额外功能：
-- name: "MinerHub Token"
-- symbol: "MM"
-- total supply: 10 亿
-- mint(): 只有授权的 Minter 可以铸造
-- burn(): 任何持有者可以销毁代币
+IERC20 鏍囧噯 + 棰濆鍔熻兘锛?
+- name: "Coin Planet Token"
+- symbol: "SUPER"
+- total supply: 10 浜?
+- mint(): 鍙湁鎺堟潈鐨?Minter 鍙互閾搁€?
+- burn(): 浠讳綍鎸佹湁鑰呭彲浠ラ攢姣佷唬甯?
 ```
 
-**主要方法：**
+**涓昏鏂规硶锛?*
 ```solidity
-addMinter(address _minter)           // 添加铸造者权限
-removeMinter(address _minter)        // 移除铸造者权限
-mint(address _to, uint256 _amount)   // 铸造新代币
-burn(uint256 _amount)                // 销毁代币
+addMinter(address _minter)           // 娣诲姞閾搁€犺€呮潈闄?
+removeMinter(address _minter)        // 绉婚櫎閾搁€犺€呮潈闄?
+mint(address _to, uint256 _amount)   // 閾搁€犳柊浠ｅ竵
+burn(uint256 _amount)                // 閿€姣佷唬甯?
 ```
 
 ---
 
 ### MiningPool
 
-核心挖矿逻辑合约。
+鏍稿績鎸栫熆閫昏緫鍚堢害銆?
 
-**关键概念：**
-- **算力 (Hashrate)**：矿工计算能力的度量
-- **奖励 (Reward)**：根据算力和时间计算的 MM 代币奖励
-- **冷却期 (Cooldown)**：两次领取奖励之间的最小时间间隔
-- **锁仓期 (Lockup)**：首次注册后无法领取奖励的时间
+**鍏抽敭姒傚康锛?*
+- **绠楀姏 (Hashrate)**锛氱熆宸ヨ绠楄兘鍔涚殑搴﹂噺
+- **濂栧姳 (Reward)**锛氭牴鎹畻鍔涘拰鏃堕棿璁＄畻鐨?SUPER 浠ｅ竵濂栧姳
+- **鍐峰嵈鏈?(Cooldown)**锛氫袱娆￠鍙栧鍔变箣闂寸殑鏈€灏忔椂闂撮棿闅?
+- **閿佷粨鏈?(Lockup)**锛氶娆℃敞鍐屽悗鏃犳硶棰嗗彇濂栧姳鐨勬椂闂?
 
-**主要方法：**
+**涓昏鏂规硶锛?*
 ```solidity
 registerMiner(uint256 _hashrate, string _deviceId)
-  -> 注册矿工，初始化算力
+  -> 娉ㄥ唽鐭垮伐锛屽垵濮嬪寲绠楀姏
 
 updateHashrate(uint256 _newHashrate)
-  -> 更新矿工算力（检测异常增长）
+  -> 鏇存柊鐭垮伐绠楀姏锛堟娴嬪紓甯稿闀匡級
 
 calculatePendingReward(address _miner)
-  -> 计算待领取奖励
+  -> 璁＄畻寰呴鍙栧鍔?
 
 claimReward()
-  -> 领取奖励（需满足冷却期）
+  -> 棰嗗彇濂栧姳锛堥渶婊¤冻鍐峰嵈鏈燂級
 
 getMinerInfo(address _miner)
-  -> 获取矿工完整信息
+  -> 鑾峰彇鐭垮伐瀹屾暣淇℃伅
 ```
 
-**奖励公式：**
+**濂栧姳鍏紡锛?*
 ```
-日产总量 = 284.7222 万 MM
+鏃ヤ骇鎬婚噺 = 284.7222 涓?SUPER
 
-矿工日奖励 = 日产总量 × (矿工算力 / 全球总算力)
+鐭垮伐鏃ュ鍔?= 鏃ヤ骇鎬婚噺 脳 (鐭垮伐绠楀姏 / 鍏ㄧ悆鎬荤畻鍔?
 
-实时奖励 = 矿工日奖励 × (经过时间 / 一天)
+瀹炴椂濂栧姳 = 鐭垮伐鏃ュ鍔?脳 (缁忚繃鏃堕棿 / 涓€澶?
 ```
 
-**参数配置：**
-- `MIN_HASHRATE`：100 (0.1 MH/s)
-- `MAX_HASHRATE`：10,000,000 (10 MH/s)
-- `claimCooldown`：1 天
-- `lockupPeriod`：7 天
+**鍙傛暟閰嶇疆锛?*
+- `MIN_HASHRATE`锛?00 (0.1 MH/s)
+- `MAX_HASHRATE`锛?0,000,000 (10 MH/s)
+- `claimCooldown`锛? 澶?
+- `lockupPeriod`锛? 澶?
 
 ---
 
 ### SwapRouter
 
-AMM (自动做市商) 流动性交换合约。
+AMM (鑷姩鍋氬競鍟? 娴佸姩鎬т氦鎹㈠悎绾︺€?
 
-**流动性池组成：**
-- **初始 MM**：5000 万
-- **初始 USDT**：5 万
-- **初始价格**：1 MM ≈ 0.001 USDT
+**娴佸姩鎬ф睜缁勬垚锛?*
+- **鍒濆 SUPER**锛?000 涓?
+- **鍒濆 USDT**锛? 涓?
+- **鍒濆浠锋牸**锛? SUPER 鈮?0.001 USDT
 
-**费用结构：**
-- **总手续费**：0.5%
-  - 70% → LP (流动性提供者)
-  - 20% → 平台
-  - 10% → 生态
+**璐圭敤缁撴瀯锛?*
+- **鎬绘墜缁垂**锛?.5%
+  - 70% 鈫?LP (娴佸姩鎬ф彁渚涜€?
+  - 20% 鈫?骞冲彴
+  - 10% 鈫?鐢熸€?
 
-**主要方法：**
+**涓昏鏂规硶锛?*
 ```solidity
-initializeLiquidity(uint256 _mmAmount, uint256 _usdtAmount)
-  -> 初始化流动性池 (仅 Owner，只能调用一次)
+initializeLiquidity(uint256 _superAmount, uint256 _usdtAmount)
+  -> 鍒濆鍖栨祦鍔ㄦ€ф睜 (浠?Owner锛屽彧鑳借皟鐢ㄤ竴娆?
 
-addLiquidity(uint256 _mmAmount, uint256 _usdtAmount)
-  -> 添加流动性，获得 LP 份额
+addLiquidity(uint256 _superAmount, uint256 _usdtAmount)
+  -> 娣诲姞娴佸姩鎬э紝鑾峰緱 LP 浠介
 
 removeLiquidity(uint256 _sharesToBurn)
-  -> 移除流动性，提取代币
+  -> 绉婚櫎娴佸姩鎬э紝鎻愬彇浠ｅ竵
 
-swapMmToUsdt(uint256 _mmAmount)
-  -> MM 兑换 USDT
+swapSuperToUsdt(uint256 _superAmount)
+  -> SUPER 鍏戞崲 USDT
 
-swapUsdtToMm(uint256 _usdtAmount)
-  -> USDT 兑换 MM
+swapUsdtToSuper(uint256 _usdtAmount)
+  -> USDT 鍏戞崲 SUPER
 
 getPrice()
-  -> 获取当前 MM/USDT 价格
+  -> 鑾峰彇褰撳墠 SUPER/USDT 浠锋牸
 ```
 
-**AMM 公式 (x × y = k)**：
+**AMM 鍏紡 (x 脳 y = k)**锛?
 ```
-假设当前池状态：
-- reserveMM = X
+鍋囪褰撳墠姹犵姸鎬侊細
+- reserveSuper = X
 - reserveUSDT = Y
-- k = X × Y (常数)
+- k = X 脳 Y (甯告暟)
 
-用户交换 A 个 MM 获得多少 USDT？
-1. 减去手续费：A' = A × 0.995
-2. 计算新池状态：newX = X + A'
-3. 计算输出：newY = k / newX
-4. 用户获得：Y - newY
+鐢ㄦ埛浜ゆ崲 A 涓?SUPER 鑾峰緱澶氬皯 USDT锛?
+1. 鍑忓幓鎵嬬画璐癸細A' = A 脳 0.995
+2. 璁＄畻鏂版睜鐘舵€侊細newX = X + A'
+3. 璁＄畻杈撳嚭锛歯ewY = k / newX
+4. 鐢ㄦ埛鑾峰緱锛歒 - newY
 ```
 
 ---
 
-## 🧪 测试
+## 馃И 娴嬭瘯
 
-### 运行所有测试
+### 杩愯鎵€鏈夋祴璇?
 
 ```bash
 npm test
 ```
 
-### 生成覆盖率报告
+### 鐢熸垚瑕嗙洊鐜囨姤鍛?
 
 ```bash
 npm run coverage
 ```
 
-### 运行特定测试
+### 杩愯鐗瑰畾娴嬭瘯
 
 ```bash
 npx hardhat test test/MiningPool.test.ts
 ```
 
-### 本地节点调试
+### 鏈湴鑺傜偣璋冭瘯
 
 ```bash
 npx hardhat node
 ```
 
-在另一个终端：
+鍦ㄥ彟涓€涓粓绔細
 ```bash
 npx hardhat run scripts/deploy.ts --network localhost
 ```
 
 ---
 
-## 🔗 区块浏览器验证
+## 馃敆 鍖哄潡娴忚鍣ㄩ獙璇?
 
-### 验证合约
+### 楠岃瘉鍚堢害
 
 ```bash
 npm run verify -- CONTRACT_ADDRESS constructor_args
 ```
 
-示例：
+绀轰緥锛?
 ```bash
 npm run verify -- 0x1234567890123456789012345678901234567890 "0x0000000000000000000000000000000000000000"
 ```
 
-### 查看合约
+### 鏌ョ湅鍚堢害
 
-部署后，访问以下链接在 Sepolia 浏览器查看：
+閮ㄧ讲鍚庯紝璁块棶浠ヤ笅閾炬帴鍦?Sepolia 娴忚鍣ㄦ煡鐪嬶細
 
 ```
 https://sepolia.etherscan.io/address/0x{CONTRACT_ADDRESS}
@@ -275,78 +275,78 @@ https://sepolia.etherscan.io/address/0x{CONTRACT_ADDRESS}
 
 ---
 
-## 🚨 安全考虑
+## 馃毃 瀹夊叏鑰冭檻
 
-### 已实现的防护
+### 宸插疄鐜扮殑闃叉姢
 
-- ✅ ReentrancyGuard：防止重入攻击
-- ✅ 访问控制：Owner/Minter 权限检查
-- ✅ 输入验证：合约参数范围检查
-- ✅ SafeMath：Solidity 0.8+ 内置上溢/下溢保护
-- ✅ 异常检测：矿工可疑分数追踪
+- 鉁?ReentrancyGuard锛氶槻姝㈤噸鍏ユ敾鍑?
+- 鉁?璁块棶鎺у埗锛歄wner/Minter 鏉冮檺妫€鏌?
+- 鉁?杈撳叆楠岃瘉锛氬悎绾﹀弬鏁拌寖鍥存鏌?
+- 鉁?SafeMath锛歋olidity 0.8+ 鍐呯疆涓婃孩/涓嬫孩淇濇姢
+- 鉁?寮傚父妫€娴嬶細鐭垮伐鍙枒鍒嗘暟杩借釜
 
-### 审计建议
+### 瀹¤寤鸿
 
-1. **内部审计**：
-   - [ ] 代码走查
-   - [ ] 单元测试覆盖 >90%
-   - [ ] 集成测试所有流程
+1. **鍐呴儴瀹¤**锛?
+   - [ ] 浠ｇ爜璧版煡
+   - [ ] 鍗曞厓娴嬭瘯瑕嗙洊 >90%
+   - [ ] 闆嗘垚娴嬭瘯鎵€鏈夋祦绋?
 
-2. **外部审计**（推荐）：
-   - [ ] 提交给 CertiK 或 Trail of Bits
-   - [ ] 修复所有发现的问题
-   - [ ] 获得审计报告
+2. **澶栭儴瀹¤**锛堟帹鑽愶級锛?
+   - [ ] 鎻愪氦缁?CertiK 鎴?Trail of Bits
+   - [ ] 淇鎵€鏈夊彂鐜扮殑闂
+   - [ ] 鑾峰緱瀹¤鎶ュ憡
 
-3. **部署前检查清单**：
-   - [ ] 所有测试通过
-   - [ ] gas 优化完成
-   - [ ] 权限配置检查
-   - [ ] 应急暂停机制配置
+3. **閮ㄧ讲鍓嶆鏌ユ竻鍗?*锛?
+   - [ ] 鎵€鏈夋祴璇曢€氳繃
+   - [ ] gas 浼樺寲瀹屾垚
+   - [ ] 鏉冮檺閰嶇疆妫€鏌?
+   - [ ] 搴旀€ユ殏鍋滄満鍒堕厤缃?
 
 ---
 
-## 📊 Gas 估计
+## 馃搳 Gas 浼拌
 
-| 操作 | Gas 消耗 | USDT 成本<br/>(20 Gwei) |
+| 鎿嶄綔 | Gas 娑堣€?| USDT 鎴愭湰<br/>(20 Gwei) |
 |------|--------|--------|
-| MM 转账 | ~50K | $0.01 |
-| 矿工注册 | ~80K | $0.02 |
-| 更新算力 | ~60K | $0.01 |
-| 领取奖励 | ~120K | $0.03 |
-| Swap (MM→USDT) | ~150K | $0.04 |
-| 添加流动性 | ~180K | $0.05 |
+| SUPER 杞处 | ~50K | $0.01 |
+| 鐭垮伐娉ㄥ唽 | ~80K | $0.02 |
+| 鏇存柊绠楀姏 | ~60K | $0.01 |
+| 棰嗗彇濂栧姳 | ~120K | $0.03 |
+| Swap (MM鈫扷SDT) | ~150K | $0.04 |
+| 娣诲姞娴佸姩鎬?| ~180K | $0.05 |
 
 ---
 
-## 🎯 部署清单
+## 馃幆 閮ㄧ讲娓呭崟
 
-- [ ] 编译所有合约成功
-- [ ] 所有测试通过
-- [ ] Sepolia 部署成功
-- [ ] 流动性池初始化
-- [ ] 梅权限配置完成
-- [ ] Etherscan 验证成功
-- [ ] 前端 .env 更新
-- [ ] 后台合约地址配置更新
-- [ ] 移动应用 ABI 更新
-- [ ] CertiK 审计通过
+- [ ] 缂栬瘧鎵€鏈夊悎绾︽垚鍔?
+- [ ] 鎵€鏈夋祴璇曢€氳繃
+- [ ] Sepolia 閮ㄧ讲鎴愬姛
+- [ ] 娴佸姩鎬ф睜鍒濆鍖?
+- [ ] 姊呮潈闄愰厤缃畬鎴?
+- [ ] Etherscan 楠岃瘉鎴愬姛
+- [ ] 鍓嶇 .env 鏇存柊
+- [ ] 鍚庡彴鍚堢害鍦板潃閰嶇疆鏇存柊
+- [ ] 绉诲姩搴旂敤 ABI 鏇存柊
+- [ ] CertiK 瀹¤閫氳繃
 
 ---
 
-## 📱 与前端集成
+## 馃摫 涓庡墠绔泦鎴?
 
-### 获取合约 ABI
+### 鑾峰彇鍚堢害 ABI
 
-部署后，ABI 自动生成在：
+閮ㄧ讲鍚庯紝ABI 鑷姩鐢熸垚鍦細
 ```
 artifacts/contracts/
-├── MM.sol/MM.json
-├── MiningPool.sol/MiningPool.json
-├── SwapRouter.sol/SwapRouter.json
-└── USDT_Mock.sol/USDT_Mock.json
+鈹溾攢鈹€ SUPER.sol/SUPER.json
+鈹溾攢鈹€ MiningPool.sol/MiningPool.json
+鈹溾攢鈹€ SwapRouter.sol/SwapRouter.json
+鈹斺攢鈹€ USDT_Mock.sol/USDT_Mock.json
 ```
 
-### 前端调用示例
+### 鍓嶇璋冪敤绀轰緥
 
 ```typescript
 import { ethers } from "ethers";
@@ -361,54 +361,56 @@ const miningPool = new ethers.Contract(
   signer
 );
 
-// 注册矿工
+// 娉ㄥ唽鐭垮伐
 const tx = await miningPool.registerMiner(1000, "device-1");
 await tx.wait();
 
-// 查询奖励
+// 鏌ヨ濂栧姳
 const pending = await miningPool.calculatePendingReward(userAddress);
 console.log("Pending reward:", ethers.formatEther(pending));
 
-// 领取奖励
+// 棰嗗彇濂栧姳
 const claimTx = await miningPool.claimReward();
 await claimTx.wait();
 ```
 
 ---
 
-## 🔧 故障排除
+## 馃敡 鏁呴殰鎺掗櫎
 
 ### "Miner not registered"
 
-确保已调用 `registerMiner()` 初始化矿工账户。
+纭繚宸茶皟鐢?`registerMiner()` 鍒濆鍖栫熆宸ヨ处鎴枫€?
 
 ### "Claim cooldown not met"
 
-需要等待 1 天才能再次领取奖励。
+闇€瑕佺瓑寰?1 澶╂墠鑳藉啀娆￠鍙栧鍔便€?
 
 ### "Insufficient liquidity"
 
-Swap 池中流动性不足，稍后重试或增加流动性。
+Swap 姹犱腑娴佸姩鎬т笉瓒筹紝绋嶅悗閲嶈瘯鎴栧鍔犳祦鍔ㄦ€с€?
 
-### 部署失败 "Insufficient funds"
+### 閮ㄧ讲澶辫触 "Insufficient funds"
 
-Deployer 账户 Sepolia ETH 余额不足。从水龙头获取 Sepolia ETH：
+Deployer 璐︽埛 Sepolia ETH 浣欓涓嶈冻銆備粠姘撮緳澶磋幏鍙?Sepolia ETH锛?
 - https://www.alchemy.com/faucets/sepolia
 - https://sepolia-faucet.pk910.de/
 
 ---
 
-## 📞 支持
+## 馃摓 鏀寔
 
-遇到问题？
+閬囧埌闂锛?
 
-1. 检查本文档的故障排除部分
-2. 查看合约注释和文档字符串
-3. 运行测试确保本地环境正确
-4. 提交 Issue 附上完整错误日志
+1. 妫€鏌ユ湰鏂囨。鐨勬晠闅滄帓闄ら儴鍒?
+2. 鏌ョ湅鍚堢害娉ㄩ噴鍜屾枃妗ｅ瓧绗︿覆
+3. 杩愯娴嬭瘯纭繚鏈湴鐜姝ｇ‘
+4. 鎻愪氦 Issue 闄勪笂瀹屾暣閿欒鏃ュ織
 
 ---
 
-**智能合约版本**：1.0.0  
-**Solidity 版本**：0.8.24  
-**最后更新**：2026-04-04
+**鏅鸿兘鍚堢害鐗堟湰**锛?.0.0  
+**Solidity 鐗堟湰**锛?.8.24  
+**鏈€鍚庢洿鏂?*锛?026-04-04
+
+

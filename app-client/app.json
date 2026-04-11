@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "MinerHub",
-    "slug": "minerhub-mobile",
-    "scheme": "minerhub",
+    "name": "Coin Planet",
+    "slug": "coin-planet-mobile",
+    "scheme": "coinplanet",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "platforms": ["ios", "android"],
+    "platforms": ["ios", "android", "web"],
     "ios": {
-      "bundleIdentifier": "com.minerhub.mobile",
+      "bundleIdentifier": "com.coinplanet.mobile",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.minerhub.mobile"
+      "package": "com.coinplanet.mobile"
     },
     "extra": {
       "rpcUrl": "https://mainnet.base.org",

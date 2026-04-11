@@ -1,11 +1,23 @@
 import { createId, nowIso } from "../lib/id";
-import { badRequest, json } from "../lib/response";
+import { badRequest, json, unauthorized } from "../lib/response";
+import { extractAndVerifyAuth } from "../lib/auth";
 import type { Env } from "../types/env";
 
 export async function handleUsers(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
+    // 验证签名
+    const authResult = await extractAndVerifyAuth(request);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
     const body = (await request.json().catch(() => null)) as { wallet?: string; email?: string } | null;
     if (!body?.wallet) return badRequest("wallet is required");
+
+    // 检查请求中的wallet与签名wallet是否一致
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch: body wallet must match signed wallet");
+    }
 
     const id = createId("usr");
     const now = nowIso();

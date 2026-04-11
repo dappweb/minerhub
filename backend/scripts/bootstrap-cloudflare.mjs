@@ -55,7 +55,7 @@ function updateWranglerToml({ d1Id, kvId }) {
 
 function main() {
   const dbNameArg = process.argv.find((value) => !value.startsWith('--') && value !== process.argv[0] && value !== process.argv[1]);
-  const dbName = dbNameArg || 'minerhub-db';
+  const dbName = dbNameArg || 'coin-planet-db';
 
   console.log('Starting Cloudflare bootstrap...');
   console.log(`Backend dir: ${backendDir}`);

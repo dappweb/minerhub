@@ -1,32 +1,32 @@
-# MinerHub 后台管理系统设计
+﻿# Coin Planet 鍚庡彴绠＄悊绯荤粺璁捐
 
-## 1. 系统架构概览
+## 1. 绯荤粺鏋舵瀯姒傝
 
 ```
-┌─────────────────────────────────────────┐
-│      Web 后台管理系统（React + Web3）     │
-│  - 运营团队、财务、技术支持              │
-└──────────────┬──────────────────────────┘
-               │
-    ┌──────────┴──────────┐
-    ▼                     ▼
-┌─────────────┐      ┌──────────────┐
-│ 后台 API    │      │ 区块链网络    │
-│ (Node.js)   │      │ (Base+Sepolia)│
-└─────────────┘      └──────────────┘
-    │
-    ├─ MongoDB（用户数据）
-    ├─ Redis（缓存）
-    └─ AWS S3（日志）
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?     Web 鍚庡彴绠＄悊绯荤粺锛圧eact + Web3锛?    鈹?
+鈹? - 杩愯惀鍥㈤槦銆佽储鍔°€佹妧鏈敮鎸?             鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+               鈹?
+    鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹粹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+    鈻?                    鈻?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?鍚庡彴 API    鈹?     鈹?鍖哄潡閾剧綉缁?   鈹?
+鈹?(Node.js)   鈹?     鈹?(Base+Sepolia)鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+    鈹?
+    鈹溾攢 MongoDB锛堢敤鎴锋暟鎹級
+    鈹溾攢 Redis锛堢紦瀛橈級
+    鈹斺攢 AWS S3锛堟棩蹇楋級
 ```
 
 ---
 
-## 2. 后台管理系统模块设计
+## 2. 鍚庡彴绠＄悊绯荤粺妯″潡璁捐
 
-### 2.1 用户管理模块
+### 2.1 鐢ㄦ埛绠＄悊妯″潡
 
-#### 2.1.1 用户数据结构
+#### 2.1.1 鐢ㄦ埛鏁版嵁缁撴瀯
 
 ```javascript
 // User Collection (MongoDB)
@@ -40,24 +40,24 @@
   status: "active" | "banned" | "suspended",
   deviceId: "device_hash_123",
   appVersion: "1.0.0",
-  referrer: "0x..." // 推荐人地址（用于返佣）
+  referrer: "0x..." // 鎺ㄨ崘浜哄湴鍧€锛堢敤浜庤繑浣ｏ級
 }
 ```
 
-#### 2.1.2 用户管理功能
+#### 2.1.2 鐢ㄦ埛绠＄悊鍔熻兘
 
 ```
-- 用户搜索（按钱包、邮箱、DeviceID）
-- 用户状态管理（启用/禁用/封禁）
-- 用户详情查看（挖矿数据、收益统计）
-- 批量操作（导出、封禁、激励）
-- 风险识别（异常行为、多账户、刷单）
+- 鐢ㄦ埛鎼滅储锛堟寜閽卞寘銆侀偖绠便€丏eviceID锛?
+- 鐢ㄦ埛鐘舵€佺鐞嗭紙鍚敤/绂佺敤/灏佺锛?
+- 鐢ㄦ埛璇︽儏鏌ョ湅锛堟寲鐭挎暟鎹€佹敹鐩婄粺璁★級
+- 鎵归噺鎿嶄綔锛堝鍑恒€佸皝绂併€佹縺鍔憋級
+- 椋庨櫓璇嗗埆锛堝紓甯歌涓恒€佸璐︽埛銆佸埛鍗曪級
 ```
 
-#### 2.1.3 后台 API - 用户模块
+#### 2.1.3 鍚庡彴 API - 鐢ㄦ埛妯″潡
 
 ```typescript
-// GET /api/admin/users - 分页获取用户列表
+// GET /api/admin/users - 鍒嗛〉鑾峰彇鐢ㄦ埛鍒楄〃
 {
   query: {
     page: 1,
@@ -112,9 +112,9 @@
 
 ---
 
-### 2.2 矿机管理模块
+### 2.2 鐭挎満绠＄悊妯″潡
 
-#### 2.2.1 设备数据结构
+#### 2.2.1 璁惧鏁版嵁缁撴瀯
 
 ```javascript
 // DeviceMetrics Collection (MongoDB)
@@ -131,15 +131,15 @@
   status: "mining" | "idle" | "offline" | "suspended",
   metrics: {
     currentHashrate: 1.5,      // MH/s
-    averageHashrate: 1.45,     // 24h 平均
-    temperature: 42,            // ℃
+    averageHashrate: 1.45,     // 24h 骞冲潎
+    temperature: 42,            // 鈩?
     cpuUsage: 65,               // %
     batteryLevel: 78,           // %
     networkQuality: 95          // %
   },
-  uptime: 864000,              // 秒
+  uptime: 864000,              // 绉?
   lastSeen: Timestamp,
-  totalMined: 500,             // MM
+  totalMined: 500,             // SUPER
   createdAt: Timestamp,
   dailyStats: [
     {
@@ -152,26 +152,26 @@
 }
 ```
 
-#### 2.2.2 矿机管理功能
+#### 2.2.2 鐭挎満绠＄悊鍔熻兘
 
 ```
-- 实时设备监控（在线/离线状态）
-- 算力分布统计（总算力、单机算力排行）
-- 设备健康监控（温度、电量、网络）
-- 异常设备预警（掉线、算力异常、多设备作弊）
-- 批量管理（黑名单、限流、停止）
+- 瀹炴椂璁惧鐩戞帶锛堝湪绾?绂荤嚎鐘舵€侊級
+- 绠楀姏鍒嗗竷缁熻锛堟€荤畻鍔涖€佸崟鏈虹畻鍔涙帓琛岋級
+- 璁惧鍋ュ悍鐩戞帶锛堟俯搴︺€佺數閲忋€佺綉缁滐級
+- 寮傚父璁惧棰勮锛堟帀绾裤€佺畻鍔涘紓甯搞€佸璁惧浣滃紛锛?
+- 鎵归噺绠＄悊锛堥粦鍚嶅崟銆侀檺娴併€佸仠姝級
 ```
 
-#### 2.2.3 后台 API - 矿机模块
+#### 2.2.3 鍚庡彴 API - 鐭挎満妯″潡
 
 ```typescript
-// GET /api/admin/devices - 设备统计
+// GET /api/admin/devices - 璁惧缁熻
 {
   response: {
     totalDevices: 50000,
     activeDevices: 38000,
     totalHashrate: 75000,     // MH/s
-    avgHashrate: 1.97,        // 平均单机
+    avgHashrate: 1.97,        // 骞冲潎鍗曟満
     distribution: {
       online: 38000,
       idle: 10000,
@@ -209,18 +209,18 @@
 
 ---
 
-### 2.3 收益管理模块
+### 2.3 鏀剁泭绠＄悊妯″潡
 
-#### 2.3.1 收益统计
+#### 2.3.1 鏀剁泭缁熻
 
 ```
-- 实时总产量（今日、本周、本月、累计）
-- 用户收益分布（金字塔、排行榜）
-- 提现申请审核（待审、已批准、已驳回）
-- 链上交易查询（挖矿奖励、Swap、提现）
+- 瀹炴椂鎬讳骇閲忥紙浠婃棩銆佹湰鍛ㄣ€佹湰鏈堛€佺疮璁★級
+- 鐢ㄦ埛鏀剁泭鍒嗗竷锛堥噾瀛楀銆佹帓琛屾锛?
+- 鎻愮幇鐢宠瀹℃牳锛堝緟瀹°€佸凡鎵瑰噯銆佸凡椹冲洖锛?
+- 閾句笂浜ゆ槗鏌ヨ锛堟寲鐭垮鍔便€丼wap銆佹彁鐜帮級
 ```
 
-#### 2.3.2 数据统计 API
+#### 2.3.2 鏁版嵁缁熻 API
 
 ```typescript
 // GET /api/admin/revenue/stats
@@ -228,11 +228,11 @@
   response: {
     dailyStats: {
       date: "2026-04-04",
-      totalMined: 347222,        // MM
+      totalMined: 347222,        // SUPER
       totalUsers: 48000,
-      avgUserReward: 7.23,       // MM
-      totalClaimed: 150000,      // MM
-      totalSwapped: 120000,      // MM -> USDT
+      avgUserReward: 7.23,       // SUPER
+      totalClaimed: 150000,      // SUPER
+      totalSwapped: 120000,      // SUPER -> USDT
       totalUsdtOut: 120          // USDT
     },
     monthlyStats: {
@@ -258,7 +258,7 @@
       {
         _id: ObjectId,
         userWallet: "0x...",
-        amount: 1000,             // MM
+        amount: 1000,             // SUPER
         type: "reward_claim",
         status: "pending",
         createdAt: "2026-04-04T10:00:00Z"
@@ -276,49 +276,49 @@
 
 ---
 
-### 2.4 风控与反作弊模块
+### 2.4 椋庢帶涓庡弽浣滃紛妯″潡
 
-#### 2.4.1 风险检测规则
+#### 2.4.1 椋庨櫓妫€娴嬭鍒?
 
 ```javascript
-// 作弊检测模型
+// 浣滃紛妫€娴嬫ā鍨?
 const suspiciousPatterns = [
   {
     name: "Multi-Device-Cheat",
-    rule: "同一用户多个设备算力同时激增",
-    threshold: 3,  // 3个设备
+    rule: "鍚屼竴鐢ㄦ埛澶氫釜璁惧绠楀姏鍚屾椂婵€澧?,
+    threshold: 3,  // 3涓澶?
     action: "flag_review"
   },
   {
     name: "Impossible-Hashrate",
-    rule: "设备算力超过物理上限",
-    threshold: 10,  // 10 MH/s 以上为异常
+    rule: "璁惧绠楀姏瓒呰繃鐗╃悊涓婇檺",
+    threshold: 10,  // 10 MH/s 浠ヤ笂涓哄紓甯?
     action: "suspend"
   },
   {
     name: "Claim-Spam",
-    rule: "频繁提交微小金额提现请求",
-    threshold: 10,  // 10分钟内5次
+    rule: "棰戠箒鎻愪氦寰皬閲戦鎻愮幇璇锋眰",
+    threshold: 10,  // 10鍒嗛挓鍐?娆?
     action: "rate_limit"
   },
   {
     name: "Geolocation-Anomaly",
-    rule: "短时间内地理位置跨度异常",
+    rule: "鐭椂闂村唴鍦扮悊浣嶇疆璺ㄥ害寮傚父",
     threshold: 1000,  // 1000km in 10 min
     action: "flag_review"
   }
 ];
 ```
 
-#### 2.4.2 风控 API
+#### 2.4.2 椋庢帶 API
 
 ```typescript
 // GET /api/admin/risk/alerts
 {
   response: {
-    critical: 5,          // 关键风险
-    warning: 23,          // 警告
-    info: 150,            // 信息
+    critical: 5,          // 鍏抽敭椋庨櫓
+    warning: 23,          // 璀﹀憡
+    info: 150,            // 淇℃伅
     recentAlerts: [
       {
         id: "alert_123",
@@ -342,23 +342,23 @@ const suspiciousPatterns = [
 
 ---
 
-### 2.5 财务与提现管理模块
+### 2.5 璐㈠姟涓庢彁鐜扮鐞嗘ā鍧?
 
-#### 2.5.1 提现流程
+#### 2.5.1 鎻愮幇娴佺▼
 
 ```
-用户发起提现 (MM 或 USDT)
-    ↓
-智能合约验证 (gas 费用、频率限制)
-    ↓
-后台审核 (如超过日额度 5k)
-    ↓
-自动转账 (Swap MM→USDT + 链上转账)
-    ↓
-用户到账
+鐢ㄦ埛鍙戣捣鎻愮幇 (SUPER 鎴?USDT)
+    鈫?
+鏅鸿兘鍚堢害楠岃瘉 (gas 璐圭敤銆侀鐜囬檺鍒?
+    鈫?
+鍚庡彴瀹℃牳 (濡傝秴杩囨棩棰濆害 5k)
+    鈫?
+鑷姩杞处 (Swap MM鈫扷SDT + 閾句笂杞处)
+    鈫?
+鐢ㄦ埛鍒拌处
 ```
 
-#### 2.5.2 财务报表 API
+#### 2.5.2 璐㈠姟鎶ヨ〃 API
 
 ```typescript
 // GET /api/admin/finance/report
@@ -373,22 +373,22 @@ const suspiciousPatterns = [
       endDate: "2026-04-04"
     },
     income: {
-      miningReward: 1388888,    // MM
-      platformFee: 69444,       // MM (5%)
-      lpFee: 97222              // MM (为流动性提供者）
+      miningReward: 1388888,    // SUPER
+      platformFee: 69444,       // SUPER (5%)
+      lpFee: 97222              // SUPER (涓烘祦鍔ㄦ€ф彁渚涜€咃級
     },
     expense: {
-      userClaimed: 500000,      // MM
-      userSwapped: 400000,      // MM -> 400 USDT
-      liquidityProvision: 50000 // MM
+      userClaimed: 500000,      // SUPER
+      userSwapped: 400000,      // SUPER -> 400 USDT
+      liquidityProvision: 50000 // SUPER
     },
     balance: {
-      in_contract: 5000000,     // MM 在链上锁定
-      in_liquidity: 100000,     // MM in LP池
-      reserve_usdt: 50000       // USDT 储备金
+      in_contract: 5000000,     // SUPER 鍦ㄩ摼涓婇攣瀹?
+      in_liquidity: 100000,     // SUPER in LP姹?
+      reserve_usdt: 50000       // USDT 鍌ㄥ閲?
     },
     metrics: {
-      platformEarnings: 69444,  // MM （一周收益）
+      platformEarnings: 69444,  // SUPER 锛堜竴鍛ㄦ敹鐩婏級
       networkHashrate: 75000,   // MH/s
       activeUsers: 48000,
       churnRate: 0.03           // 3%
@@ -405,7 +405,7 @@ const suspiciousPatterns = [
         id: "wd_123",
         user: "0x...",
         amount: 100,
-        type: "MM_TO_USDT",
+        type: "SUPER_TO_USDT",
         usdtAmount: 0.1,
         status: "completed",
         txHash: "0x...",
@@ -420,27 +420,27 @@ const suspiciousPatterns = [
 
 ---
 
-### 2.6 系统配置与参数管理
+### 2.6 绯荤粺閰嶇疆涓庡弬鏁扮鐞?
 
-#### 2.6.1 可调参数
+#### 2.6.1 鍙皟鍙傛暟
 
 ```javascript
 const systemConfig = {
   mining: {
-    dailyRelease: 347222,          // MM
+    dailyRelease: 347222,          // SUPER
     minHashrate: 0.1,               // MH/s
-    maxHashrate: 10,                // MH/s（防止单机垄断）
-    difficultyAdjustmentPeriod: 7   // 天
+    maxHashrate: 10,                // MH/s锛堥槻姝㈠崟鏈哄瀯鏂級
+    difficultyAdjustmentPeriod: 7   // 澶?
   },
   swap: {
     feeRate: 0.005,                 // 0.5%
-    slippage: 0.03,                 // 最大3%滑点
-    minAmount: 100                  // 100 MM 最小兑换额
+    slippage: 0.03,                 // 鏈€澶?%婊戠偣
+    minAmount: 100                  // 100 SUPER 鏈€灏忓厬鎹㈤
   },
   claim: {
-    cooldown: 3600,                 // 秒
-    dailyLimit: 100000,             // MM
-    firstMonthLock: 7 * 24 * 3600   // 首月锁仓7天
+    cooldown: 3600,                 // 绉?
+    dailyLimit: 100000,             // SUPER
+    firstMonthLock: 7 * 24 * 3600   // 棣栨湀閿佷粨7澶?
   },
   riskControl: {
     multiDeviceThreshold: 3,
@@ -451,7 +451,7 @@ const systemConfig = {
 };
 ```
 
-#### 2.6.2 配置管理 API
+#### 2.6.2 閰嶇疆绠＄悊 API
 
 ```typescript
 // GET /api/admin/config
@@ -473,9 +473,9 @@ const systemConfig = {
 
 ---
 
-### 2.7 日志与审计
+### 2.7 鏃ュ織涓庡璁?
 
-#### 2.7.1 审计日志
+#### 2.7.1 瀹¤鏃ュ織
 
 ```typescript
 // AuditLog Collection
@@ -487,11 +487,11 @@ const systemConfig = {
   changes: { before: {}, after: {} },
   reason: "Cheat detection",
   timestamp: Timestamp,
-  txHash?: "0x..." // 链上交易哈希（如适用）
+  txHash?: "0x..." // 閾句笂浜ゆ槗鍝堝笇锛堝閫傜敤锛?
 }
 ```
 
-#### 2.7.2 审计 API
+#### 2.7.2 瀹¤ API
 
 ```typescript
 // GET /api/admin/audit/logs
@@ -521,113 +521,114 @@ const systemConfig = {
 
 ---
 
-## 3. 后台管理系统架构
+## 3. 鍚庡彴绠＄悊绯荤粺鏋舵瀯
 
-### 3.1 技术栈
+### 3.1 鎶€鏈爤
 
-| 模块 | 技术 | 说明 |
+| 妯″潡 | 鎶€鏈?| 璇存槑 |
 |------|------|------|
-| 前端 | React 18 + TypeScript | 后台 UI |
-| 状态管理 | Redux Toolkit | 全局状态 |
-| UI 组件 | Ant Design / Material-UI | 组件库 |
-| 图表 | ECharts / Chart.js | 数据可视化 |
-| HTTP | Axios | API 请求 |
-| 后端 | Node.js + Express | REST API |
-| 数据库 | MongoDB | 用户/设备数据 |
-| 缓存 | Redis | 缓存热数据 |
-| 区块链 | Ethers.js + Viem | 链交互 |
-| 部署 | Docker + K8s | 容器化部署 |
+| 鍓嶇 | React 18 + TypeScript | 鍚庡彴 UI |
+| 鐘舵€佺鐞?| Redux Toolkit | 鍏ㄥ眬鐘舵€?|
+| UI 缁勪欢 | Ant Design / Material-UI | 缁勪欢搴?|
+| 鍥捐〃 | ECharts / Chart.js | 鏁版嵁鍙鍖?|
+| HTTP | Axios | API 璇锋眰 |
+| 鍚庣 | Node.js + Express | REST API |
+| 鏁版嵁搴?| MongoDB | 鐢ㄦ埛/璁惧鏁版嵁 |
+| 缂撳瓨 | Redis | 缂撳瓨鐑暟鎹?|
+| 鍖哄潡閾?| Ethers.js + Viem | 閾句氦浜?|
+| 閮ㄧ讲 | Docker + K8s | 瀹瑰櫒鍖栭儴缃?|
 
-### 3.2 部署架构
+### 3.2 閮ㄧ讲鏋舵瀯
 
 ```
-┌─────────────────────────────────────────────┐
-│        Cloudflare CDN / WAF                  │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────┴──────────────────────────┐
-│  K8s Cluster (负载均衡)                      │
-├─────────────────────────────────────────────┤
-│  Pod 1: Admin API (Node.js)                 │
-│  Pod 2: Admin API (Node.js)                 │
-│  Pod 3: Worker (数据清理)                   │
-└──────────────────┬──────────────────────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    ▼              ▼              ▼
-┌─────────┐  ┌────────┐  ┌──────────┐
-│MongoDB  │  │ Redis  │  │ AWS S3   │
-│ Replica │  │Cluster │  │(日志备份)│
-└─────────┘  └────────┘  └──────────┘
-    │
-    └── 每周备份 → AWS S3
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?       Cloudflare CDN / WAF                  鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+                   鈹?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹粹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? K8s Cluster (璐熻浇鍧囪　)                      鈹?
+鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? Pod 1: Admin API (Node.js)                 鈹?
+鈹? Pod 2: Admin API (Node.js)                 鈹?
+鈹? Pod 3: Worker (鏁版嵁娓呯悊)                   鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+                   鈹?
+    鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+    鈻?             鈻?             鈻?
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹侻ongoDB  鈹? 鈹?Redis  鈹? 鈹?AWS S3   鈹?
+鈹?Replica 鈹? 鈹侰luster 鈹? 鈹?鏃ュ織澶囦唤)鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+    鈹?
+    鈹斺攢鈹€ 姣忓懆澶囦唤 鈫?AWS S3
 ```
 
 ---
 
-## 4. 安全考虑
+## 4. 瀹夊叏鑰冭檻
 
-### 4.1 权限管理
+### 4.1 鏉冮檺绠＄悊
 
 ```javascript
 const roles = {
-  super_admin: ["*"],                    // 完全权限
-  operations: ["user.*", "device.*"],    // 用户运维
-  finance: ["claim.*", "withdrawal.*"],  // 财务审核
-  risk: ["risk.*"],                      // 风控审查
-  viewer: ["*.read"]                     // 仅查看
+  super_admin: ["*"],                    // 瀹屽叏鏉冮檺
+  operations: ["user.*", "device.*"],    // 鐢ㄦ埛杩愮淮
+  finance: ["claim.*", "withdrawal.*"],  // 璐㈠姟瀹℃牳
+  risk: ["risk.*"],                      // 椋庢帶瀹℃煡
+  viewer: ["*.read"]                     // 浠呮煡鐪?
 };
 ```
 
-### 4.2 多签管理
+### 4.2 澶氱绠＄悊
 
 ```solidity
-// 重要操作需要多签（2/3）
-- 提高参数限额
-- 禁用合约
-- 提现大额资金
-- 升级代码
+// 閲嶈鎿嶄綔闇€瑕佸绛撅紙2/3锛?
+- 鎻愰珮鍙傛暟闄愰
+- 绂佺敤鍚堢害
+- 鎻愮幇澶ч璧勯噾
+- 鍗囩骇浠ｇ爜
 
-多签管理员钱包：
-  1. Operator: 0x... (日常操作)
-  2. Finance: 0x... (财务审批)
-  3. Security: 0x... (安全审批)
+澶氱绠＄悊鍛橀挶鍖咃細
+  1. Operator: 0x... (鏃ュ父鎿嶄綔)
+  2. Finance: 0x... (璐㈠姟瀹℃壒)
+  3. Security: 0x... (瀹夊叏瀹℃壒)
 ```
 
-### 4.3 数据加密
+### 4.3 鏁版嵁鍔犲瘑
 
-- 所有 API 通信使用 HTTPS
-- 敏感参数（私钥）存储在 AWS KMS
-- 数据库备份使用 AES-256 加密
+- 鎵€鏈?API 閫氫俊浣跨敤 HTTPS
+- 鏁忔劅鍙傛暟锛堢閽ワ級瀛樺偍鍦?AWS KMS
+- 鏁版嵁搴撳浠戒娇鐢?AES-256 鍔犲瘑
 
 ---
 
-## 5. 监控与告警
+## 5. 鐩戞帶涓庡憡璀?
 
 ```
-指标监控：
-- API 响应时间 (SLA: < 200ms)
-- 数据库查询性能
-- 区块链 RPC 调用成功率
-- 系统错误率 (SLA: < 0.1%)
+鎸囨爣鐩戞帶锛?
+- API 鍝嶅簲鏃堕棿 (SLA: < 200ms)
+- 鏁版嵁搴撴煡璇㈡€ц兘
+- 鍖哄潡閾?RPC 璋冪敤鎴愬姛鐜?
+- 绯荤粺閿欒鐜?(SLA: < 0.1%)
 
-告警规则：
-- 异常交易量 (日均 ±30% 算作异常)
-- API 响应时间 > 1s
-- 数据库连接池耗尽
-- 区块链网络分叉检测
+鍛婅瑙勫垯锛?
+- 寮傚父浜ゆ槗閲?(鏃ュ潎 卤30% 绠椾綔寮傚父)
+- API 鍝嶅簲鏃堕棿 > 1s
+- 鏁版嵁搴撹繛鎺ユ睜鑰楀敖
+- 鍖哄潡閾剧綉缁滃垎鍙夋娴?
 ```
 
 ---
 
-## 总结
+## 鎬荤粨
 
-MinerHub 后台管理系统核心包括：
-1. **用户运维** - 账户管理、状态控制
-2. **矿机监控** - 实时算力、设备健康
-3. **收益审单** - 提现申请、财务报表
-4. **风控反作弊** - 多维度风险检测
-5. **参数管理** - 系统配置、多签执行
-6. **审计日志** - 操作追溯、合规性
+Coin Planet 鍚庡彴绠＄悊绯荤粺鏍稿績鍖呮嫭锛?
+1. **鐢ㄦ埛杩愮淮** - 璐︽埛绠＄悊銆佺姸鎬佹帶鍒?
+2. **鐭挎満鐩戞帶** - 瀹炴椂绠楀姏銆佽澶囧仴搴?
+3. **鏀剁泭瀹″崟** - 鎻愮幇鐢宠銆佽储鍔℃姤琛?
+4. **椋庢帶鍙嶄綔寮?* - 澶氱淮搴﹂闄╂娴?
+5. **鍙傛暟绠＄悊** - 绯荤粺閰嶇疆銆佸绛炬墽琛?
+6. **瀹¤鏃ュ織** - 鎿嶄綔杩芥函銆佸悎瑙勬€?
 
-所有重要操作都需多签批准，确保去中心化治理的同时保留必要的运营灵活性。
+鎵€鏈夐噸瑕佹搷浣滈兘闇€澶氱鎵瑰噯锛岀‘淇濆幓涓績鍖栨不鐞嗙殑鍚屾椂淇濈暀蹇呰鐨勮繍钀ョ伒娲绘€с€?
+

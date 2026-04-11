@@ -1,44 +1,44 @@
-# MinerHub
+﻿# Coin Planet
 
-MinerHub 是一个包含三端视图的 Web 项目：
+Coin Planet 鏄竴涓寘鍚笁绔鍥剧殑 Web 椤圭洰锛?
 
-- 项目网站（官网展示）
-- 后台管理系统
-- 挖矿 App（钱包连接、链上挖矿、链上兑换）
+- 椤圭洰缃戠珯锛堝畼缃戝睍绀猴級
+- 鍚庡彴绠＄悊绯荤粺
+- 鎸栫熆 App锛堥挶鍖呰繛鎺ャ€侀摼涓婃寲鐭裤€侀摼涓婂厬鎹級
 
-当前官网已增加：
+褰撳墠瀹樼綉宸插鍔狅細
 
-- 钱包登录进入后台管理系统入口
-- Android / iOS 挖矿 App 下载入口
-- 双端客户端工程（React Native Expo）：`app-client/`
+- 閽卞寘鐧诲綍杩涘叆鍚庡彴绠＄悊绯荤粺鍏ュ彛
+- Android / iOS 鎸栫熆 App 涓嬭浇鍏ュ彛
+- 鍙岀瀹㈡埛绔伐绋嬶紙React Native Expo锛夛細`app-client/`
 
-## 📚 完整设计文档
+## 馃摎 瀹屾暣璁捐鏂囨。
 
-> 查看完整系统设计、实现路线和 API 规范，请见 [**文档导航**](./docs/docs-index.md)
+> 鏌ョ湅瀹屾暣绯荤粺璁捐銆佸疄鐜拌矾绾垮拰 API 瑙勮寖锛岃瑙?[**鏂囨。瀵艰埅**](./docs/docs-index.md)
 
-主要文档：
+涓昏鏂囨。锛?
 
-- [**MM 代币模型及经济设计** - Token Model](./docs/token-model.md)：代币分配、4 年释放时间表、挖矿奖励机制、USDT/MM 交换兑换池、智能合约架构
-- [**后台管理系统设计** - Admin System](./docs/admin-system-design.md)：6 大管理模块、20+ REST API、MongoDB + Redis 架构、风险控制系统、多签治理机制
-- [**系统集成与部署路线** - Integration Roadmap](./docs/system-integration-roadmap.md)：完整用户旅程、合约部署清单、测试计划（Sepolia / Base Mainnet）、发布时间表（4 月-7 月）
-- [**开发周期与预期费用** - Costs & Timeline](./docs/development-timeline-and-costs.md)：人力成本 ($375K)、基础设施 ($8K)、融资建议 ($600K-$800K)、ROI 预测与风险评估
-- [**投资决策速查表** - Quick Reference](./docs/investment-quickref.md)：融资规模、成本构成、月度投入、ROI 预测、决策检查清单
+- [**SUPER 浠ｅ竵妯″瀷鍙婄粡娴庤璁?* - Token Model](./docs/token-model.md)锛氫唬甯佸垎閰嶃€? 骞撮噴鏀炬椂闂磋〃銆佹寲鐭垮鍔辨満鍒躲€乁SDT/SUPER 浜ゆ崲鍏戞崲姹犮€佹櫤鑳藉悎绾︽灦鏋?
+- [**鍚庡彴绠＄悊绯荤粺璁捐** - Admin System](./docs/admin-system-design.md)锛? 澶х鐞嗘ā鍧椼€?0+ REST API銆丮ongoDB + Redis 鏋舵瀯銆侀闄╂帶鍒剁郴缁熴€佸绛炬不鐞嗘満鍒?
+- [**绯荤粺闆嗘垚涓庨儴缃茶矾绾?* - Integration Roadmap](./docs/system-integration-roadmap.md)锛氬畬鏁寸敤鎴锋梾绋嬨€佸悎绾﹂儴缃叉竻鍗曘€佹祴璇曡鍒掞紙Sepolia / Base Mainnet锛夈€佸彂甯冩椂闂磋〃锛? 鏈?7 鏈堬級
+- [**寮€鍙戝懆鏈熶笌棰勬湡璐圭敤** - Costs & Timeline](./docs/development-timeline-and-costs.md)锛氫汉鍔涙垚鏈?($375K)銆佸熀纭€璁炬柦 ($8K)銆佽瀺璧勫缓璁?($600K-$800K)銆丷OI 棰勬祴涓庨闄╄瘎浼?
+- [**鎶曡祫鍐崇瓥閫熸煡琛?* - Quick Reference](./docs/investment-quickref.md)锛氳瀺璧勮妯°€佹垚鏈瀯鎴愩€佹湀搴︽姇鍏ャ€丷OI 棰勬祴銆佸喅绛栨鏌ユ竻鍗?
 
-## 本地运行
+## 鏈湴杩愯
 
-1. 安装依赖
+1. 瀹夎渚濊禆
 
 ```bash
 npm install
 ```
 
-2. 复制环境变量
+2. 澶嶅埗鐜鍙橀噺
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. 配置合约地址与链参数
+3. 閰嶇疆鍚堢害鍦板潃涓庨摼鍙傛暟
 
 - `VITE_CHAIN_ID`
 - `VITE_RPC_URL`
@@ -47,59 +47,59 @@ cp .env.example .env.local
 - `VITE_ANDROID_DOWNLOAD_URL`
 - `VITE_IOS_DOWNLOAD_URL`
 
-4. 启动开发环境
+4. 鍚姩寮€鍙戠幆澧?
 
 ```bash
 npm run dev
 ```
 
-## 区块链挖矿功能
+## 鍖哄潡閾炬寲鐭垮姛鑳?
 
-前端已接入钱包与合约调用：
+鍓嶇宸叉帴鍏ラ挶鍖呬笌鍚堢害璋冪敤锛?
 
-- 挖矿 App 页面：
-   - 连接钱包
-   - 调用 `startMining()` 开始链上挖矿
-   - 调用 `claimRewards()` 领取收益
-- DApp Swap 页面：
-   - 调用 `swapMmToUsdt(uint256)` 完成链上兑换
+- 鎸栫熆 App 椤甸潰锛?
+   - 杩炴帴閽卞寘
+   - 璋冪敤 `startMining()` 寮€濮嬮摼涓婃寲鐭?
+   - 璋冪敤 `claimRewards()` 棰嗗彇鏀剁泭
+- DApp Swap 椤甸潰锛?
+   - 璋冪敤 `swapSuperToUsdt(uint256)` 瀹屾垚閾句笂鍏戞崲
 
-对应代码在 `src/lib/blockchain.ts`。
+瀵瑰簲浠ｇ爜鍦?`src/lib/blockchain.ts`銆?
 
-## 📋 开发阶段与测试
+## 馃搵 寮€鍙戦樁娈典笌娴嬭瘯
 
-- **第一阶段**（4 月-5 月）：Sepolia 测试网部署与验证
-- **第二阶段**（6 月）：Base Mainnet 灰度上线（1000 内部测试用户）
-- **第三阶段**（7 月）：正式公开发布
+- **绗竴闃舵**锛? 鏈?5 鏈堬級锛歋epolia 娴嬭瘯缃戦儴缃蹭笌楠岃瘉
+- **绗簩闃舵**锛? 鏈堬級锛欱ase Mainnet 鐏板害涓婄嚎锛?000 鍐呴儴娴嬭瘯鐢ㄦ埛锛?
+- **绗笁闃舵**锛? 鏈堬級锛氭寮忓叕寮€鍙戝竷
 
-详见 [System Integration Roadmap](./docs/system-integration-roadmap.md#timeline)
+璇﹁ [System Integration Roadmap](./docs/system-integration-roadmap.md#timeline)
 
-## 部署到 Cloudflare Pages
+## 閮ㄧ讲鍒?Cloudflare Pages
 
-### 方式一：Cloudflare Dashboard
+### 鏂瑰紡涓€锛欳loudflare Dashboard
 
 - Build command: `npm run build`
 - Build output directory: `dist`
 
-### 方式二：Wrangler CLI
+### 鏂瑰紡浜岋細Wrangler CLI
 
-1. 登录 Cloudflare
+1. 鐧诲綍 Cloudflare
 
 ```bash
 npx wrangler login
 ```
 
-2. 部署
+2. 閮ㄧ讲
 
 ```bash
 npm run deploy:cf
 ```
 
-`wrangler.toml` 已包含基础配置，适用于当前静态站点部署。
+`wrangler.toml` 宸插寘鍚熀纭€閰嶇疆锛岄€傜敤浜庡綋鍓嶉潤鎬佺珯鐐归儴缃层€?
 
-## App 客户端（双端兼容）
+## App 瀹㈡埛绔紙鍙岀鍏煎锛?
 
-`app-client/` 已调整为 React Native Expo 工程，支持 Android 与 iOS。
+`app-client/` 宸茶皟鏁翠负 React Native Expo 宸ョ▼锛屾敮鎸?Android 涓?iOS銆?
 
 ```bash
 cd app-client
@@ -107,36 +107,37 @@ npm install
 npm run start
 ```
 
-- Android 调试：`npm run android`
-- iOS 调试：`npm run ios`
+- Android 璋冭瘯锛歚npm run android`
+- iOS 璋冭瘯锛歚npm run ios`
 
-## 📂 文件结构与快速参考
+## 馃搨 鏂囦欢缁撴瀯涓庡揩閫熷弬鑰?
 
 ```
 minerhub/
-├── src/                      # Web Frontend
-│   ├── components/           # React 组件
-│   ├── lib/blockchain.ts    # 区块链调用层
-│   └── App.tsx              # 主应用（钱包登录门禁）
-├── app-client/              # 移动应用（React Native Expo）
-├── docs/                    # 完整设计文档
-│   ├── docs-index.md        # 文档导航
-│   ├── token-model.md       # MM 代币模型
-│   ├── admin-system-design.md
-│   └── system-integration-roadmap.md
-└── wrangler.toml           # Cloudflare Pages 配置
+鈹溾攢鈹€ src/                      # Web Frontend
+鈹?  鈹溾攢鈹€ components/           # React 缁勪欢
+鈹?  鈹溾攢鈹€ lib/blockchain.ts    # 鍖哄潡閾捐皟鐢ㄥ眰
+鈹?  鈹斺攢鈹€ App.tsx              # 涓诲簲鐢紙閽卞寘鐧诲綍闂ㄧ锛?
+鈹溾攢鈹€ app-client/              # 绉诲姩搴旂敤锛圧eact Native Expo锛?
+鈹溾攢鈹€ docs/                    # 瀹屾暣璁捐鏂囨。
+鈹?  鈹溾攢鈹€ docs-index.md        # 鏂囨。瀵艰埅
+鈹?  鈹溾攢鈹€ token-model.md       # SUPER 浠ｅ竵妯″瀷
+鈹?  鈹溾攢鈹€ admin-system-design.md
+鈹?  鈹斺攢鈹€ system-integration-roadmap.md
+鈹斺攢鈹€ wrangler.toml           # Cloudflare Pages 閰嶇疆
 ```
 
-## 👥 团队分工与下一步
+## 馃懃 鍥㈤槦鍒嗗伐涓庝笅涓€姝?
 
-| 角色 | 文档入口 | 核心任务 |
+| 瑙掕壊 | 鏂囨。鍏ュ彛 | 鏍稿績浠诲姟 |
 |------|--------|--------|
-| **合约工程师** | [Token Model](./docs/token-model.md#contracts) | 编写 MM.sol、MiningPool.sol、SwapRouter.sol、AdminController.sol |
-| **后端工程师** | [Admin System Design](./docs/admin-system-design.md#api) | 实现 20+ REST API、多签系统、风险控制 |
-| **移动开发** | [Integration Guide](./docs/system-integration-roadmap.md#mobile) | 集成 WalletConnect SDK、完成真实链上交互 |
-| **DevOps** | [Deployment Guide](./docs/system-integration-roadmap.md#deployment) | Sepolia 部署→Base 灰度→正式发布 |
-| **QA** | [Test Plan](./docs/system-integration-roadmap.md#testing) | 单元测试、集成测试、安全审计（CertiK） |
+| **鍚堢害宸ョ▼甯?* | [Token Model](./docs/token-model.md#contracts) | 缂栧啓 SUPER.sol銆丮iningPool.sol銆丼wapRouter.sol銆丄dminController.sol |
+| **鍚庣宸ョ▼甯?* | [Admin System Design](./docs/admin-system-design.md#api) | 瀹炵幇 20+ REST API銆佸绛剧郴缁熴€侀闄╂帶鍒?|
+| **绉诲姩寮€鍙?* | [Integration Guide](./docs/system-integration-roadmap.md#mobile) | 闆嗘垚 WalletConnect SDK銆佸畬鎴愮湡瀹為摼涓婁氦浜?|
+| **DevOps** | [Deployment Guide](./docs/system-integration-roadmap.md#deployment) | Sepolia 閮ㄧ讲鈫払ase 鐏板害鈫掓寮忓彂甯?|
+| **QA** | [Test Plan](./docs/system-integration-roadmap.md#testing) | 鍗曞厓娴嬭瘯銆侀泦鎴愭祴璇曘€佸畨鍏ㄥ璁★紙CertiK锛?|
 
 ---
 
-**项目状态：** ✅ 基础架构完成 | 📝 设计文档完成 | ⏳ 开发阶段启动中
+**椤圭洰鐘舵€侊細** 鉁?鍩虹鏋舵瀯瀹屾垚 | 馃摑 璁捐鏂囨。瀹屾垚 | 鈴?寮€鍙戦樁娈靛惎鍔ㄤ腑
+

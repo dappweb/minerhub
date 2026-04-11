@@ -1,11 +1,11 @@
-name = "minerhub-api"
+﻿name = "coin-planet-api"
 main = "src/index.ts"
 compatibility_date = "2026-04-04"
 workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "minerhub-db"
+database_name = "coin-planet-db"
 database_id = "replace-with-your-d1-id"
 
 [[kv_namespaces]]
@@ -16,6 +16,7 @@ id = "replace-with-your-kv-id"
 JWT_SECRET = "replace-with-strong-secret"
 CHAIN_ID = "11155111"
 RPC_URL = "https://sepolia.infura.io/v3/replace"
-MM_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
+SUPER_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
 MINING_POOL_ADDRESS = "0x0000000000000000000000000000000000000000"
 SWAP_ROUTER_ADDRESS = "0x0000000000000000000000000000000000000000"
+

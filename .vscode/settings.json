@@ -1,0 +1,24 @@
+{
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/.git/**": true,
+    "**/app-client/android/**": true,
+    "**/contracts/artifacts/**": true,
+    "**/contracts/cache/**": true,
+    "**/contracts/node_modules/**": true,
+    "**/backend/node_modules/**": true,
+    "**/app-client/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/contracts/artifacts": true,
+    "**/contracts/cache": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/node_modules": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

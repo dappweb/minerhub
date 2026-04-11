@@ -1,50 +1,50 @@
-# MinerHub MM 代币与挖矿系统设计
+﻿# Coin Planet SUPER 浠ｅ竵涓庢寲鐭跨郴缁熻璁?
 
-## 1. MM 代币模型
+## 1. SUPER 浠ｅ竵妯″瀷
 
-### 代币基本信息
-- **代币名称**：MinerHub Miner Token
-- **代币符号**：MM
-- **总供应量**：1,000,000,000 MM（10亿枚）
-- **小数位数**：18
-- **合约标准**：ERC20 + ERC20Burnable
+### 浠ｅ竵鍩烘湰淇℃伅
+- **浠ｅ竵鍚嶇О**锛欳oin Planet Miner Token
+- **浠ｅ竵绗﹀彿**锛歁M
+- **鎬讳緵搴旈噺**锛?,000,000,000 MM锛?0浜挎灇锛?
+- **灏忔暟浣嶆暟**锛?8
+- **鍚堢害鏍囧噯**锛欵RC20 + ERC20Burnable
 
-### 代币分配方案
+### 浠ｅ竵鍒嗛厤鏂规
 
-| 分配类别 | 占比 | 数量 | 用途 |
+| 鍒嗛厤绫诲埆 | 鍗犳瘮 | 鏁伴噺 | 鐢ㄩ€?|
 |---------|------|------|------|
-| 挖矿奖励池 | 50% | 500,000,000 | 用户挖矿收益（4年线性释放） |
-| 生态基金 | 20% | 200,000,000 | 生态建设、营销、激励 |
-| 团队锁仓 | 15% | 150,000,000 | 团队激励（2年锁仓 + 2年线性解锁） |
-| 早期投资者 | 10% | 100,000,000 | 融资（1年线性解锁） |
-| 储备金 | 5% | 50,000,000 | 风险储备、流动性 |
+| 鎸栫熆濂栧姳姹?| 50% | 500,000,000 | 鐢ㄦ埛鎸栫熆鏀剁泭锛?骞寸嚎鎬ч噴鏀撅級 |
+| 鐢熸€佸熀閲?| 20% | 200,000,000 | 鐢熸€佸缓璁俱€佽惀閿€銆佹縺鍔?|
+| 鍥㈤槦閿佷粨 | 15% | 150,000,000 | 鍥㈤槦婵€鍔憋紙2骞撮攣浠?+ 2骞寸嚎鎬цВ閿侊級 |
+| 鏃╂湡鎶曡祫鑰?| 10% | 100,000,000 | 铻嶈祫锛?骞寸嚎鎬цВ閿侊級 |
+| 鍌ㄥ閲?| 5% | 50,000,000 | 椋庨櫓鍌ㄥ銆佹祦鍔ㄦ€?|
 
-### 代币释放机制
+### 浠ｅ竵閲婃斁鏈哄埗
 
 ```
-挖矿奖励释放曲线（4年）:
-年份1：月产量 10,416,667 MM（总计 125M）
-年份2：月产量 10,416,667 MM（总计 125M）
-年份3：月产量 10,416,667 MM（总计 125M）
-年份4：月产量 10,416,667 MM（总计 125M）
+鎸栫熆濂栧姳閲婃斁鏇茬嚎锛?骞达級:
+骞翠唤1锛氭湀浜ч噺 10,416,667 MM锛堟€昏 125M锛?
+骞翠唤2锛氭湀浜ч噺 10,416,667 MM锛堟€昏 125M锛?
+骞翠唤3锛氭湀浜ч噺 10,416,667 MM锛堟€昏 125M锛?
+骞翠唤4锛氭湀浜ч噺 10,416,667 MM锛堟€昏 125M锛?
 
-每月一次自动释放，通过 TimeLock 合约保证进度不可逆转。
+姣忔湀涓€娆¤嚜鍔ㄩ噴鏀撅紝閫氳繃 TimeLock 鍚堢害淇濊瘉杩涘害涓嶅彲閫嗚浆銆?
 ```
 
 ---
 
-## 2. App 端（矿机 App）绑定流程
+## 2. App 绔紙鐭挎満 App锛夌粦瀹氭祦绋?
 
-### 2.1 用户注册与钱包生成
+### 2.1 鐢ㄦ埛娉ㄥ唽涓庨挶鍖呯敓鎴?
 
-1. **首次安装**
-   - 用户在 App 内一键生成本地非托管钱包（基于 TEE 硬件加密）
-   - 私钥永不离开设备，存储在安全芯片中
-   - 生成 Derived Address（派生地址），用于链上身份绑定
+1. **棣栨瀹夎**
+   - 鐢ㄦ埛鍦?App 鍐呬竴閿敓鎴愭湰鍦伴潪鎵樼閽卞寘锛堝熀浜?TEE 纭欢鍔犲瘑锛?
+   - 绉侀挜姘镐笉绂诲紑璁惧锛屽瓨鍌ㄥ湪瀹夊叏鑺墖涓?
+   - 鐢熸垚 Derived Address锛堟淳鐢熷湴鍧€锛夛紝鐢ㄤ簬閾句笂韬唤缁戝畾
 
-2. **身份绑定**
+2. **韬唤缁戝畾**
    ```solidity
-   // 合约调用
+   // 鍚堢害璋冪敤
    function registerMiner(
        address minerAddress,
        string memory deviceId,
@@ -61,78 +61,78 @@
    }
    ```
 
-3. **设备绑定** - 一个钱包仅可绑定一个设备
+3. **璁惧缁戝畾** - 涓€涓挶鍖呬粎鍙粦瀹氫竴涓澶?
    ```solidity
    mapping(string => address) public deviceToMiner;
    ```
 
-### 2.2 挖矿权限与防作弊
+### 2.2 鎸栫熆鏉冮檺涓庨槻浣滃紛
 
-- **设备签名验证**：每次挖矿提交都需 TEE 签名
-- **设备唯一性**：IMEI + 设备指纹 hash 验证
-- **算力上报机制**：App 每分钟上报一次算力证明
+- **璁惧绛惧悕楠岃瘉**锛氭瘡娆℃寲鐭挎彁浜ら兘闇€ TEE 绛惧悕
+- **璁惧鍞竴鎬?*锛欼MEI + 璁惧鎸囩汗 hash 楠岃瘉
+- **绠楀姏涓婃姤鏈哄埗**锛欰pp 姣忓垎閽熶笂鎶ヤ竴娆＄畻鍔涜瘉鏄?
 
 ---
 
-## 3. 代币分配与挖矿逻辑
+## 3. 浠ｅ竵鍒嗛厤涓庢寲鐭块€昏緫
 
-### 3.1 挖矿奖励计算
+### 3.1 鎸栫熆濂栧姳璁＄畻
 
 ```solidity
-// 挖矿奖励率
-MiningReward = (设备算力 * 难度系数 * 时间段) / 总网络算力
+// 鎸栫熆濂栧姳鐜?
+MiningReward = (璁惧绠楀姏 * 闅惧害绯绘暟 * 鏃堕棿娈? / 鎬荤綉缁滅畻鍔?
 
-// 示例：
-// - 单台设备算力：1 MH/s
-// - 全网总算力：10,000 MH/s
-// - 每天总产量：86,400 MM
-// - 单设备日产量：86,400 * (1 / 10,000) = 8.64 MM
+// 绀轰緥锛?
+// - 鍗曞彴璁惧绠楀姏锛? MH/s
+// - 鍏ㄧ綉鎬荤畻鍔涳細10,000 MH/s
+// - 姣忓ぉ鎬讳骇閲忥細86,400 SUPER
+// - 鍗曡澶囨棩浜ч噺锛?6,400 * (1 / 10,000) = 8.64 SUPER
 ```
 
-### 3.2 日产量分配规则
+### 3.2 鏃ヤ骇閲忓垎閰嶈鍒?
 
 ```
-总日产量 = 365 * 月释放量 / (12 * 30)
+鎬绘棩浜ч噺 = 365 * 鏈堥噴鏀鹃噺 / (12 * 30)
 
-示例（第一年）：
-月释放量：10,416,667 MM
-日释放量：347,222 MM
-分配给用户：347,222 * 95% = 329,861 MM
-平台/运营费：347,222 * 5% = 17,361 MM
+绀轰緥锛堢涓€骞达級锛?
+鏈堥噴鏀鹃噺锛?0,416,667 SUPER
+鏃ラ噴鏀鹃噺锛?47,222 SUPER
+鍒嗛厤缁欑敤鎴凤細347,222 * 95% = 329,861 SUPER
+骞冲彴/杩愯惀璐癸細347,222 * 5% = 17,361 SUPER
 ```
 
-### 3.3 挖矿参数
+### 3.3 鎸栫熆鍙傛暟
 
 ```solidity
 struct MiningConfig {
-    uint256 dailyRelease;           // 每日释放量
-    uint256 minimalHashrate;        // 最小算力要求（MH/s）
-    uint256 maximalHashrate;        // 最大算力上限（防止单个设备垄断）
-    uint256 adjustmentPeriod;       // 难度调整周期（天）
-    uint256 claimCooldown;          // 提取冷却时间（天）
+    uint256 dailyRelease;           // 姣忔棩閲婃斁閲?
+    uint256 minimalHashrate;        // 鏈€灏忕畻鍔涜姹傦紙MH/s锛?
+    uint256 maximalHashrate;        // 鏈€澶х畻鍔涗笂闄愶紙闃叉鍗曚釜璁惧鍨勬柇锛?
+    uint256 adjustmentPeriod;       // 闅惧害璋冩暣鍛ㄦ湡锛堝ぉ锛?
+    uint256 claimCooldown;          // 鎻愬彇鍐峰嵈鏃堕棿锛堝ぉ锛?
 }
 ```
 
 ---
 
-## 4. Swap 兑换设计（MM ↔ USDT）
+## 4. Swap 鍏戞崲璁捐锛圡M 鈫?USDT锛?
 
-### 4.1 Swap 池结构
+### 4.1 Swap 姹犵粨鏋?
 
 ```solidity
 interface ISwapPool {
-    // 兑换对：MM/USDT
-    // 采用 Uniswap v3 或自实现 AMM
+    // 鍏戞崲瀵癸細MM/USDT
+    // 閲囩敤 Uniswap v3 鎴栬嚜瀹炵幇 AMM
     
-    function swapMmToUsdt(
-        uint256 mmAmount,
+    function swapSuperToUsdt(
+        uint256 superAmount,
         uint256 minUsdtOut
     ) external returns (uint256 usdtAmount);
     
-    function swapUsdtToMm(
+    function swapUsdtToSuper(
         uint256 usdtAmount,
         uint256 minMmOut
-    ) external returns (uint256 mmAmount);
+    ) external returns (uint256 superAmount);
     
     function getSwapPrice(
         address tokenIn,
@@ -141,45 +141,45 @@ interface ISwapPool {
 }
 ```
 
-### 4.2 兑换费用结构
+### 4.2 鍏戞崲璐圭敤缁撴瀯
 
 ```
-手续费：0.3% - 1.0%（可配）
-结构：
-- 70% → 流动性提供者
-- 20% → 平台
-- 10% → 生态基金
+鎵嬬画璐癸細0.3% - 1.0%锛堝彲閰嶏級
+缁撴瀯锛?
+- 70% 鈫?娴佸姩鎬ф彁渚涜€?
+- 20% 鈫?骞冲彴
+- 10% 鈫?鐢熸€佸熀閲?
 
-示例：用户兑换 1000 MM → USDT
-假设当前价格：1000 MM = 1 USDT
-兑换费用：1 USDT * 0.5% = 0.005 USDT
-用户实际获得：0.995 USDT
+绀轰緥锛氱敤鎴峰厬鎹?1000 SUPER 鈫?USDT
+鍋囪褰撳墠浠锋牸锛?000 SUPER = 1 USDT
+鍏戞崲璐圭敤锛? USDT * 0.5% = 0.005 USDT
+鐢ㄦ埛瀹為檯鑾峰緱锛?.995 USDT
 ```
 
-### 4.3 初始流动性
+### 4.3 鍒濆娴佸姩鎬?
 
 ```
-流动性池初始化：
-- MM：50,000,000 枚
-- USDT：50,000 枚
-- 目标价格：1 MM = 0.001 USDT
+娴佸姩鎬ф睜鍒濆鍖栵細
+- MM锛?0,000,000 鏋?
+- USDT锛?0,000 鏋?
+- 鐩爣浠锋牸锛? SUPER = 0.001 USDT
 
-日后可通过 LP 机制引入社区流动性提供者。
+鏃ュ悗鍙€氳繃 LP 鏈哄埗寮曞叆绀惧尯娴佸姩鎬ф彁渚涜€呫€?
 ```
 
-### 4.4 防滑点与闪电贷保护
+### 4.4 闃叉粦鐐逛笌闂數璐蜂繚鎶?
 
 ```solidity
-// 最大滑点：3%
-// 闪电贷防护：同一交易块内不允许连续操作
-// 价格预言机：使用 Time-Weighted Average Price (TWAP)
+// 鏈€澶ф粦鐐癸細3%
+// 闂數璐烽槻鎶わ細鍚屼竴浜ゆ槗鍧楀唴涓嶅厑璁歌繛缁搷浣?
+// 浠锋牸棰勮█鏈猴細浣跨敤 Time-Weighted Average Price (TWAP)
 ```
 
 ---
 
-## 5. 挖矿收益提取流程
+## 5. 鎸栫熆鏀剁泭鎻愬彇娴佺▼
 
-### 5.1 实时收益计算
+### 5.1 瀹炴椂鏀剁泭璁＄畻
 
 ```solidity
 function getPendingReward(address miner) external view returns (uint256) {
@@ -190,11 +190,11 @@ function getPendingReward(address miner) external view returns (uint256) {
 }
 ```
 
-### 5.2 分批提取机制
+### 5.2 鍒嗘壒鎻愬彇鏈哄埗
 
-- **日提取额度**：不限制
-- **周提取额度**：无限制
-- **月锁仓期**：首月需锁仓7天后可提取30%
+- **鏃ユ彁鍙栭搴?*锛氫笉闄愬埗
+- **鍛ㄦ彁鍙栭搴?*锛氭棤闄愬埗
+- **鏈堥攣浠撴湡**锛氶鏈堥渶閿佷粨7澶╁悗鍙彁鍙?0%
 
 ```solidity
 function claimReward(uint256 amount) external {
@@ -202,7 +202,7 @@ function claimReward(uint256 amount) external {
     require(block.timestamp >= lastClaim[msg.sender] + claimCooldown, "Cooldown");
     
     miners[msg.sender].claimed += amount;
-    MM.transfer(msg.sender, amount);
+    SUPER.transfer(msg.sender, amount);
     
     lastClaim[msg.sender] = block.timestamp;
 }
@@ -210,99 +210,100 @@ function claimReward(uint256 amount) external {
 
 ---
 
-## 6. 智能合约架构
+## 6. 鏅鸿兘鍚堢害鏋舵瀯
 
-### 6.1 核心合约列表
+### 6.1 鏍稿績鍚堢害鍒楄〃
 
-| 合约名 | 功能 | 部署地址 |
+| 鍚堢害鍚?| 鍔熻兘 | 閮ㄧ讲鍦板潃 |
 |-------|------|---------|
-| MM.sol | ERC20 代币 | 独立部署 |
-| MinerRegistry.sol | 矿工注册与管理 | 后续部署 |
-| MiningPool.sol | 挖矿奖励分配 | 后续部署 |
-| SwapRouter.sol | MM/USDT 兑换 | 后续部署 |
-| RewardVesting.sol | 代币解锁时间锁 | 后续部署 |
+| SUPER.sol | ERC20 浠ｅ竵 | 鐙珛閮ㄧ讲 |
+| MinerRegistry.sol | 鐭垮伐娉ㄥ唽涓庣鐞?| 鍚庣画閮ㄧ讲 |
+| MiningPool.sol | 鎸栫熆濂栧姳鍒嗛厤 | 鍚庣画閮ㄧ讲 |
+| SwapRouter.sol | SUPER/USDT 鍏戞崲 | 鍚庣画閮ㄧ讲 |
+| RewardVesting.sol | 浠ｅ竵瑙ｉ攣鏃堕棿閿?| 鍚庣画閮ㄧ讲 |
 
-### 6.2 合约交互流程
+### 6.2 鍚堢害浜や簰娴佺▼
 
 ```
-App用户 → 注册钱包 → MinerRegistry.registerMiner()
-              ↓
-         设置算力参数 → MiningPool.updateHashrate()
-              ↓
-         每日上报算力 → MiningPool.submitProof()
-              ↓
-         实时计算收益 → MiningPool.getPendingReward()
-              ↓
-         提取收益 → MiningPool.claimReward()
-              ↓
-         兑换为 USDT → SwapRouter.swapMmToUsdt()
-              ↓
-         提现到交易所 → 用户钱包
+App鐢ㄦ埛 鈫?娉ㄥ唽閽卞寘 鈫?MinerRegistry.registerMiner()
+              鈫?
+         璁剧疆绠楀姏鍙傛暟 鈫?MiningPool.updateHashrate()
+              鈫?
+         姣忔棩涓婃姤绠楀姏 鈫?MiningPool.submitProof()
+              鈫?
+         瀹炴椂璁＄畻鏀剁泭 鈫?MiningPool.getPendingReward()
+              鈫?
+         鎻愬彇鏀剁泭 鈫?MiningPool.claimReward()
+              鈫?
+         鍏戞崲涓?USDT 鈫?SwapRouter.swapSuperToUsdt()
+              鈫?
+         鎻愮幇鍒颁氦鏄撴墍 鈫?鐢ㄦ埛閽卞寘
 ```
 
 ---
 
-## 7. 代币初始化与部署
+## 7. 浠ｅ竵鍒濆鍖栦笌閮ㄧ讲
 
-### 部署网络
-- **主网**：Base Mainnet (Chainid: 8453)
-- **测试网**：Sepolia (Chainid: 11155111) - 初期测试
+### 閮ㄧ讲缃戠粶
+- **涓荤綉**锛欱ase Mainnet (Chainid: 8453)
+- **娴嬭瘯缃?*锛歋epolia (Chainid: 11155111) - 鍒濇湡娴嬭瘯
 
-### 部署脚本关键步骤
+### 閮ㄧ讲鑴氭湰鍏抽敭姝ラ
 
 ```bash
-# 1. 部署 MM 代币
-npx hardhat run scripts/deploy-mm-token.js --network sepolia
+# 1. 閮ㄧ讲 SUPER 浠ｅ竵
+npx hardhat run scripts/deploy-SUPER-token.js --network sepolia
 
-# 2. 部署矿工注册表
+# 2. 閮ㄧ讲鐭垮伐娉ㄥ唽琛?
 npx hardhat run scripts/deploy-miner-registry.js --network sepolia
 
-# 3. 部署挖矿奖励池
+# 3. 閮ㄧ讲鎸栫熆濂栧姳姹?
 npx hardhat run scripts/deploy-mining-pool.js --network sepolia
 
-# 4. 部署 Swap 路由
+# 4. 閮ㄧ讲 Swap 璺敱
 npx hardhat run scripts/deploy-swap-router.js --network sepolia
 
-# 5. 初始化流动性
+# 5. 鍒濆鍖栨祦鍔ㄦ€?
 npx hardhat run scripts/init-liquidity.js --network sepolia
 ```
 
 ---
 
-## 8. 经济模型平衡点
+## 8. 缁忔祹妯″瀷骞宠　鐐?
 
-### 8.1 供需平衡
+### 8.1 渚涢渶骞宠　
 
-| 指标 | 值 | 说明 |
+| 鎸囨爣 | 鍊?| 璇存槑 |
 |------|------|------|
-| 初始流通量 | 50M | 第一年奖励释放 |
-| 年均新增供应 | 125M | 线性释放 |
-| 目标年交易量 | 100W | 用户挖矿 + 兑换 |
-| 目标通胀率 | 12.5% | 第一年 |
+| 鍒濆娴侀€氶噺 | 50M | 绗竴骞村鍔遍噴鏀?|
+| 骞村潎鏂板渚涘簲 | 125M | 绾挎€ч噴鏀?|
+| 鐩爣骞翠氦鏄撻噺 | 100W | 鐢ㄦ埛鎸栫熆 + 鍏戞崲 |
+| 鐩爣閫氳儉鐜?| 12.5% | 绗竴骞?|
 
-### 8.2 价格稳定机制
+### 8.2 浠锋牸绋冲畾鏈哄埗
 
-1. **动态难度调整**：全网算力 ↑ → 单位奖励 ↓
-2. **流动性深度**：初始 50M MM + 50k USDT
-3. **激励机制**：LP 提供者获得额外奖励
+1. **鍔ㄦ€侀毦搴﹁皟鏁?*锛氬叏缃戠畻鍔?鈫?鈫?鍗曚綅濂栧姳 鈫?
+2. **娴佸姩鎬ф繁搴?*锛氬垵濮?50M SUPER + 50k USDT
+3. **婵€鍔辨満鍒?*锛歀P 鎻愪緵鑰呰幏寰楅澶栧鍔?
 
 ---
 
-## 系统总结
+## 绯荤粺鎬荤粨
 
 ```
-MM代币 ← ERC20标准合约
-   ↓
-MinerRegistry ← 用户身份/设备绑定
-   ↓
-MiningPool ← 算力证明 → 每日奖励分配
-   ↓
-SwapRouter ← 流动性池 → MM/USDT 兑换
-   ↓
-用户提现 → USDT 到交易所/钱包
+MM浠ｅ竵 鈫?ERC20鏍囧噯鍚堢害
+   鈫?
+MinerRegistry 鈫?鐢ㄦ埛韬唤/璁惧缁戝畾
+   鈫?
+MiningPool 鈫?绠楀姏璇佹槑 鈫?姣忔棩濂栧姳鍒嗛厤
+   鈫?
+SwapRouter 鈫?娴佸姩鎬ф睜 鈫?SUPER/USDT 鍏戞崲
+   鈫?
+鐢ㄦ埛鎻愮幇 鈫?USDT 鍒颁氦鏄撴墍/閽卞寘
 ```
 
-**安全考虑**：
-- 所有重要参数由多签管理员控制
-- 合约可升级性：使用 Proxy Pattern
-- 审计周期：每季度进行第三方审计
+**瀹夊叏鑰冭檻**锛?
+- 鎵€鏈夐噸瑕佸弬鏁扮敱澶氱绠＄悊鍛樻帶鍒?
+- 鍚堢害鍙崌绾ф€э細浣跨敤 Proxy Pattern
+- 瀹¤鍛ㄦ湡锛氭瘡瀛ｅ害杩涜绗笁鏂瑰璁?
+

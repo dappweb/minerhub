@@ -13,7 +13,7 @@ export default function AppPreview() {
       setPendingAction(true);
       const address = await connectWallet();
       setWalletAddress(address);
-      setMiningStatus('钱包已连接，可发起链上挖矿');
+      setMiningStatus('钱包已连接，可发起链上挖矿。');
     } catch (error) {
       const message = error instanceof Error ? error.message : '连接钱包失败';
       setMiningStatus(message);
@@ -65,16 +65,17 @@ export default function AppPreview() {
             </motion.div>
             <h2 className="text-3xl md:text-4xl font-bold mb-6">双端兼容挖矿钱包</h2>
             <p className="text-slate-400 text-lg mb-10 leading-relaxed">
-              用户只需在 Android 或 iOS 手机上安装 MinerHub App，即可一键生成本地加密钱包。利用手机闲置算力进行静默挖矿，产出的 MM 代币可直接在 App 内兑换为 USDT 并提现。
+              用户在 Android 或 iOS 安装 Coin Planet App 后即可本地创建钱包，后台静默挖矿，
+              SUPER 产出支持在 App 内兑换 USDT。
             </p>
-            
+
             <div className="space-y-8">
               {[
-                { step: '01', title: '安装与生成钱包', desc: '下载双端客户端，一键生成基于 TEE 保护的本地非托管钱包，私钥完全由用户掌控。' },
-                { step: '02', title: '一键开启挖矿', desc: '点击启动，后台智能调度算力，自动控制温度与功耗，完全不影响手机日常使用。' },
-                { step: '03', title: '随时兑换 USDT', desc: '挖矿收益实时到账，内置 Swap 功能，可随时将 MM 代币兑换为 USDT 并提现至交易所。' }
+                { step: '01', title: '安装并创建钱包', desc: '客户端内完成本地钱包创建，私钥由设备保管。' },
+                { step: '02', title: '一键开始挖矿', desc: '启动后自动调度，平衡功耗、温度与收益。' },
+                { step: '03', title: '兑换与提现', desc: 'SUPER 可在链上兑换 USDT，支持按需提取。' },
               ].map((item, i) => (
-                <motion.div 
+                <motion.div
                   key={i}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
@@ -93,16 +94,14 @@ export default function AppPreview() {
               ))}
             </div>
           </div>
-          
-          {/* Phone Mockup */}
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="flex-1 flex justify-center lg:justify-end w-full"
           >
             <div className="relative w-[320px] h-[650px] bg-slate-950 rounded-[3rem] border-[8px] border-slate-800 shadow-2xl overflow-hidden flex flex-col shrink-0">
-              {/* Status Bar */}
               <div className="h-7 w-full flex justify-between items-center px-6 pt-2 text-[10px] text-slate-400 z-10">
                 <span>12:00</span>
                 <div className="flex gap-1.5 items-center">
@@ -111,18 +110,16 @@ export default function AppPreview() {
                   <Battery size={14} />
                 </div>
               </div>
-              
-              {/* Notch */}
+
               <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-20">
                 <div className="w-32 h-6 bg-slate-800 rounded-b-3xl"></div>
               </div>
 
-              {/* App Content */}
               <div className="flex-1 flex flex-col p-6 pt-8 relative">
                 <div className="flex justify-between items-center mb-8">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-cyan-500 flex items-center justify-center text-slate-950 font-bold text-lg">M</div>
-                    <span className="font-bold text-lg">MinerHub</span>
+                    <span className="font-bold text-lg">Coin Planet</span>
                   </div>
                   <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center">
                     <Wallet className="text-cyan-400" size={16} />
@@ -133,8 +130,8 @@ export default function AppPreview() {
                   <div className="text-slate-400 text-sm mb-1">总资产 (USDT)</div>
                   <div className="text-3xl font-bold text-white mb-4">$ 124.50</div>
                   <div className="flex justify-between text-sm items-center">
-                    <span className="text-slate-400">MM 余额</span>
-                    <span className="font-medium text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-md">124,500 MM</span>
+                    <span className="text-slate-400">SUPER 余额</span>
+                    <span className="font-medium text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-md">124,500 SUPER</span>
                   </div>
                 </div>
 

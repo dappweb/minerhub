@@ -2,12 +2,12 @@ import { Check, X } from 'lucide-react';
 
 export default function Comparison() {
   const data = [
-    { feature: '安全性', traditional: '无', software: '软件级（易攻击）', minerhub: '硬件TEE（金融级）' },
-    { feature: '便捷性', traditional: '无', software: '需下载配置', minerhub: '开机即用，后台自动' },
-    { feature: '成本', traditional: '无', software: '耗电高、效率低', minerhub: '系统级优化，成本最低' },
-    { feature: '收益保障', traditional: '无', software: '无保底', minerhub: '官方池保底+市场双通道' },
-    { feature: '资产归属', traditional: '无', software: '平台控制', minerhub: '私钥自持，链上确权' },
-    { feature: '二手价值', traditional: '折旧', software: '无', minerhub: '挖矿权可转让，残值+' },
+    { feature: '安全性', traditional: '无', software: '软件级（易攻击）', coinPlanet: '硬件TEE（金融级）' },
+    { feature: '便捷性', traditional: '无', software: '需下载配置', coinPlanet: '开机即用，后台自动' },
+    { feature: '成本', traditional: '无', software: '耗电高、效率低', coinPlanet: '系统级优化，成本最低' },
+    { feature: '收益保障', traditional: '无', software: '无保底', coinPlanet: '官方池保底+市场双通道' },
+    { feature: '资产归属', traditional: '无', software: '平台控制', coinPlanet: '私钥自持，链上确权' },
+    { feature: '二手价值', traditional: '折旧', software: '无', coinPlanet: '挖矿权可转让，残值+' },
   ];
 
   return (
@@ -26,7 +26,7 @@ export default function Comparison() {
                   <th className="py-5 px-6 font-medium text-slate-300 w-1/4">对比维度</th>
                   <th className="py-5 px-6 font-medium text-slate-500 w-1/4">传统手机</th>
                   <th className="py-5 px-6 font-medium text-slate-500 w-1/4">软件挖矿App</th>
-                  <th className="py-5 px-6 font-bold text-cyan-400 w-1/4 bg-cyan-950/20">MinerHub 方案</th>
+                  <th className="py-5 px-6 font-bold text-cyan-400 w-1/4 bg-cyan-950/20">Coin Planet 方案</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -40,7 +40,7 @@ export default function Comparison() {
                     <td className="py-4 px-6 text-slate-400">{row.software}</td>
                     <td className="py-4 px-6 font-bold text-cyan-300 bg-cyan-950/10 flex items-center gap-2">
                       <Check size={18} className="text-cyan-500" />
-                      {row.minerhub}
+                      {row.coinPlanet}
                     </td>
                   </tr>
                 ))}
