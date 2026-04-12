@@ -6,7 +6,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "ios": {
       "bundleIdentifier": "com.coinplanet.mobile",
       "supportsTablet": true
@@ -19,6 +23,9 @@
       "chainId": 8453,
       "minerContractAddress": "0x0000000000000000000000000000000000000000",
       "swapContractAddress": "0x0000000000000000000000000000000000000000"
-    }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }

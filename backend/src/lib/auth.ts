@@ -1,5 +1,4 @@
-import { verifyMessage } from 'viem';
-import type { Address, Hex } from 'viem';
+import { verifyMessage } from 'ethers';
 
 /**
  * 签名验证流程：
@@ -18,11 +17,11 @@ export async function getNonce(): Promise<string> {
 }
 
 export async function verifySignature(
-  wallet: string, // 前端传来的钱包地址
-  signature: string, // 签名值 (0x开头)
-  nonce: string, // nonce (防重放)
-  path: string, // 请求路径 e.g. "/api/users"
-  payload?: Record<string, any> // 请求体
+  wallet: string,
+  signature: string,
+  nonce: string,
+  path: string,
+  payload?: Record<string, any>
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     // 1. 检查nonce是否已用过
@@ -33,14 +32,9 @@ export async function verifySignature(
     // 2. 构造签名消息（必须与前端一致）
     const message = `coinplanet|${nonce}|${path}|${JSON.stringify(payload ?? {})}`;
 
-    // 3. 验证签名
-    const isValid = await verifyMessage({
-      address: wallet as Address,
-      message,
-      signature: signature as Hex,
-    });
-
-    if (!isValid) {
+    // 3. 验证签名 (ethers v6: verifyMessage 返回恢复出的地址)
+    const recovered = verifyMessage(message, signature);
+    if (recovered.toLowerCase() !== wallet.toLowerCase()) {
       return { valid: false, error: 'Signature verification failed' };
     }
 

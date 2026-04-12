@@ -9,3 +9,4 @@ coverage/
 .dev.vars
 .wrangler/
 backend/.wrangler/
+backend/dev.sqlite

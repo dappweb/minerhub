@@ -1,5 +1,5 @@
-﻿import { createPublicClient, createWalletClient, defineChain, http, parseUnits } from 'viem';
-import type { Address, Hex } from 'viem';
+﻿import type { Address, Hex } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, http, parseUnits } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
 const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '11155111');
@@ -102,7 +102,8 @@ export async function registerMinerOnChain(hashrate: number, deviceId: string) {
     args: [BigInt(hashrate), deviceId],
   });
 
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
@@ -121,7 +122,8 @@ export async function updateHashrateOnChain(hashrate: number) {
     args: [BigInt(hashrate)],
   });
 
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
@@ -139,7 +141,8 @@ export async function claimRewardOnChain() {
     functionName: 'claimReward',
   });
 
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
@@ -163,7 +166,8 @@ export async function swapSuperToUsdtOnChain(amount: string) {
     args: [parseUnits(amount, 18)],
   });
 
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
@@ -193,7 +197,8 @@ export async function sendNativeTokenOnChain(to: Address, amountEth: string) {
     value: parseUnits(amountEth, 18),
   });
 
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
