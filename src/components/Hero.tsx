@@ -1,5 +1,5 @@
-﻿import { motion } from 'motion/react';
-import { Smartphone, Zap, Shield, Coins, ArrowRight } from 'lucide-react';
+﻿import { ArrowRight, Coins, Shield, Smartphone, Zap } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export default function Hero() {
   return (
@@ -46,6 +46,10 @@ export default function Hero() {
           >
             <a href="#quick-entry" className="px-8 py-4 rounded-full bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shadow-[0_0_30px_-5px_rgba(6,182,212,0.5)] inline-flex items-center gap-2">
               连接钱包进入后台
+              <ArrowRight size={18} />
+            </a>
+            <a href="#download" className="px-8 py-4 rounded-full bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-[0_0_30px_-5px_rgba(34,197,94,0.5)] inline-flex items-center gap-2">
+              立即下载应用
               <ArrowRight size={18} />
             </a>
             <a href="#flow-steps" className="px-8 py-4 rounded-full bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors border border-slate-700 inline-flex items-center gap-2">

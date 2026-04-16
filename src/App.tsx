@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { verifyMessage } from 'viem';
+import React, { Suspense } from 'react';
 import type { Address } from 'viem';
+import { verifyMessage } from 'viem';
 import { useAccount, useSignMessage } from 'wagmi';
 import Hero from './components/Hero';
 import { getMiningPoolOwnerOnChain } from './lib/blockchain';
@@ -14,6 +14,7 @@ import { getMiningPoolOwnerOnChain } from './lib/blockchain';
 // Lazy-load non-critical components for faster initial render
 const AppPreview = React.lazy(() => import('./components/AppPreview'));
 const DappSwap = React.lazy(() => import('./components/DappSwap'));
+const Download = React.lazy(() => import('./components/Download'));
 const Features = React.lazy(() => import('./components/Features'));
 const Architecture = React.lazy(() => import('./components/Architecture'));
 const Economics = React.lazy(() => import('./components/Economics'));
@@ -288,6 +289,7 @@ export default function App() {
                 </div>
               </div>
             </section>
+            <Download />
             <Features />
             <Architecture />
             <Economics />

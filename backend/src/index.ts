@@ -1,7 +1,8 @@
+import { internalError, json, notFound } from "./lib/response";
 import { handleClaims } from "./routes/claims";
 import { handleDevices } from "./routes/devices";
+import { handleDownloads } from "./routes/downloads";
 import { handleUsers } from "./routes/users";
-import { internalError, json, notFound } from "./lib/response";
 import type { Env } from "./types/env";
 
 function getPathParts(url: string): string[] {
@@ -33,6 +34,7 @@ export default {
       if (scope === "users") return handleUsers(request, env, pathParts);
       if (scope === "devices") return handleDevices(request, env, pathParts);
       if (scope === "claims") return handleClaims(request, env, pathParts);
+      if (scope === "downloads") return handleDownloads(request, env, pathParts);
 
       return notFound("API route not found");
     } catch (error) {
