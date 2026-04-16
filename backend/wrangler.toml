@@ -5,8 +5,8 @@ workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "longxiaji_inventory"
-database_id = "6487f628-44f2-44e6-a978-065d7e1582d3"
+database_name = "coin-planet-db"
+database_id = "6fc57b82-5ec7-47b8-a3a4-4b00a23af41c"
 
 [[kv_namespaces]]
 binding = "CACHE"
@@ -19,5 +19,10 @@ RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
 SUPER_TOKEN_ADDRESS = "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357"
 MINING_POOL_ADDRESS = "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE"
 SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
-OWNER_ADDRESS = "replace-with-your-owner-wallet-address"
+OWNER_ADDRESS = "0x744447d8580EB900b199e852C132F626247a36F7"
+
+# 开通 R2 后取消注释以下部分，并重新 npx wrangler deploy
+# [[r2_buckets]]
+# binding = "APP_BUCKET"
+# bucket_name = "coin-planet-apps"
 

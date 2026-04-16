@@ -40,5 +40,16 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     return json(user);
   }
 
+  // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)
+  if (request.method === "GET" && pathParts.length === 0) {
+    const wallet = new URL(request.url).searchParams.get("wallet");
+    if (!wallet) return json({ error: "wallet query param is required" }, 400);
+    const user = await env.DB.prepare("SELECT id, wallet, email, role, created_at, updated_at FROM users WHERE wallet = ?")
+      .bind(wallet.toLowerCase())
+      .first();
+    if (!user) return json({ error: "User not found" }, 404);
+    return json(user);
+  }
+
   return json({ error: "Unsupported users route" }, 404);
 }

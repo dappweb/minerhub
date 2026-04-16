@@ -1,28 +1,28 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { Address } from 'viem';
-import { createClaim, createUser, registerDevice } from './services/api';
+import { createClaim, createUser, getUser, getUserByWallet, registerDevice } from './services/api';
 import {
-    claimRewardOnChain,
-    getSwapPriceOnChain,
-    getWalletAddress,
-    registerMinerOnChain,
-    sendNativeTokenOnChain,
-    swapUsdtToSuperOnChain,
-    updateHashrateOnChain,
+  claimRewardOnChain,
+  getSwapPriceOnChain,
+  getWalletAddress,
+  registerMinerOnChain,
+  sendNativeTokenOnChain,
+  swapUsdtToSuperOnChain,
+  updateHashrateOnChain,
 } from './services/blockchain';
 
 type Lang = 'en' | 'zh';
@@ -33,6 +33,7 @@ type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 const LANG_KEY = 'coinplanet.lang';
 const DEVICE_ID_KEY = 'coinplanet.device_id';
 const MINER_READY_KEY = 'coinplanet.miner_ready';
+const USER_ID_KEY = 'coinplanet.user_id';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 
@@ -438,8 +439,33 @@ export default function App() {
     try {
       const address = await getWalletAddress();
       setWalletAddress(address);
+
+      // 1. 先尝试从本地缓存恢复 userId
+      const cachedUserId = await AsyncStorage.getItem(USER_ID_KEY).catch(() => null);
+      if (cachedUserId) {
+        const existing = await getUser(cachedUserId);
+        if (existing) {
+          setUserId(existing.id);
+          await refreshSwapPrice();
+          setStatus(t.initDone);
+          return;
+        }
+      }
+
+      // 2. 本地无缓存或服务端已不存在，尝试按钱包地址查找
+      const existingByWallet = await getUserByWallet(address);
+      if (existingByWallet) {
+        setUserId(existingByWallet.id);
+        await AsyncStorage.setItem(USER_ID_KEY, existingByWallet.id).catch(() => null);
+        await refreshSwapPrice();
+        setStatus(t.initDone);
+        return;
+      }
+
+      // 3. 全新用户，注册并持久化
       const user = await createUser(address);
       setUserId(user.id);
+      await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
       await refreshSwapPrice();
       setStatus(t.initDone);
     } catch (error) {

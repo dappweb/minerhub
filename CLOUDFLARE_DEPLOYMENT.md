@@ -8,13 +8,13 @@
 
 ## 📊 部署概览
 
-| 组件 | 状态 | 地址 | 说明 |
-|------|------|------|------|
-| **前端 (Pages)** | ✅ 在线 | https://7246abcb.minerhub.pages.dev | React + Vite 官网/管理平台 |
-| **后端 (Workers)** | ✅ 在线 | https://coin-planet-api.dappweb.workers.dev | TypeScript + Vite 后台 API |
-| **数据库 (D1)** | ✅ 初始化 | longxiaji_inventory | SQLite，6 张表已创建 |
-| **缓存 (KV)** | ✅ 绑定 | CACHE (06f37a3d...) | Nonce 防重放、数据缓存 |
-| **文件存储 (R2)** | ⚠️ 待启用 | 未配置 | 需在 Cloudflare 控制台手动启用 |
+| 组件               | 状态      | 地址                                        | 说明                           |
+| ------------------ | --------- | ------------------------------------------- | ------------------------------ |
+| **前端 (Pages)**   | ✅ 在线   | https://7246abcb.minerhub.pages.dev         | React + Vite 官网/管理平台     |
+| **后端 (Workers)** | ✅ 在线   | https://coin-planet-api.dappweb.workers.dev | TypeScript + Vite 后台 API     |
+| **数据库 (D1)**    | ✅ 初始化 | longxiaji_inventory                         | SQLite，6 张表已创建           |
+| **缓存 (KV)**      | ✅ 绑定   | CACHE (06f37a3d...)                         | Nonce 防重放、数据缓存         |
+| **文件存储 (R2)**  | ⚠️ 待启用 | 未配置                                      | 需在 Cloudflare 控制台手动启用 |
 
 ---
 
@@ -66,18 +66,21 @@ VITE_SWAP_ROUTER_ADDRESS=0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435
 ## ✅ 快速验证
 
 ### 1. 前端可访问性
+
 ```bash
 curl -I https://7246abcb.minerhub.pages.dev
 # 预期: HTTP 200
 ```
 
 ### 2. 后端健康检查
+
 ```bash
 curl https://coin-planet-api.dappweb.workers.dev/api/health
 # 预期: {"status":"healthy","chainId":"97","timestamp":"..."}
 ```
 
 ### 3. 数据库连接
+
 ```bash
 # 后端已连接到 D1，schema 已初始化
 # users, devices, claims, nonces 等表已创建
@@ -88,6 +91,7 @@ curl https://coin-planet-api.dappweb.workers.dev/api/health
 ## 📝 部署变更说明
 
 ### 1. R2 兼容处理
+
 - **问题**: 账号 D1 创建已达配额，R2 未启用
 - **解决**: 后端改为可选 R2 组件，下载接口无 R2 时返回明确错误
 - **文件修改**:
@@ -96,11 +100,13 @@ curl https://coin-planet-api.dappweb.workers.dev/api/health
   - `backend/wrangler.toml`: 移除 R2 绑定块
 
 ### 2. D1 临时绑定
+
 - **问题**: 无法创建 coin-planet-db，配额已满
 - **用途**: 后端临时绑定到现有库 longxiaji_inventory
 - **计划**: 待账号清理旧库后切换回专用库
 
 ### 3. JWT Secret 生成
+
 - **新增**: 生成和部署实际加密密钥取代占位符
 - **用途**: 后端签名验证和 Nonce 管理
 
@@ -109,16 +115,17 @@ curl https://coin-planet-api.dappweb.workers.dev/api/health
 ## 🛠️ 后续维护任务
 
 ### 高优先级
+
 1. **[ ] 启用 R2** - 在 Cloudflare 控制台激活 R2 存储
    - 一旦启用，编辑 `backend/wrangler.toml` 恢复 R2 绑定
    - 重新部署 Worker: `npm run deploy:api`
-   
 2. **[ ] 释放 D1 配额** - 删除不再使用的 D1 库
    - 删除后创建 coin-planet-db
    - 更新 `backend/wrangler.toml` 中的 database_id
    - 重新部署: `npm run deploy:api`
 
 ### 中优先级
+
 3. **[ ] 配置 OWNER_ADDRESS** - 设置管理员钱包地址
    - 在 `backend/wrangler.toml` 中添加 `OWNER_ADDRESS`
    - 用于 R2 上传权限控制
@@ -130,6 +137,7 @@ curl https://coin-planet-api.dappweb.workers.dev/api/health
    - `/api/claims` - 待测
 
 ### 低优先级
+
 5. **[ ] 配置自定义域名** - 将 Pages 绑定到 minerhub.com
 6. **[ ] 启用 CDN 缓存** - 优化静态资源加载速度
 7. **[ ] 监控和告警** - 设置错误日志和性能指标
@@ -139,6 +147,7 @@ curl https://coin-planet-api.dappweb.workers.dev/api/health
 ## 📚 相关命令
 
 ### 本地开发
+
 ```bash
 # 前端
 npm run dev
@@ -153,6 +162,7 @@ npm run compile
 ```
 
 ### 部署
+
 ```bash
 # 前端到 Pages
 npm run deploy:cf
@@ -180,15 +190,18 @@ npm run db:migrate --remote    # 远程 D1
 ## 📞 故障排查
 
 ### 后端 502 错误
+
 - 检查 `JWT_SECRET` 是否为空或包含特殊字符
 - 检查 D1 连接 ID 是否有效
 - 查看 Wrangler 日志: `wrangler tail coin-planet-api`
 
 ### 前后端通信失败
+
 - 确认 `VITE_API_BASE_URL` 是否正确指向 Workers 域名
 - 检查请求头中的签名和 Nonce
 
 ### 数据库查询超时
+
 - 检查 D1 库大小和查询复杂度
 - 考虑进行 SQL 优化
 
