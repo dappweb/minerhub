@@ -5,12 +5,12 @@ workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "coin-planet-db"
-database_id = "replace-with-your-d1-id"
+database_name = "longxiaji_inventory"
+database_id = "6487f628-44f2-44e6-a978-065d7e1582d3"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "replace-with-your-kv-id"
+id = "06f37a3d8b3d4880ad2061397ddd4bb2"
 
 [vars]
 JWT_SECRET = "replace-with-strong-secret"
@@ -19,4 +19,5 @@ RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
 SUPER_TOKEN_ADDRESS = "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357"
 MINING_POOL_ADDRESS = "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE"
 SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
+OWNER_ADDRESS = "replace-with-your-owner-wallet-address"
 
