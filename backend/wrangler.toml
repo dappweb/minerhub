@@ -13,7 +13,7 @@ binding = "CACHE"
 id = "06f37a3d8b3d4880ad2061397ddd4bb2"
 
 [vars]
-JWT_SECRET = "replace-with-strong-secret"
+JWT_SECRET = "YzQ0ODY2OTAtMGIyZi00NzAxLWE4YjItYWRkMjEyYmVmNzhiMmQ5M2QwMDEtYjk0Yy00NmI0LWIyNDEtNDU0ZGZmNWIwM2M1"
 CHAIN_ID = "97"
 RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
 SUPER_TOKEN_ADDRESS = "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357"
