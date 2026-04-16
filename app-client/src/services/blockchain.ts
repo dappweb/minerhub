@@ -2,15 +2,15 @@
 import { createPublicClient, createWalletClient, defineChain, http, parseUnits } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
-const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '11155111');
-const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://sepolia.infura.io/v3/replace';
+const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '97');
+const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
 
 const chain = defineChain({
   id: chainId,
   name: 'Coin Planet Chain',
   nativeCurrency: {
-    name: 'Ether',
-    symbol: 'ETH',
+    name: 'BNB',
+    symbol: 'BNB',
     decimals: 18,
   },
   rpcUrls: {
@@ -76,7 +76,7 @@ const swapAbi = [
   },
   {
     type: 'function',
-    name: 'swapSuperToUsdt',
+    name: 'swapUsdtToSuper',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'amountIn', type: 'uint256' }],
     outputs: [],
@@ -102,7 +102,7 @@ export async function registerMinerOnChain(hashrate: number, deviceId: string) {
     args: [BigInt(hashrate), deviceId],
   });
 
-  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  // 等待交易确认（最多 120 秒，BSC Testnet 出块较快，通常 3-5 秒）
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
@@ -122,7 +122,7 @@ export async function updateHashrateOnChain(hashrate: number) {
     args: [BigInt(hashrate)],
   });
 
-  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  // 等待交易确认（最多 120 秒，BSC Testnet 出块较快，通常 3-5 秒）
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
@@ -141,19 +141,19 @@ export async function claimRewardOnChain() {
     functionName: 'claimReward',
   });
 
-  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  // 等待交易确认（最多 120 秒，BSC Testnet 出块较快，通常 3-5 秒）
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
 
-export async function swapSuperToUsdtOnChain(amount: string) {
+export async function swapUsdtToSuperOnChain(amount: string) {
   if (!swapRouterAddress) {
     throw new Error('缺少 EXPO_PUBLIC_SWAP_ROUTER_ADDRESS。');
   }
 
   const normalizedAmount = Number(amount);
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-    throw new Error('请输入有效的 SUPER 数量。');
+    throw new Error('请输入有效的 USDT 数量。');
   }
 
   const { account, walletClient, publicClient } = await getWalletClients();
@@ -162,11 +162,11 @@ export async function swapSuperToUsdtOnChain(amount: string) {
     account,
     address: swapRouterAddress,
     abi: swapAbi,
-    functionName: 'swapSuperToUsdt',
+    functionName: 'swapUsdtToSuper',
     args: [parseUnits(amount, 18)],
   });
 
-  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  // 等待交易确认（最多 120 秒，BSC Testnet 出块较快，通常 3-5 秒）
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }
@@ -197,7 +197,7 @@ export async function sendNativeTokenOnChain(to: Address, amountEth: string) {
     value: parseUnits(amountEth, 18),
   });
 
-  // 等待交易确认（最多 120 秒，Sepolia 测试网可能较慢）
+  // 等待交易确认（最多 120 秒，BSC Testnet 出块较快，通常 3-5 秒）
   await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
   return hash;
 }

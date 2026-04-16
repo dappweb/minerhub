@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 本地开发替代服务器（替代 wrangler dev，解决 Windows workerd 崩溃问题）
  * 使用方式: node server-dev.mjs
  * 监听端口: 8788
@@ -106,7 +106,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/health
   if (scope === 'health' && req.method === 'GET') {
-    return sendJson(res, { status: 'healthy', chainId: '11155111', timestamp: nowIso() });
+    return sendJson(res, { status: 'healthy', chainId: '97', timestamp: nowIso() });
   }
 
   // ── /api/users ──────────────────────────────────────────────────────────────

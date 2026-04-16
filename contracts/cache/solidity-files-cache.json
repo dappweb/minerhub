@@ -799,8 +799,8 @@
       ]
     },
     "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\USDT_Mock.sol": {
-      "lastModificationDate": 1775835289309,
-      "contentHash": "5248225b0582b981120b3e30076ad891",
+      "lastModificationDate": 1776090344088,
+      "contentHash": "7510cbf5af4319636713fd644bc1f023",
       "sourceName": "contracts/USDT_Mock.sol",
       "solcConfig": {
         "version": "0.8.24",

@@ -1,7 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
-import { formatUnits, isAddress } from 'viem';
+﻿import { Activity, CheckCircle2, Database, LayoutDashboard, ShieldAlert, Smartphone, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Activity, CheckCircle2, Database, LayoutDashboard, ShieldAlert, Smartphone, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatUnits, isAddress } from 'viem';
 import {
   addSwapLiquidityOnChain,
   collectEcosystemFeeOnChain,
@@ -46,7 +46,7 @@ function formatTokenAmount(amount: bigint): string {
 }
 
 function formatUsdtAmount(amount: bigint): string {
-  const parsed = Number(formatUnits(amount, 6));
+  const parsed = Number(formatUnits(amount, 18));
   if (!Number.isFinite(parsed)) {
     return '0';
   }

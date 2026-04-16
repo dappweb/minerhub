@@ -1,6 +1,6 @@
 ﻿# Coin Planet 瀹屾暣瀹炵幇璁″垝锛圫epolia + Cloudflare锛?
 
-> 鍩轰簬 Ethereum Sepolia 娴嬭瘯缃?+ Cloudflare鍩虹璁炬柦鐨勭鍒扮瀹炵幇鏂规  
+> 鍩轰簬 Ethereum BSC Testnet 娴嬭瘯缃?+ Cloudflare鍩虹璁炬柦鐨勭鍒扮瀹炵幇鏂规  
 > 鐢熸垚鏃堕棿锛?026-04-04 | 鐩爣瀹屾垚锛?026-05-26锛圫epolia娴嬬綉楠岃瘉锛?
 
 ---
@@ -23,7 +23,7 @@
 鈹?             鈹?                                         鈹?         鈹?
 鈹?             鈻?                                         鈻?         鈹?
 鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?           鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?
-鈹? 鈹? Cloudflare Workers      鈹?           鈹? Sepolia RPC         鈹?鈹?
+鈹? 鈹? Cloudflare Workers      鈹?           鈹? BSC Testnet RPC         鈹?鈹?
 鈹? 鈹? (API Gateway)           鈹?           鈹? (Infura/Alchemy)    鈹?鈹?
 鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?           鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?
 鈹?                鈹?                                鈻?                鈹?
@@ -47,7 +47,7 @@
 鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?
 鈹?                鈹?                                     鈹?          鈹?
 鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈻尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?
-鈹? 鈹?        鍖哄潡閾惧眰 (Sepolia Test Network)                   鈹?  鈹?
+鈹? 鈹?        鍖哄潡閾惧眰 (BSC Testnet Test Network)                   鈹?  鈹?
 鈹? 鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹愨攤   鈹?
 鈹? 鈹? 鈹?SUPER Token     鈹? 鈹?Mining Pool  鈹? 鈹?Swap Router   鈹傗攤   鈹?
 鈹? 鈹? 鈹?(ERC20)      鈹? 鈹?(鎸栫熆閫昏緫)    鈹? 鈹?(AMM)         鈹傗攤   鈹?
@@ -58,8 +58,8 @@
 鈹? 鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹樷攤   鈹?
 鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?
 鈹?                                                                    鈹?
-鈹? 閮ㄧ讲锛歋epolia 娴嬭瘯缃?(chainId: 11155111)                         鈹?
-鈹? RPC: https://sepolia.infura.io/v3/{KEY}                         鈹?
+鈹? 閮ㄧ讲锛歋epolia 娴嬭瘯缃?(chainId: 97)                         鈹?
+鈹? RPC: https://data-seed-prebsc-1-s1.binance.org:8545/                         鈹?
 鈹?                                                                    鈹?
 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
@@ -222,7 +222,7 @@ npm install dotenv
 
 # 鐩綍缁撴瀯
 contracts/
-鈹溾攢鈹€ hardhat.config.ts           鈫?RPC 閰嶇疆 (Sepolia)
+鈹溾攢鈹€ hardhat.config.ts           鈫?RPC 閰嶇疆 (BSC Testnet)
 鈹溾攢鈹€ contracts/
 鈹?  鈹溾攢鈹€ SUPER.sol                  鈫?ERC20 浠ｅ竵
 鈹?  鈹溾攢鈹€ MiningPool.sol          鈫?鎸栫熆鍚堢害
@@ -292,11 +292,11 @@ npx hardhat coverage
 # 鐩爣锛?90% 瑕嗙洊鐜?
 ```
 
-#### Step 1.4: Sepolia 閮ㄧ讲
+#### Step 1.4: BSC Testnet 閮ㄧ讲
 
 ```bash
 # 閮ㄧ讲鑴氭湰
-npx hardhat run scripts/deploy.ts --network sepolia
+npx hardhat run scripts/deploy.ts --network bscTestnet
 
 # 杈撳嚭锛?
 # 鉁?SUPER deployed: 0x1234...
@@ -310,7 +310,7 @@ VITE_MINING_POOL_ADDRESS=0x...
 VITE_SWAP_ROUTER_ADDRESS=0x...
 ```
 
-**閲岀▼纰戝畬鎴?*锛氣渽 鍚堢害閮ㄧ讲鍒?Sepolia锛屽湴鍧€纭
+**閲岀▼纰戝畬鎴?*锛氣渽 鍚堢害閮ㄧ讲鍒?BSC Testnet锛屽湴鍧€纭
 
 ---
 
@@ -455,7 +455,7 @@ import { ethers } from "ethers";
 export async function connectWallet() {
   const provider = new WalletConnectProvider({
     infuraId: process.env.REACT_APP_INFURA_ID,
-    chainId: 11155111  // Sepolia
+    chainId: 97  // BSC Testnet
   });
 
   await provider.enable();
@@ -619,7 +619,7 @@ export async function submitClaim(userId, amount) {
 
 ```env
 # ========== 鍖哄潡閾?==========
-SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/{YOUR_INFURA_KEY}
+BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 DEPLOYER_PRIVATE_KEY=0x{your_private_key}  # 4涓?鍚庤窡40浣?6杩涘埗
 
 # 鍚堢害鍦板潃 (閮ㄧ讲鍚庤幏寰?
@@ -628,8 +628,8 @@ VITE_MINING_POOL_ADDRESS=0x...
 VITE_SWAP_ROUTER_ADDRESS=0x...
 VITE_ADMIN_CONTROLLER_ADDRESS=0x...
 
-VITE_CHAIN_ID=11155111
-VITE_RPC_URL=https://sepolia.infura.io/v3/{YOUR_INFURA_KEY}
+VITE_CHAIN_ID=97
+VITE_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # ========== Cloudflare ==========
 CLOUDFLARE_ACCOUNT_ID=your_account_id
@@ -666,15 +666,15 @@ const config: HardhatUserConfig = {
     }
   },
   networks: {
-    sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "",
+    BSC Testnet: {
+      url: process.env.BSC_TESTNET_RPC_URL || "",
       accounts: process.env.DEPLOYER_PRIVATE_KEY 
         ? [process.env.DEPLOYER_PRIVATE_KEY] 
         : []
     },
     hardhat: {
-      chainId: 11155111
-      // 鏈湴妯℃嫙 Sepolia
+      chainId: 97
+      // 鏈湴妯℃嫙 BSC Testnet
     }
   }
 };
@@ -715,8 +715,8 @@ routes = [
 ]
 
 [env.production.vars]
-CHAIN_ID = "11155111"
-RPC_URL = "https://sepolia.infura.io/v3/{KEY}"
+CHAIN_ID = "97"
+RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
 ```
 
 ---
@@ -728,15 +728,15 @@ RPC_URL = "https://sepolia.infura.io/v3/{KEY}"
 ```bash
 # 1. 閰嶇疆绉侀挜
 export DEPLOYER_PRIVATE_KEY=0x...
-export SEPOLIA_RPC_URL=https://sepolia.infura.io/...
+export BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # 2. 缂栬瘧鍚堢害
 cd contracts
 npm install
 npx hardhat compile
 
-# 3. 閮ㄧ讲鍒?Sepolia
-npx hardhat run scripts/deploy.ts --network sepolia
+# 3. 閮ㄧ讲鍒?BSC Testnet
+npx hardhat run scripts/deploy.ts --network bscTestnet
 
 # 杈撳嚭锛?
 # Deploying SUPER Token...
@@ -745,7 +745,7 @@ npx hardhat run scripts/deploy.ts --network sepolia
 # 鉁?All contracts deployed successfully!
 
 # 4. 楠岃瘉鍚堢害 (鍙€?
-npx hardhat verify --network sepolia 0x1234...
+npx hardhat verify --network bscTestnet 0x1234...
 ```
 
 ### 5.2 鍚庡彴閮ㄧ讲鍒?Cloudflare Workers
@@ -1041,7 +1041,7 @@ k6 run stress-test.js --vus 1000 --duration 5m
 
 | 閲岀▼纰?| 瀹屾垚鏉′欢 | 楠屾敹鏍囧噯 |
 |--------|--------|--------|
-| **鍚堢害閮ㄧ讲** | 4 涓悎绾﹀湪 Sepolia 閮ㄧ讲 | 鉁?鎵€鏈夊悎绾﹀湴鍧€纭 |
+| **鍚堢害閮ㄧ讲** | 4 涓悎绾﹀湪 BSC Testnet 閮ㄧ讲 | 鉁?鎵€鏈夊悎绾﹀湴鍧€纭 |
 | **鍚庡彴 API** | 20+ 绔偣閮ㄧ讲鍒?CF Workers | 鉁?鎵€鏈?API 鍝嶅簲 < 200ms |
 | **绉诲姩搴旂敤** | UI 灞忓箷瀹屾垚銆侀摼鎺ュ畬鏁?| 鉁?瀹屾暣鐢ㄦ埛鏃呯▼鍙蛋閫?|
 | **绔埌绔?* | 浠庣櫥褰曞埌鎻愮幇鍏ㄦ祦绋?| 鉁?鏃?Bug銆佹棤閿欒 |

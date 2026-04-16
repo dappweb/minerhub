@@ -1,5 +1,5 @@
-import { ethers } from 'hardhat';
 import * as fs from 'fs';
+import { ethers } from 'hardhat';
 import * as path from 'path';
 
 async function main() {
@@ -38,7 +38,7 @@ async function main() {
     await mintTx.wait();
   }
 
-  const minRequiredUsdt = ethers.parseUnits('50000', 6);
+  const minRequiredUsdt = ethers.parseUnits('50000', 18);
   const usdtBalance = await usdt.balanceOf(deployer.address);
   if (usdtBalance < minRequiredUsdt) {
     const faucetTx = await usdt.faucet();
@@ -60,7 +60,7 @@ async function main() {
   }
 
   const deploymentInfo = {
-    network: 'sepolia',
+    network: 'bscTestnet',
     timestamp: new Date().toISOString(),
     deployer: deployer.address,
     contracts: {
@@ -71,7 +71,7 @@ async function main() {
     },
     initialization: {
       liquiditySuper: ethers.formatEther(minRequiredSuper),
-      liquidityUSDT: ethers.formatUnits(minRequiredUsdt, 6),
+      liquidityUSDT: ethers.formatUnits(minRequiredUsdt, 18),
       superMinters: [miningPoolAddress, swapRouterAddress],
     },
   };

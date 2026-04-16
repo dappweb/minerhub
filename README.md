@@ -20,7 +20,7 @@ Coin Planet 鏄竴涓寘鍚笁绔鍥剧殑 Web 椤圭洰锛?
 
 - [**SUPER 浠ｅ竵妯″瀷鍙婄粡娴庤璁?* - Token Model](./docs/token-model.md)锛氫唬甯佸垎閰嶃€? 骞撮噴鏀炬椂闂磋〃銆佹寲鐭垮鍔辨満鍒躲€乁SDT/SUPER 浜ゆ崲鍏戞崲姹犮€佹櫤鑳藉悎绾︽灦鏋?
 - [**鍚庡彴绠＄悊绯荤粺璁捐** - Admin System](./docs/admin-system-design.md)锛? 澶х鐞嗘ā鍧椼€?0+ REST API銆丮ongoDB + Redis 鏋舵瀯銆侀闄╂帶鍒剁郴缁熴€佸绛炬不鐞嗘満鍒?
-- [**绯荤粺闆嗘垚涓庨儴缃茶矾绾?* - Integration Roadmap](./docs/system-integration-roadmap.md)锛氬畬鏁寸敤鎴锋梾绋嬨€佸悎绾﹂儴缃叉竻鍗曘€佹祴璇曡鍒掞紙Sepolia / Base Mainnet锛夈€佸彂甯冩椂闂磋〃锛? 鏈?7 鏈堬級
+- [**绯荤粺闆嗘垚涓庨儴缃茶矾绾?* - Integration Roadmap](./docs/system-integration-roadmap.md)锛氬畬鏁寸敤鎴锋梾绋嬨€佸悎绾﹂儴缃叉竻鍗曘€佹祴璇曡鍒掞紙BSC Testnet / Base Mainnet锛夈€佸彂甯冩椂闂磋〃锛? 鏈?7 鏈堬級
 - [**寮€鍙戝懆鏈熶笌棰勬湡璐圭敤** - Costs & Timeline](./docs/development-timeline-and-costs.md)锛氫汉鍔涙垚鏈?($375K)銆佸熀纭€璁炬柦 ($8K)銆佽瀺璧勫缓璁?($600K-$800K)銆丷OI 棰勬祴涓庨闄╄瘎浼?
 - [**鎶曡祫鍐崇瓥閫熸煡琛?* - Quick Reference](./docs/investment-quickref.md)锛氳瀺璧勮妯°€佹垚鏈瀯鎴愩€佹湀搴︽姇鍏ャ€丷OI 棰勬祴銆佸喅绛栨鏌ユ竻鍗?
 
@@ -134,7 +134,7 @@ minerhub/
 | **鍚堢害宸ョ▼甯?* | [Token Model](./docs/token-model.md#contracts) | 缂栧啓 SUPER.sol銆丮iningPool.sol銆丼wapRouter.sol銆丄dminController.sol |
 | **鍚庣宸ョ▼甯?* | [Admin System Design](./docs/admin-system-design.md#api) | 瀹炵幇 20+ REST API銆佸绛剧郴缁熴€侀闄╂帶鍒?|
 | **绉诲姩寮€鍙?* | [Integration Guide](./docs/system-integration-roadmap.md#mobile) | 闆嗘垚 WalletConnect SDK銆佸畬鎴愮湡瀹為摼涓婁氦浜?|
-| **DevOps** | [Deployment Guide](./docs/system-integration-roadmap.md#deployment) | Sepolia 閮ㄧ讲鈫払ase 鐏板害鈫掓寮忓彂甯?|
+| **DevOps** | [Deployment Guide](./docs/system-integration-roadmap.md#deployment) | BSC Testnet 閮ㄧ讲鈫払ase 鐏板害鈫掓寮忓彂甯?|
 | **QA** | [Test Plan](./docs/system-integration-roadmap.md#testing) | 鍗曞厓娴嬭瘯銆侀泦鎴愭祴璇曘€佸畨鍏ㄥ璁★紙CertiK锛?|
 
 ---

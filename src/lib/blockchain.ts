@@ -1,5 +1,5 @@
-﻿import { createPublicClient, createWalletClient, custom, defineChain, http, parseUnits } from 'viem';
-import type { Address, Hex } from 'viem';
+﻿import type { Address, Hex } from 'viem';
+import { createPublicClient, createWalletClient, custom, defineChain, http, parseUnits } from 'viem';
 
 export type MiningPoolGlobalStats = {
   totalEmitted: bigint;
@@ -665,7 +665,7 @@ export async function initializeSwapLiquidityOnChain(superAmount: string, usdtAm
   }
 
   const superUnits = parseUnits(superAmount, 18);
-  const usdtUnits = parseUnits(usdtAmount, 6);
+  const usdtUnits = parseUnits(usdtAmount, 18);
 
   await approveForRouter(superUnits, usdtUnits);
 
@@ -692,7 +692,7 @@ export async function addSwapLiquidityOnChain(superAmount: string, usdtAmount: s
   }
 
   const superUnits = parseUnits(superAmount, 18);
-  const usdtUnits = parseUnits(usdtAmount, 6);
+  const usdtUnits = parseUnits(usdtAmount, 18);
 
   await approveForRouter(superUnits, usdtUnits);
 

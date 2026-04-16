@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import type { Hex, PrivateKeyAccount } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
@@ -13,13 +13,13 @@ function normalizePrivateKey(privateKey: string): Hex {
 }
 
 async function getOrCreatePrivateKey(): Promise<Hex> {
-  const stored = await AsyncStorage.getItem(WALLET_PRIVATE_KEY);
+  const stored = await SecureStore.getItemAsync(WALLET_PRIVATE_KEY);
   if (stored) {
     return normalizePrivateKey(stored);
   }
 
   const generated = generatePrivateKey();
-  await AsyncStorage.setItem(WALLET_PRIVATE_KEY, generated);
+  await SecureStore.setItemAsync(WALLET_PRIVATE_KEY, generated);
   return normalizePrivateKey(generated);
 }
 

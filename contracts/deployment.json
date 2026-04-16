@@ -1,19 +1,19 @@
 {
-  "network": "sepolia",
-  "timestamp": "2026-04-10T15:48:14.836Z",
+  "network": "bscTestnet",
+  "timestamp": "2026-04-13T14:28:57.386Z",
   "deployer": "0x744447d8580EB900b199e852C132F626247a36F7",
   "contracts": {
-    "SUPER": "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357",
-    "USDT_Mock": "0x38AEe19aC5f2DdCFc4D6464FD2E96365116CC676",
-    "MiningPool": "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE",
-    "SwapRouter": "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
+    "SUPER": "0x24cd69bd4C0137aA836dB9935D37EAe701C81139",
+    "USDT_Mock": "0x5f6E59185Fe6b60d9E24c11425920E68805E518C",
+    "MiningPool": "0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1",
+    "SwapRouter": "0x1C094012b17461C26938752549E367011443592f"
   },
   "initialization": {
     "liquiditySuper": "50000000.0",
     "liquidityUSDT": "50000.0",
     "superMinters": [
-      "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE",
-      "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
+      "0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1",
+      "0x1C094012b17461C26938752549E367011443592f"
     ]
   }
 }

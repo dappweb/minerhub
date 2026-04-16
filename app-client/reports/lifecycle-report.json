@@ -1,0 +1,64 @@
+﻿{
+    "timestamp":  "2026-04-13T22:49:21.1955405+08:00",
+    "deviceId":  "emulator-5554",
+    "package":  "com.coinplanet.mobile",
+    "passed":  9,
+    "failed":  0,
+    "total":  9,
+    "results":  [
+                    {
+                        "name":  "device-online",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:12.4687364+08:00"
+                    },
+                    {
+                        "name":  "app-installed",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:12.5446719+08:00"
+                    },
+                    {
+                        "name":  "cold-start",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:14.8610131+08:00"
+                    },
+                    {
+                        "name":  "ui-smoke",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:17.0928728+08:00"
+                    },
+                    {
+                        "name":  "background-foreground",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:18.2861179+08:00"
+                    },
+                    {
+                        "name":  "deeplink-launch",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:18.4292353+08:00"
+                    },
+                    {
+                        "name":  "rotation-stress",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:18.6755971+08:00"
+                    },
+                    {
+                        "name":  "force-stop-relaunch",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:20.7187100+08:00"
+                    },
+                    {
+                        "name":  "network-toggle-smoke",
+                        "passed":  true,
+                        "detail":  "OK",
+                        "ts":  "2026-04-13T22:49:21.1835569+08:00"
+                    }
+                ]
+}

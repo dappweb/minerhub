@@ -1,12 +1,12 @@
+import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { badRequest, json, unauthorized } from "../lib/response";
-import { extractAndVerifyAuth } from "../lib/auth";
 import type { Env } from "../types/env";
 
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
     // 验证签名
-    const authResult = await extractAndVerifyAuth(request);
+    const authResult = await extractAndVerifyAuth(request, env);
     if (!authResult.valid) {
       return unauthorized(authResult.error || "Signature verification failed");
     }

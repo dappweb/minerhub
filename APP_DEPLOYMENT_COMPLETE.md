@@ -1,4 +1,4 @@
-# ✅ Coin Planet APP 已成功运行在 Android 模拟器
+﻿# ✅ Coin Planet APP 已成功运行在 Android 模拟器
 
 **部署完成时间**: 2026-04-11  
 **APP运行位置**: Android 模拟器 (emulator-5554)  
@@ -28,8 +28,8 @@ EXPO_PUBLIC_WALLET_PRIVATE_KEY=0x1234567890...
 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链网络
-EXPO_PUBLIC_CHAIN_ID=11155111
-EXPO_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161
+EXPO_PUBLIC_CHAIN_ID=97
+EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # 智能合约（部署后配置）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...
@@ -62,7 +62,7 @@ EXPO_PUBLIC_SWAP_ROUTER_ADDRESS=0x...
 | 签名认证 | ✅ 集成 | 后端验证完成 |
 | 交易管理 | ✅ 集成 | Hook 已实现 |
 | 后台 API | ⏳ 待启动 | `npm run dev` in backend/ |
-| 链上合约 | ⏳ 待部署 | `npm run deploy:sepolia` in contracts/ |
+| 链上合约 | ⏳ 待部署 | `npm run deploy:bscTestnet` in contracts/ |
 | 管理平台 | ✅ 编译通过 | 可用 `npm run dev` 启动 |
 
 ---
@@ -101,10 +101,10 @@ npm run deploy:local
 
 ## 📝 下一步任务清单
 
-1. **部署智能合约到 Sepolia**
+1. **部署智能合约到 BSC Testnet**
    ```bash
    cd contracts
-   npm run deploy:sepolia
+   npm run deploy:bscTestnet
    # 记录deployment.json中的合约地址
    ```
 
@@ -273,7 +273,7 @@ http://localhost:5173
 
 下一步可以：
 1. 启动完整的后台系统
-2. 部署合约到 Sepolia 测试网
+2. 部署合约到 BSC Testnet 测试网
 3. 测试完整的挖矿流程
 4. 准备生产部署
 

@@ -1,4 +1,4 @@
-# Coin Planet App - Android 模拟器运行指南
+﻿# Coin Planet App - Android 模拟器运行指南
 
 ## 📱 当前状态
 
@@ -129,8 +129,8 @@ APP已配置的环境变量（`app-client/.env.local`）：
 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链
-EXPO_PUBLIC_CHAIN_ID=11155111
-EXPO_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161
+EXPO_PUBLIC_CHAIN_ID=97
+EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # 合约地址（部署后更新）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...
@@ -221,10 +221,10 @@ adb logcat --pid=$(adb shell pidof com.coinplanet.mobile)
 
 一旦APP在模拟器上运行成功：
 
-1. **部署合约到Sepolia**
+1. **部署合约到BSC Testnet**
    ```bash
    cd contracts
-   npm run deploy:sepolia
+   npm run deploy:bscTestnet
    ```
 
 2. **更新合约地址到`.env.local`**

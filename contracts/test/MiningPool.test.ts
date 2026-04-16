@@ -1,7 +1,7 @@
-﻿import { expect } from "chai";
+﻿import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { expect } from "chai";
 import { ethers } from "hardhat";
-import type { SUPER, USDT_Mock, MiningPool, SwapRouter } from "../typechain-types";
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import type { MiningPool, SUPER, SwapRouter, USDT_Mock } from "../typechain-types";
 
 describe("Coin Planet Contracts", () => {
   let SUPER: SUPER;
@@ -94,7 +94,7 @@ describe("Coin Planet Contracts", () => {
     before(async () => {
       // 鍒濆鍖栨祦鍔ㄦ€?
       const superAmount = ethers.parseEther("50000000");  // 5000 涓?SUPER
-      const usdtAmount = ethers.parseUnits("50000", 6); // 5 涓?USDT
+      const usdtAmount = ethers.parseUnits("50000", 18); // 5 涓?USDT
 
       await SUPER.approve(await swapRouter.getAddress(), superAmount);
       await usdt.approve(await swapRouter.getAddress(), usdtAmount);
@@ -107,7 +107,7 @@ describe("Coin Planet Contracts", () => {
       const reserveUSDT = await swapRouter.reserveUSDT();
 
       expect(reserveSuper).to.equal(ethers.parseEther("50000000"));
-      expect(reserveUSDT).to.equal(ethers.parseUnits("50000", 6));
+      expect(reserveUSDT).to.equal(ethers.parseUnits("50000", 18));
     });
 
     it("Should allow SUPER to USDT swap", async () => {

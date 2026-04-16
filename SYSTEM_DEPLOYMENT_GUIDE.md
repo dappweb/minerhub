@@ -1,4 +1,4 @@
-# Coin Planet 完整系统部署指南（3周版本）
+﻿# Coin Planet 完整系统部署指南（3周版本）
 
 > 完整的挖矿系统：APP客户端 + 后台API + 智能合约 + 管理平台  
 > 生成于 2026-04-11 | 版本：0.1.0（MVP）
@@ -25,7 +25,7 @@
 │  ├─ 数据库 (D1 SQLite) ✅                               │
 │  └─ CORS 配置 ✅                                        │
 │                                                           │
-│  ⛓️  智能合约 (Sepolia 测试网)                           │
+│  ⛓️  智能合约 (BSC Testnet 测试网)                           │
 │  ├─ SUPER Token (ERC20) ✅                              │
 │  ├─ MiningPool (挖矿逻辑) ✅                            │
 │  ├─ SwapRouter (AMM 兑换) ✅                            │
@@ -60,8 +60,8 @@ npm install
 # 设置环境变量 (.env 或 .env.local)
 EXPO_PUBLIC_WALLET_PRIVATE_KEY=0x...      # 测试钱包私钥
 EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8788
-EXPO_PUBLIC_CHAIN_ID=11155111              # Sepolia
-EXPO_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/YOUR_KEY
+EXPO_PUBLIC_CHAIN_ID=97              # BSC Testnet
+EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # 运行开发服务器
 npm start
@@ -110,11 +110,11 @@ npm start
 # 数据库仅在 Cloudflare 部署后可用
 
 # 链 RPC
-SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_KEY
+BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 DEPLOYER_PRIVATE_KEY=0x...
 
 # Viem 配置
-EXPO_PUBLIC_CHAIN_ID=11155111
+EXPO_PUBLIC_CHAIN_ID=97
 ```
 
 ### 本地开发运行
@@ -174,7 +174,7 @@ POST /api/claims
 ## 📋 部分三：链上合约部署
 
 ### 支持的网络
-- **Sepolia** (测试网，推荐)
+- **BSC Testnet** (测试网，推荐)
 - **Hardhat Local** (本地开发)
 
 ### 环境配置
@@ -182,7 +182,7 @@ POST /api/claims
 创建 `contracts/.env`：
 
 ```env
-SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 DEPLOYER_PRIVATE_KEY=0x...yourawesomedeployerkey...
 ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY  # 可选，用于验证
 ```
@@ -208,14 +208,14 @@ npm run deploy:local
 cat deployment.json
 ```
 
-### 部署到 Sepolia
+### 部署到 BSC Testnet
 
 ```bash
 # 部署所有合约
-npm run deploy:sepolia
+npm run deploy:bscTestnet
 
 # 或分步部署和验证
-npm run deploy:sepolia
+npm run deploy:bscTestnet
 npm run deploy:finalize
 npm run verify
 ```
@@ -226,8 +226,8 @@ npm run verify
 
 ```json
 {
-  "network": "sepolia",
-  "chainId": 11155111,
+  "network": "BSC Testnet",
+  "chainId": 97,
   "addresses": {
     "SUPER": "0x...",
     "USDT_Mock": "0x...",
@@ -365,15 +365,15 @@ npm run dev
 # 访问 http://localhost:5173
 ```
 
-### 方式二：部署到 Sepolia 测试网
+### 方式二：部署到 BSC Testnet 测试网
 
 ```bash
 # 1. 部署合约
 cd contracts
-npm run deploy:sepolia
+npm run deploy:bscTestnet
 
 # 2. 更新 APP 环境变量
-# 填入 Sepolia 合约地址
+# 填入 BSC Testnet 合约地址
 
 # 3. 部署后端
 cd backend
@@ -429,8 +429,8 @@ npm run deploy:pages
 
 ## 📝 常见问题
 
-**Q: APP 如何获取 Sepolia ETH？**  
-A: 访问 https://sepolia-faucet.pk910.de/ 或其他 Sepolia 水龙头申请测试币
+**Q: APP 如何获取 tBNB？**  
+A: 访问 https://testnet.bnbchain.org/faucet-smart 或其他 BSC Testnet 水龙头申请测试币
 
 **Q: 如何修改 MiningPool 的收益率？**  
 A: 在 `contracts/contracts/MiningPool.sol` 中修改 `rewardRate` 参数后重新部署
@@ -493,5 +493,5 @@ minerhub/
 **版本信息**  
 - **Date**: 2026-04-11
 - **Status**: MVP (Minimum Viable Product)
-- **Testnet**: Ethereum Sepolia (11155111)
+- **Testnet**: Ethereum BSC Testnet (97)
 - **Compatibility**: Node.js 18+, Expo SDK 52+

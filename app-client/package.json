@@ -7,13 +7,16 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:lifecycle": "powershell -ExecutionPolicy Bypass -File ./scripts/lifecycle-emulator.ps1",
+    "test:lifecycle:install": "powershell -ExecutionPolicy Bypass -File ./scripts/lifecycle-emulator.ps1 -AutoInstall"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
     "@react-native-async-storage/async-storage": "^1.23.1",
     "expo": "~52.0.25",
     "expo-asset": "~11.0.5",
+    "expo-secure-store": "^55.0.13",
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
     "react-native": "0.76.9",

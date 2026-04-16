@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Modal,
+    Pressable,
     SafeAreaView,
     ScrollView,
     StatusBar,
@@ -19,163 +21,189 @@ import {
     getWalletAddress,
     registerMinerOnChain,
     sendNativeTokenOnChain,
-    swapSuperToUsdtOnChain,
+    swapUsdtToSuperOnChain,
     updateHashrateOnChain,
 } from './services/blockchain';
 
 type Lang = 'en' | 'zh';
 
+type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | '';
+type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
+
 const LANG_KEY = 'coinplanet.lang';
+const DEVICE_ID_KEY = 'coinplanet.device_id';
+const MINER_READY_KEY = 'coinplanet.miner_ready';
+const SWAP_FEE_RATE = 0.005;
+const SWAP_SLIPPAGE_RATE = 0.008;
 
 const translations = {
   en: {
     appTitle: 'Coin Planet',
-    subtitle: 'Built-in wallet mode (no external wallet)',
-    flow1: 'Step 1/3: complete identity setup first',
-    flow2: 'Step 2/3: register your miner to unlock rewards',
-    flow3: 'Step 3/3: claim, swap, and transfer',
-    stepIdentity: '1. Identity',
-    stepMiner: '2. Miner',
-    stepActions: '3. Actions',
-    sec1Title: 'Step 1: Identity Setup',
-    labelWallet: 'Wallet Address',
-    labelUserId: 'Backend User ID',
-    labelDeviceId: 'Device ID (stable tracking)',
-    initializing: 'Initializing...',
-    notInitialized: 'Not initialized',
-    short: 'Short: ',
-    resyncIdentity: 'Resync Identity',
-    sec2Title: 'Step 2: Miner Setup',
-    labelHashrate: 'Hashrate (raw contract value)',
-    phHashrate: 'e.g. 2600',
-    hintMinerReady: 'Already registered. Submitting again will update hashrate.',
-    hintMinerNew: 'First submit will register miner and create reward record.',
-    hintMinerLocked: 'Complete Step 1 first: initialize wallet, user, and device.',
-    hintMinerWorking: 'Miner setup in progress. This can take 10-30 seconds on testnet.',
-    btnUpdateHashrate: 'Update Hashrate',
-    btnRegisterMiner: 'Register Miner and Start',
-    sec3Title: 'Step 3: Daily On-chain Actions',
-    btnClaimReward: 'Claim Reward',
-    labelSuperAmount: 'SUPER Amount to Swap',
-    phSuperAmount: 'Enter SUPER amount',
-    pricePlaceholder: 'Price available after identity setup',
+    subtitle: 'Device Center',
+    flow1: 'Finish identity setup to unlock on-chain actions',
+    flow2: 'Register miner to start rewards',
+    flow3: 'Daily mode: swap and claim rewards',
+    profileId: 'ID',
+    profileVip: 'VIP',
+    profileUnbind: 'Unbind',
+    profileExpire: 'Expire Date',
+    phoneStatus: 'Phone Status',
+    online: 'Online',
+    offline: 'Offline',
+    hashing: 'AI Hashing in Progress',
+    totalOnline: 'Total Online Time',
+    monthOnline: 'Current Month Online',
+    earningsChart: 'Earnings Trend',
+    chartYAxis: 'USDT',
+    ruleHint: 'Interest is based on online duration and settles every 30 days.',
+    swapPanelTitle: 'USDT -> SUPER',
+    swapAmount: 'Swap Amount (USDT)',
+    swapAmountPlaceholder: 'Enter USDT amount',
     refreshPrice: 'Refresh Price',
-    btnSwap: 'Swap to USDT',
-    labelTransfer: 'Native Token Transfer',
-    phTransferTo: 'Destination address 0x...',
-    phTransferAmount: 'Amount (ETH)',
-    btnTransfer: 'Send Transfer',
-    processing: 'Processing, please do not resubmit',
+    quote: 'Estimated SUPER',
+    fee: 'Fee (0.5%)',
+    minReceive: 'Minimum Received',
+    swapButton: 'Swap Now',
+    swapConfirmTitle: 'Confirm Swap',
+    swapConfirmHint: 'Please verify amount and estimated receive before submitting.',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    txProgressTitle: 'Transaction Progress',
+    txSubmit: 'Submitting',
+    txConfirming: 'On-chain Confirming',
+    txSuccess: 'Completed',
+    txFailed: 'Failed',
+    quickActions: 'Quick Actions',
+    claimReward: 'Claim Reward',
+    setupMiner: 'Setup Miner',
+    syncIdentity: 'Sync Identity',
+    advancedSettings: 'Advanced Settings',
+    hashrate: 'Hashrate',
+    hashratePlaceholder: 'e.g. 2600',
+    transferTitle: 'Native Transfer',
+    transferTo: 'Destination address 0x...',
+    transferAmount: 'Amount (ETH)',
+    sendTransfer: 'Send Transfer',
+    processing: 'Processing, do not resubmit',
     latestTx: 'Latest Tx: ',
-    statusInit: 'Initializing local wallet...',
-    statusInitializing: 'Initializing wallet and binding backend account...',
-    statusInitDone: 'Identity initialized. Next: set up miner.',
-    statusInitFailed: 'Initialization failed: ',
-    errIdentityNotReady: 'Identity is not ready. Please initialize first.',
-    errInvalidHashrate: 'Please enter a valid hashrate (> 0)',
-    statusUpdatingHashrate: 'Submitting on-chain hashrate update...',
-    statusHashrateUpdated: 'Hashrate updated: ',
-    statusRegisteringMiner: 'Submitting on-chain miner registration...',
-    statusMinerRegistered: 'Miner registered: ',
-    statusDeviceRecord: ', device record ',
-    statusMinerAlreadyRegistered: 'Miner already registered on-chain. Hashrate updated: ',
-    statusRecoveryFailed: 'Miner state recovery failed: ',
-    statusMinerFailed: 'Miner setup failed: ',
-    errMinerNotReady: 'Please register miner before claiming rewards',
-    statusClaiming: 'Submitting reward claim transaction...',
-    statusClaimSuccess: 'Claim success: ',
-    statusClaimFailed: 'Claim failed: ',
-    errInvalidSuperAmount: 'Please enter a valid SUPER amount',
-    statusSwapping: 'Submitting swap transaction...',
-    statusSwapSuccess: 'Swap success: ',
-    statusSwapFailed: 'Swap failed: ',
-    errInvalidAddress: 'Please enter a valid destination address (0x + 40 hex chars)',
-    errInvalidAmount: 'Please enter a valid transfer amount',
-    statusTransferring: 'Submitting native token transfer...',
-    statusTransferSuccess: 'Transfer success: ',
-    statusTransferFailed: 'Transfer failed: ',
-    priceUnavailable: 'Current pool price is unavailable',
-    priceFetchFailed: 'Unable to fetch pool price right now',
+    initStatus: 'Initializing local wallet...',
+    initDoing: 'Syncing wallet and backend account...',
+    initDone: 'Identity is ready.',
+    initFail: 'Initialization failed: ',
+    identityNotReady: 'Identity not ready. Please sync identity first.',
+    invalidHashrate: 'Please enter a valid hashrate (>0)',
+    updateHashrate: 'Updating hashrate on-chain...',
+    hashrateUpdated: 'Hashrate updated: ',
+    registerMiner: 'Registering miner on-chain...',
+    minerRegistered: 'Miner registered: ',
+    deviceRecord: ', device record ',
+    minerRecovered: 'Miner already exists. Hashrate updated: ',
+    minerRecoverFail: 'Miner state recovery failed: ',
+    minerFail: 'Miner setup failed: ',
+    minerNotReady: 'Please setup miner before claiming reward',
+    claimDoing: 'Submitting claim transaction...',
+    claimSuccess: 'Claim success: ',
+    claimFail: 'Claim failed: ',
+    invalidSwapAmount: 'Please enter a valid USDT amount',
+    swapDoing: 'Submitting swap transaction...',
+    swapSuccess: 'Swap success: ',
+    swapFail: 'Swap failed: ',
+    invalidAddress: 'Please enter a valid destination address',
+    invalidAmount: 'Please enter a valid transfer amount',
+    transferDoing: 'Submitting transfer...',
+    transferSuccess: 'Transfer success: ',
+    transferFail: 'Transfer failed: ',
+    priceUnavailable: 'Pool price unavailable',
+    priceFetchFailed: 'Failed to fetch pool price',
     priceFormat: (val: string) => `1 USDT ~= ${val} SUPER`,
     langToggle: '中文',
+    notInit: 'Not initialized',
+    short: 'Short: ',
   },
   zh: {
     appTitle: 'Coin Planet',
-    subtitle: '内置钱包模式（无需外部钱包）',
-    flow1: '第 1/3 步：请先完成身份初始化',
-    flow2: '第 2/3 步：注册矿机以解锁奖励',
-    flow3: '第 3/3 步：领取奖励、兑换、转账',
-    stepIdentity: '1. 身份',
-    stepMiner: '2. 矿机',
-    stepActions: '3. 操作',
-    sec1Title: '第一步：身份初始化',
-    labelWallet: '钱包地址',
-    labelUserId: '后端用户 ID',
-    labelDeviceId: '设备 ID（稳定追踪）',
-    initializing: '初始化中...',
-    notInitialized: '未初始化',
-    short: '简短：',
-    resyncIdentity: '重新同步身份',
-    sec2Title: '第二步：矿机设置',
-    labelHashrate: '算力（合约原始值）',
-    phHashrate: '例如 2600',
-    hintMinerReady: '已注册。再次提交将更新算力。',
-    hintMinerNew: '首次提交将注册矿机并创建奖励记录。',
-    hintMinerLocked: '请先完成第一步：钱包、用户和设备都要初始化完成。',
-    hintMinerWorking: '矿机注册进行中，测试网通常需要 10-30 秒。',
-    btnUpdateHashrate: '更新算力',
-    btnRegisterMiner: '注册矿机并开始',
-    sec3Title: '第三步：日常链上操作',
-    btnClaimReward: '领取奖励',
-    labelSuperAmount: '兑换的 SUPER 数量',
-    phSuperAmount: '输入 SUPER 数量',
-    pricePlaceholder: '完成身份初始化后显示价格',
+    subtitle: '设备中心',
+    flow1: '请先完成身份初始化，解锁链上操作',
+    flow2: '请先注册矿机，开始计收益',
+    flow3: '日常模式：兑换与领取收益',
+    profileId: 'ID',
+    profileVip: 'VIP',
+    profileUnbind: '解绑',
+    profileExpire: '到期时间',
+    phoneStatus: '手机状态',
+    online: '在线',
+    offline: '离线',
+    hashing: 'AI算力中',
+    totalOnline: '当前设备累计时长',
+    monthOnline: '当月收益累计时长',
+    earningsChart: '收益数据统计',
+    chartYAxis: 'USDT',
+    ruleHint: '收益按在线时长计算，每30天结算一次。',
+    swapPanelTitle: 'USDT -> SUPER',
+    swapAmount: '兑换数量（USDT）',
+    swapAmountPlaceholder: '输入USDT数量',
     refreshPrice: '刷新价格',
-    btnSwap: '兑换为 USDT',
-    labelTransfer: '原生代币转账',
-    phTransferTo: '目标地址 0x...',
-    phTransferAmount: '数量（ETH）',
-    btnTransfer: '发起转账',
+    quote: '预计获得',
+    fee: '手续费（0.5%）',
+    minReceive: '最少到账',
+    swapButton: '立即兑换',
+    swapConfirmTitle: '确认兑换',
+    swapConfirmHint: '请确认兑换数量与预计到账后再提交。',
+    cancel: '取消',
+    confirm: '确认',
+    txProgressTitle: '交易进度',
+    txSubmit: '提交交易',
+    txConfirming: '链上确认',
+    txSuccess: '完成',
+    txFailed: '失败',
+    quickActions: '快捷操作',
+    claimReward: '领取收益',
+    setupMiner: '矿机设置',
+    syncIdentity: '身份同步',
+    advancedSettings: '高级设置',
+    hashrate: '算力值',
+    hashratePlaceholder: '例如 2600',
+    transferTitle: '原生代币转账',
+    transferTo: '目标地址 0x...',
+    transferAmount: '数量（ETH）',
+    sendTransfer: '发起转账',
     processing: '处理中，请勿重复提交',
     latestTx: '最新交易：',
-    statusInit: '正在初始化本地钱包...',
-    statusInitializing: '正在初始化钱包并绑定后端账户...',
-    statusInitDone: '身份已初始化，下一步：设置矿机。',
-    statusInitFailed: '初始化失败：',
-    errIdentityNotReady: '身份未就绪，请先完成初始化。',
-    errInvalidHashrate: '请输入有效的算力值（> 0）',
-    statusUpdatingHashrate: '正在提交链上算力更新...',
-    statusHashrateUpdated: '算力已更新：',
-    statusRegisteringMiner: '正在提交链上矿机注册...',
-    statusMinerRegistered: '矿机已注册：',
-    statusDeviceRecord: '，设备记录 ',
-    statusMinerAlreadyRegistered: '矿机已在链上注册。算力已更新：',
-    statusRecoveryFailed: '矿机状态恢复失败：',
-    statusMinerFailed: '矿机设置失败：',
-    errMinerNotReady: '请先注册矿机后再领取奖励',
-    statusClaiming: '正在提交奖励领取交易...',
-    statusClaimSuccess: '领取成功：',
-    statusClaimFailed: '领取失败：',
-    errInvalidSuperAmount: '请输入有效的 SUPER 数量',
-    statusSwapping: '正在提交兑换交易...',
-    statusSwapSuccess: '兑换成功：',
-    statusSwapFailed: '兑换失败：',
-    errInvalidAddress: '请输入有效的目标地址（0x + 40位十六进制字符）',
-    errInvalidAmount: '请输入有效的转账数量',
-    statusTransferring: '正在提交原生代币转账...',
-    statusTransferSuccess: '转账成功：',
-    statusTransferFailed: '转账失败：',
-    priceUnavailable: '当前池子价格不可用',
-    priceFetchFailed: '暂时无法获取池子价格',
+    initStatus: '正在初始化本地钱包...',
+    initDoing: '正在同步钱包与后端账户...',
+    initDone: '身份初始化完成。',
+    initFail: '初始化失败：',
+    identityNotReady: '身份未就绪，请先同步身份。',
+    invalidHashrate: '请输入有效算力值（>0）',
+    updateHashrate: '正在提交链上算力更新...',
+    hashrateUpdated: '算力已更新：',
+    registerMiner: '正在提交链上矿机注册...',
+    minerRegistered: '矿机已注册：',
+    deviceRecord: '，设备记录 ',
+    minerRecovered: '矿机已存在，算力已更新：',
+    minerRecoverFail: '矿机状态恢复失败：',
+    minerFail: '矿机设置失败：',
+    minerNotReady: '请先完成矿机设置，再领取收益',
+    claimDoing: '正在提交领取交易...',
+    claimSuccess: '领取成功：',
+    claimFail: '领取失败：',
+    invalidSwapAmount: '请输入有效的USDT数量',
+    swapDoing: '正在提交兑换交易...',
+    swapSuccess: '兑换成功：',
+    swapFail: '兑换失败：',
+    invalidAddress: '请输入有效的目标地址',
+    invalidAmount: '请输入有效转账数量',
+    transferDoing: '正在提交转账...',
+    transferSuccess: '转账成功：',
+    transferFail: '转账失败：',
+    priceUnavailable: '池子价格不可用',
+    priceFetchFailed: '获取池子价格失败',
     priceFormat: (val: string) => `1 USDT ≈ ${val} SUPER`,
     langToggle: 'English',
+    notInit: '未初始化',
+    short: '简短：',
   },
 } as const;
-
-const DEVICE_ID_KEY = 'coinplanet.device_id';
-const MINER_READY_KEY = 'coinplanet.miner_ready';
-
-type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | '';
 
 function createDeviceId() {
   const random = Math.random().toString(36).slice(2, 8);
@@ -190,10 +218,29 @@ function isValidEvmAddress(address: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 }
 
+function formatDuration(totalMinutes: number, lang: Lang) {
+  const safe = Math.max(0, Math.floor(totalMinutes));
+  const days = Math.floor(safe / 1440);
+  const hours = Math.floor((safe % 1440) / 60);
+  const minutes = safe % 60;
+
+  if (lang === 'zh') {
+    return `${days}天${hours}小时${minutes}分`;
+  }
+  return `${days}d ${hours}h ${minutes}m`;
+}
+
+function formatDate(input: Date) {
+  const y = input.getFullYear();
+  const m = `${input.getMonth() + 1}`.padStart(2, '0');
+  const d = `${input.getDate()}`.padStart(2, '0');
+  return `${y}.${m}.${d}`;
+}
+
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
-  const [superAmount, setSuperAmount] = useState<string>('10');
+  const [swapAmount, setSwapAmount] = useState<string>('10');
   const [transferTo, setTransferTo] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('0.001');
   const [hashrateInput, setHashrateInput] = useState<string>('1000');
@@ -202,10 +249,99 @@ export default function App() {
   const [status, setStatus] = useState<string>('');
   const [lastTxHash, setLastTxHash] = useState<string>('');
   const [activeAction, setActiveAction] = useState<ActionType>('');
-  const [swapPrice, setSwapPrice] = useState<string>('');
+  const [swapPriceValue, setSwapPriceValue] = useState<number | null>(null);
   const [lang, setLang] = useState<Lang>('zh');
+  const [swapConfirmVisible, setSwapConfirmVisible] = useState(false);
+  const [swapTxStage, setSwapTxStage] = useState<SwapTxStage>('idle');
+  const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const t = translations[lang];
+  const isBusy = activeAction !== '';
+  const identityReady = Boolean(walletAddress && userId && deviceId);
+
+  const shortAddress = useMemo(() => {
+    if (!walletAddress) return t.notInit;
+    return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+  }, [walletAddress, t.notInit]);
+
+  const flowHint = useMemo(() => {
+    if (!identityReady) return t.flow1;
+    if (!minerReady) return t.flow2;
+    return t.flow3;
+  }, [identityReady, minerReady, t.flow1, t.flow2, t.flow3]);
+
+  const displayId = useMemo(() => {
+    if (!userId) return '----';
+    return userId.replace(/[^0-9]/g, '').slice(0, 4).padEnd(4, '0');
+  }, [userId]);
+
+  const expireDate = useMemo(() => {
+    const now = new Date();
+    now.setFullYear(now.getFullYear() + 2);
+    return formatDate(now);
+  }, []);
+
+  const monthProgressMinutes = useMemo(() => {
+    const hashrateNum = Number(hashrateInput);
+    if (!Number.isFinite(hashrateNum) || hashrateNum <= 0) {
+      return 443;
+    }
+    return Math.min(24 * 60 * 30, Math.floor(hashrateNum * 0.42));
+  }, [hashrateInput]);
+
+  const totalOnlineMinutes = useMemo(() => monthProgressMinutes + 11053, [monthProgressMinutes]);
+  const onlineState = identityReady ? t.online : t.offline;
+
+  const swapInputNumber = Number(swapAmount);
+  const hasValidSwapInput = Number.isFinite(swapInputNumber) && swapInputNumber > 0;
+
+  const estimatedSuper = useMemo(() => {
+    if (!hasValidSwapInput || !swapPriceValue || swapPriceValue <= 0) {
+      return 0;
+    }
+    return swapInputNumber * swapPriceValue;
+  }, [hasValidSwapInput, swapInputNumber, swapPriceValue]);
+
+  const feeUsdt = useMemo(() => {
+    if (!hasValidSwapInput) return 0;
+    return swapInputNumber * SWAP_FEE_RATE;
+  }, [hasValidSwapInput, swapInputNumber]);
+
+  const minReceiveSuper = useMemo(() => {
+    if (estimatedSuper <= 0) return 0;
+    return estimatedSuper * (1 - SWAP_SLIPPAGE_RATE);
+  }, [estimatedSuper]);
+
+  const swapPriceText = useMemo(() => {
+    if (!swapPriceValue || swapPriceValue <= 0) {
+      return t.priceUnavailable;
+    }
+    return t.priceFormat(swapPriceValue.toFixed(6));
+  }, [swapPriceValue, t]);
+
+  const txStageLabels = useMemo(
+    () => ({
+      submitting: t.txSubmit,
+      confirming: t.txConfirming,
+      success: t.txSuccess,
+      failed: t.txFailed,
+    }),
+    [t.txSubmit, t.txConfirming, t.txSuccess, t.txFailed]
+  );
+
+  const chartValues = useMemo(() => {
+    const base = Math.max(800, Math.floor(monthProgressMinutes * 1.6));
+    return [
+      Math.floor(base * 0.46),
+      Math.floor(base * 0.62),
+      Math.floor(base * 0.51),
+      Math.floor(base * 0.75),
+      Math.floor(base * 0.68),
+      Math.floor(base * 0.89),
+    ];
+  }, [monthProgressMinutes]);
+
+  const chartMax = Math.max(...chartValues, 1);
 
   const toggleLang = async () => {
     const next: Lang = lang === 'zh' ? 'en' : 'zh';
@@ -217,26 +353,6 @@ export default function App() {
     }
   };
 
-  const shortAddress = useMemo(() => {
-    if (!walletAddress) return t.initializing;
-    return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-  }, [walletAddress, lang]);
-
-  const isBusy = activeAction !== '';
-  const identityReady = Boolean(walletAddress && userId && deviceId);
-
-  const minerHintText = useMemo(() => {
-    if (!identityReady) return t.hintMinerLocked;
-    if (activeAction === 'mine') return t.hintMinerWorking;
-    return minerReady ? t.hintMinerReady : t.hintMinerNew;
-  }, [identityReady, activeAction, minerReady, lang]);
-
-  const flowHint = useMemo(() => {
-    if (!identityReady) return t.flow1;
-    if (!minerReady) return t.flow2;
-    return t.flow3;
-  }, [identityReady, minerReady, lang]);
-
   useEffect(() => {
     const initDeviceId = async () => {
       try {
@@ -244,6 +360,7 @@ export default function App() {
         if (storedLang === 'en' || storedLang === 'zh') {
           setLang(storedLang);
         }
+
         const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
         if (existing) {
           setDeviceId(existing);
@@ -274,12 +391,20 @@ export default function App() {
     void restoreMinerReady();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (swapConfirmTimerRef.current) {
+        clearTimeout(swapConfirmTimerRef.current);
+      }
+    };
+  }, []);
+
   const markMinerReady = async () => {
     setMinerReady(true);
     try {
       await AsyncStorage.setItem(MINER_READY_KEY, '1');
     } catch {
-      // Ignore storage failures and keep in-memory state.
+      // ignore
     }
   };
 
@@ -288,69 +413,75 @@ export default function App() {
       const price = await getSwapPriceOnChain();
       const parsed = Number(price) / 1e18;
       if (Number.isFinite(parsed) && parsed > 0) {
-        setSwapPrice(t.priceFormat(parsed.toFixed(6)));
+        setSwapPriceValue(parsed);
       } else {
-        setSwapPrice(t.priceUnavailable);
+        setSwapPriceValue(null);
       }
     } catch {
-      setSwapPrice(t.priceFetchFailed);
+      setSwapPriceValue(null);
+      setStatus(t.priceFetchFailed);
+    }
+  };
+
+  const clearSwapConfirmTimer = () => {
+    if (swapConfirmTimerRef.current) {
+      clearTimeout(swapConfirmTimerRef.current);
+      swapConfirmTimerRef.current = null;
     }
   };
 
   const initializeAccount = async () => {
     setActiveAction('init');
     setLastTxHash('');
-    setStatus(t.statusInitializing);
+    setStatus(t.initDoing);
+
     try {
       const address = await getWalletAddress();
       setWalletAddress(address);
       const user = await createUser(address);
       setUserId(user.id);
       await refreshSwapPrice();
-      setStatus(t.statusInitDone);
+      setStatus(t.initDone);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.statusInitFailed;
-      setStatus(`${t.statusInitFailed}${message}`);
+      const message = error instanceof Error ? error.message : t.initFail;
+      setStatus(`${t.initFail}${message}`);
     } finally {
       setActiveAction('');
     }
   };
 
   useEffect(() => {
-    if (!deviceId) {
-      return;
-    }
-    setStatus(translations[lang].statusInit);
+    if (!deviceId) return;
+    setStatus(translations[lang].initStatus);
     void initializeAccount();
   }, [deviceId]);
 
   const startMining = async () => {
     if (!identityReady) {
-      setStatus(t.errIdentityNotReady);
+      setStatus(t.identityNotReady);
       return;
     }
 
     const parsedHashrate = Number(hashrateInput);
     if (!Number.isFinite(parsedHashrate) || parsedHashrate <= 0) {
-      setStatus(t.errInvalidHashrate);
+      setStatus(t.invalidHashrate);
       return;
     }
 
     setActiveAction('mine');
     setLastTxHash('');
-
     const finalHashrate = Math.floor(parsedHashrate);
 
     try {
       if (minerReady) {
-        setStatus(t.statusUpdatingHashrate);
+        setStatus(t.updateHashrate);
         const txHash = await updateHashrateOnChain(finalHashrate);
         setLastTxHash(txHash);
-        setStatus(`${t.statusHashrateUpdated}${shortHash(txHash)}`);
+        setStatus(`${t.hashrateUpdated}${shortHash(txHash)}`);
         return;
       }
 
-      setStatus(t.statusRegisteringMiner);
+      setStatus(t.registerMiner);
       const txHash = await registerMinerOnChain(finalHashrate, deviceId);
       const device = await registerDevice({
         userId,
@@ -362,30 +493,24 @@ export default function App() {
       await createClaim({ userId, amount: '10', wallet: walletAddress });
       await markMinerReady();
       setLastTxHash(txHash);
-      setStatus(`${t.statusMinerRegistered}${shortHash(txHash)}${t.statusDeviceRecord}${device.id}`);
+      setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.statusMinerFailed;
+      const message = error instanceof Error ? error.message : t.minerFail;
       const lower = message.toLowerCase();
       const alreadyRegistered = lower.includes('already') && lower.includes('register');
-      const isTimeout = lower.includes('timeout') || lower.includes('took too long');
-
-      // 超时提示：可能是网络慢或 RPC 不稳定
-      const displayMessage = isTimeout 
-        ? `${t.statusMinerFailed}Sepolia network is busy. Waited 2+ minutes. Please check connection and try again later.`
-        : message;
 
       if (!minerReady && alreadyRegistered) {
         try {
           const txHash = await updateHashrateOnChain(finalHashrate);
           await markMinerReady();
           setLastTxHash(txHash);
-          setStatus(`${t.statusMinerAlreadyRegistered}${shortHash(txHash)}`);
+          setStatus(`${t.minerRecovered}${shortHash(txHash)}`);
         } catch (fallbackError) {
-          const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : t.statusRecoveryFailed;
-          setStatus(`${t.statusRecoveryFailed}${fallbackMsg}`);
+          const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : t.minerRecoverFail;
+          setStatus(`${t.minerRecoverFail}${fallbackMsg}`);
         }
       } else {
-        setStatus(displayMessage);
+        setStatus(`${t.minerFail}${message}`);
       }
     } finally {
       setActiveAction('');
@@ -394,53 +519,70 @@ export default function App() {
 
   const claimReward = async () => {
     if (!identityReady) {
-      setStatus(t.errIdentityNotReady);
+      setStatus(t.identityNotReady);
       return;
     }
 
     if (!minerReady) {
-      setStatus(t.errMinerNotReady);
+      setStatus(t.minerNotReady);
       return;
     }
 
     setActiveAction('claim');
     setLastTxHash('');
-    setStatus(t.statusClaiming);
+    setStatus(t.claimDoing);
+
     try {
       const txHash = await claimRewardOnChain();
       setLastTxHash(txHash);
-      setStatus(`${t.statusClaimSuccess}${shortHash(txHash)}`);
+      setStatus(`${t.claimSuccess}${shortHash(txHash)}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.statusClaimFailed;
-      setStatus(`${t.statusClaimFailed}${message}`);
+      const message = error instanceof Error ? error.message : t.claimFail;
+      setStatus(`${t.claimFail}${message}`);
     } finally {
       setActiveAction('');
     }
   };
 
-  const swapSuper = async () => {
+  const openSwapConfirm = () => {
     if (!identityReady) {
-      setStatus(t.errIdentityNotReady);
+      setStatus(t.identityNotReady);
       return;
     }
 
-    const parsedAmount = Number(superAmount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setStatus(t.errInvalidSuperAmount);
+    if (!hasValidSwapInput) {
+      setStatus(t.invalidSwapAmount);
       return;
     }
+
+    setSwapConfirmVisible(true);
+  };
+
+  const swapUsdt = async () => {
+    setSwapConfirmVisible(false);
 
     setActiveAction('swap');
     setLastTxHash('');
-    setStatus(t.statusSwapping);
+    setSwapTxStage('submitting');
+    setStatus(t.swapDoing);
+
+    clearSwapConfirmTimer();
+    swapConfirmTimerRef.current = setTimeout(() => {
+      setSwapTxStage((prev) => (prev === 'submitting' ? 'confirming' : prev));
+    }, 1200);
+
     try {
-      const txHash = await swapSuperToUsdtOnChain(superAmount);
+      const txHash = await swapUsdtToSuperOnChain(swapAmount);
+      clearSwapConfirmTimer();
       setLastTxHash(txHash);
-      setStatus(`${t.statusSwapSuccess}${shortHash(txHash)}`);
+      setSwapTxStage('success');
+      setStatus(`${t.swapSuccess}${shortHash(txHash)}`);
       await refreshSwapPrice();
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.statusSwapFailed;
-      setStatus(`${t.statusSwapFailed}${message}`);
+      clearSwapConfirmTimer();
+      const message = error instanceof Error ? error.message : t.swapFail;
+      setSwapTxStage('failed');
+      setStatus(`${t.swapFail}${message}`);
     } finally {
       setActiveAction('');
     }
@@ -448,31 +590,32 @@ export default function App() {
 
   const transferNativeToken = async () => {
     if (!identityReady) {
-      setStatus(t.errIdentityNotReady);
+      setStatus(t.identityNotReady);
       return;
     }
 
     if (!isValidEvmAddress(transferTo)) {
-      setStatus(t.errInvalidAddress);
+      setStatus(t.invalidAddress);
       return;
     }
 
     const amount = Number(transferAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setStatus(t.errInvalidAmount);
+      setStatus(t.invalidAmount);
       return;
     }
 
     setActiveAction('transfer');
     setLastTxHash('');
-    setStatus(t.statusTransferring);
+    setStatus(t.transferDoing);
+
     try {
       const txHash = await sendNativeTokenOnChain(transferTo.trim() as Address, transferAmount);
       setLastTxHash(txHash);
-      setStatus(`${t.statusTransferSuccess}${shortHash(txHash)}`);
+      setStatus(`${t.transferSuccess}${shortHash(txHash)}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.statusTransferFailed;
-      setStatus(`${t.statusTransferFailed}${message}`);
+      const message = error instanceof Error ? error.message : t.transferFail;
+      setStatus(`${t.transferFail}${message}`);
     } finally {
       setActiveAction('');
     }
@@ -482,136 +625,248 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.card}>
-          <View style={styles.titleRow}>
+        <View style={styles.headerRow}>
+          <View>
             <Text style={styles.title}>{t.appTitle}</Text>
-            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
-              <Text style={styles.langBtnText}>{t.langToggle}</Text>
-            </TouchableOpacity>
+            <Text style={styles.subtitle}>{t.subtitle}</Text>
           </View>
-          <Text style={styles.subtitle}>{t.subtitle}</Text>
-          <Text style={styles.flowHint}>{flowHint}</Text>
+          <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+            <Text style={styles.langBtnText}>{t.langToggle}</Text>
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.stepRow}>
-            <View style={[styles.stepTag, identityReady && styles.stepTagDone]}>
-              <Text style={[styles.stepTagText, identityReady && styles.stepTagTextDone]}>{t.stepIdentity}</Text>
+        <Text style={styles.flowHint}>{flowHint}</Text>
+
+        <View style={styles.profileCard}>
+          <View style={styles.rowBetween}>
+            <View style={styles.rowInline}>
+              <Text style={styles.profileId}>{t.profileId}:{displayId}</Text>
+              <Text style={styles.vipTag}>{t.profileVip}</Text>
             </View>
-            <View style={[styles.stepTag, minerReady && styles.stepTagDone]}>
-              <Text style={[styles.stepTagText, minerReady && styles.stepTagTextDone]}>{t.stepMiner}</Text>
+            <Text style={styles.unbindText}>{t.profileUnbind}</Text>
+          </View>
+          <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+          <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
+          <Text style={styles.walletHint}>{t.short}{shortAddress}</Text>
+        </View>
+
+        <View style={styles.statusCard}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.statusTitle}>{t.phoneStatus}</Text>
+            <View style={[styles.dotPill, identityReady ? styles.dotOnline : styles.dotOffline]}>
+              <Text style={styles.dotPillText}>{onlineState}</Text>
             </View>
-            <View style={[styles.stepTag, minerReady && styles.stepTagDone]}>
-              <Text style={[styles.stepTagText, minerReady && styles.stepTagTextDone]}>{t.stepActions}</Text>
-            </View>
           </View>
+          <Text style={styles.hashingText}>{t.hashing}</Text>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t.sec1Title}</Text>
-            <Text style={styles.label}>{t.labelWallet}</Text>
-            <Text style={styles.value}>{walletAddress || t.initializing}</Text>
-            {!!walletAddress && <Text style={styles.hint}>{t.short}{shortAddress}</Text>}
-
-            <Text style={styles.label}>{t.labelUserId}</Text>
-            <Text style={styles.value}>{userId || t.notInitialized}</Text>
-
-            <Text style={styles.label}>{t.labelDeviceId}</Text>
-            <Text style={styles.value}>{deviceId || t.initializing}</Text>
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={initializeAccount} disabled={isBusy}>
-              <Text style={styles.primaryBtnText}>{t.resyncIdentity}</Text>
-            </TouchableOpacity>
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
+            <Text style={styles.metricLabel}>{t.totalOnline}</Text>
           </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t.sec2Title}</Text>
-            <Text style={styles.label}>{t.labelHashrate}</Text>
-            <TextInput
-              style={styles.input}
-              value={hashrateInput}
-              onChangeText={setHashrateInput}
-              keyboardType="number-pad"
-              placeholder={t.phHashrate}
-              placeholderTextColor="#475569"
-              editable={!isBusy}
-            />
-            <Text style={styles.hint}>
-              {minerHintText}
-            </Text>
-            <TouchableOpacity
-              style={[styles.secondaryBtn, (isBusy || !identityReady) && styles.disabledBtn]}
-              onPress={startMining}
-              disabled={isBusy || !identityReady}
-            >
-              <Text style={styles.secondaryBtnText}>{minerReady ? t.btnUpdateHashrate : t.btnRegisterMiner}</Text>
-            </TouchableOpacity>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
+            <Text style={styles.metricLabel}>{t.monthOnline}</Text>
           </View>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t.sec3Title}</Text>
-
-            <TouchableOpacity style={styles.secondaryBtn} onPress={claimReward} disabled={isBusy || !identityReady}>
-              <Text style={styles.secondaryBtnText}>{t.btnClaimReward}</Text>
-            </TouchableOpacity>
-
-            <View style={styles.groupBox}>
-              <Text style={styles.label}>{t.labelSuperAmount}</Text>
-              <TextInput
-                style={styles.input}
-                value={superAmount}
-                onChangeText={setSuperAmount}
-                keyboardType="decimal-pad"
-                placeholder={t.phSuperAmount}
-                placeholderTextColor="#475569"
-                editable={!isBusy}
-              />
-              <View style={styles.rowBetween}>
-                <Text style={styles.hint}>{swapPrice || t.pricePlaceholder}</Text>
-                <TouchableOpacity onPress={refreshSwapPrice} disabled={isBusy}>
-                  <Text style={styles.refreshText}>{t.refreshPrice}</Text>
-                </TouchableOpacity>
+        <View style={styles.chartCard}>
+          <Text style={styles.sectionTitle}>{t.earningsChart}</Text>
+          <Text style={styles.chartAxis}>{t.chartYAxis}</Text>
+          <View style={styles.chartBars}>
+            {chartValues.map((item, idx) => (
+              <View key={`${item}-${idx}`} style={styles.barWrap}>
+                <View style={[styles.chartBar, { height: Math.max(12, (item / chartMax) * 120) }]} />
               </View>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={swapSuper} disabled={isBusy || !identityReady}>
-                <Text style={styles.secondaryBtnText}>{t.btnSwap}</Text>
-              </TouchableOpacity>
-            </View>
+            ))}
+          </View>
+          <Text style={styles.ruleHint}>{t.ruleHint}</Text>
+        </View>
 
-            <View style={styles.groupBox}>
-              <Text style={styles.label}>{t.labelTransfer}</Text>
-              <TextInput
-                style={styles.input}
-                value={transferTo}
-                onChangeText={setTransferTo}
-                placeholder={t.phTransferTo}
-                placeholderTextColor="#475569"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isBusy}
-              />
-              <TextInput
-                style={styles.input}
-                value={transferAmount}
-                onChangeText={setTransferAmount}
-                keyboardType="decimal-pad"
-                placeholder={t.phTransferAmount}
-                placeholderTextColor="#475569"
-                editable={!isBusy}
-              />
-              <TouchableOpacity style={styles.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
-                <Text style={styles.secondaryBtnText}>{t.btnTransfer}</Text>
-              </TouchableOpacity>
+        <View style={styles.swapCard}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.sectionTitle}>{t.swapPanelTitle}</Text>
+            <TouchableOpacity onPress={refreshSwapPrice} disabled={isBusy}>
+              <Text style={styles.refreshText}>{t.refreshPrice}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>{t.swapAmount}</Text>
+          <TextInput
+            style={styles.input}
+            value={swapAmount}
+            onChangeText={setSwapAmount}
+            keyboardType="decimal-pad"
+            placeholder={t.swapAmountPlaceholder}
+            placeholderTextColor="#93a9d1"
+            editable={!isBusy}
+          />
+
+          <Text style={styles.hint}>{swapPriceText}</Text>
+
+          <View style={styles.previewBox}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.previewLabel}>{t.quote}</Text>
+              <Text style={styles.previewValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
+            </View>
+            <View style={styles.rowBetween}>
+              <Text style={styles.previewLabel}>{t.fee}</Text>
+              <Text style={styles.previewValue}>{feeUsdt.toFixed(6)} USDT</Text>
+            </View>
+            <View style={styles.rowBetween}>
+              <Text style={styles.previewLabel}>{t.minReceive}</Text>
+              <Text style={styles.previewValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
             </View>
           </View>
 
-          {isBusy && (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#22d3ee" />
-              <Text style={styles.loadingText}>{t.processing}</Text>
+          <TouchableOpacity
+            style={[styles.primarySwapBtn, (isBusy || !identityReady) && styles.disabledBtn]}
+            onPress={openSwapConfirm}
+            disabled={isBusy || !identityReady}
+          >
+            <Text style={styles.primarySwapBtnText}>{t.swapButton}</Text>
+          </TouchableOpacity>
+
+          {swapTxStage !== 'idle' && (
+            <View style={styles.txStageCard}>
+              <Text style={styles.txStageTitle}>{t.txProgressTitle}</Text>
+              <View style={styles.txStageRow}>
+                <View style={styles.txStageItem}>
+                  <View style={[styles.txDot, styles.txDotActive]} />
+                  <Text style={styles.txStageText}>{txStageLabels.submitting}</Text>
+                </View>
+                <View style={[styles.txStageLine, (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
+                <View style={styles.txStageItem}>
+                  <View
+                    style={[
+                      styles.txDot,
+                      (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txDotActive,
+                    ]}
+                  />
+                  <Text style={styles.txStageText}>{txStageLabels.confirming}</Text>
+                </View>
+                <View style={[styles.txStageLine, (swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
+                <View style={styles.txStageItem}>
+                  <View
+                    style={[
+                      styles.txDot,
+                      (swapTxStage === 'success' || swapTxStage === 'failed') && (swapTxStage === 'success' ? styles.txDotSuccess : styles.txDotFailed),
+                    ]}
+                  />
+                  <Text style={styles.txStageText}>
+                    {swapTxStage === 'failed' ? txStageLabels.failed : txStageLabels.success}
+                  </Text>
+                </View>
+              </View>
             </View>
           )}
-
-          {!!lastTxHash && <Text style={styles.txHash}>{t.latestTx}{lastTxHash}</Text>}
-          <Text style={styles.status}>{status}</Text>
         </View>
+
+        <View style={styles.actionCard}>
+          <Text style={styles.sectionTitle}>{t.quickActions}</Text>
+          <View style={styles.quickRow}>
+            <TouchableOpacity style={styles.quickBtn} onPress={claimReward} disabled={isBusy || !identityReady}>
+              <Text style={styles.quickBtnText}>{t.claimReward}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
+              <Text style={styles.quickBtnText}>{t.setupMiner}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickBtn} onPress={initializeAccount} disabled={isBusy}>
+              <Text style={styles.quickBtnText}>{t.syncIdentity}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.actionCard}>
+          <Text style={styles.sectionTitle}>{t.advancedSettings}</Text>
+
+          <Text style={styles.label}>{t.hashrate}</Text>
+          <TextInput
+            style={styles.input}
+            value={hashrateInput}
+            onChangeText={setHashrateInput}
+            keyboardType="number-pad"
+            placeholder={t.hashratePlaceholder}
+            placeholderTextColor="#93a9d1"
+            editable={!isBusy}
+          />
+
+          <Text style={styles.label}>{t.transferTitle}</Text>
+          <TextInput
+            style={styles.input}
+            value={transferTo}
+            onChangeText={setTransferTo}
+            placeholder={t.transferTo}
+            placeholderTextColor="#93a9d1"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isBusy}
+          />
+          <TextInput
+            style={styles.input}
+            value={transferAmount}
+            onChangeText={setTransferAmount}
+            keyboardType="decimal-pad"
+            placeholder={t.transferAmount}
+            placeholderTextColor="#93a9d1"
+            editable={!isBusy}
+          />
+          <TouchableOpacity style={styles.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
+            <Text style={styles.secondaryBtnText}>{t.sendTransfer}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isBusy && (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color="#7dd3fc" />
+            <Text style={styles.loadingText}>{t.processing}</Text>
+          </View>
+        )}
+
+        {!!lastTxHash && <Text style={styles.txHash}>{t.latestTx}{lastTxHash}</Text>}
+        <Text style={styles.statusText}>{status}</Text>
       </ScrollView>
+
+      <Modal
+        visible={swapConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSwapConfirmVisible(false)}
+      >
+        <Pressable style={styles.modalMask} onPress={() => setSwapConfirmVisible(false)}>
+          <Pressable style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t.swapConfirmTitle}</Text>
+            <Text style={styles.modalHint}>{t.swapConfirmHint}</Text>
+
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>{t.swapAmount}</Text>
+              <Text style={styles.modalValue}>{swapAmount || '0'} USDT</Text>
+            </View>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>{t.quote}</Text>
+              <Text style={styles.modalValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
+            </View>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>{t.fee}</Text>
+              <Text style={styles.modalValue}>{feeUsdt.toFixed(6)} USDT</Text>
+            </View>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>{t.minReceive}</Text>
+              <Text style={styles.modalValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
+            </View>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setSwapConfirmVisible(false)}>
+                <Text style={styles.modalGhostBtnText}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={swapUsdt}>
+                <Text style={styles.modalPrimaryBtnText}>{t.confirm}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -619,161 +874,350 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#030b1d',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 28,
+    paddingHorizontal: 14,
+    paddingBottom: 24,
+    gap: 10,
   },
-  card: {
-    borderRadius: 20,
-    backgroundColor: '#0f172a',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    padding: 16,
-    gap: 12,
-  },
-  title: {
-    color: '#f8fafc',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  titleRow: {
+  headerRow: {
+    marginTop: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  langBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#1e293b',
-  },
-  langBtnText: {
-    color: '#67e8f9',
-    fontSize: 13,
-    fontWeight: '600',
+  title: {
+    color: '#ecfeff',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   subtitle: {
-    color: '#94a3b8',
+    color: '#9cc6ff',
+    marginTop: -2,
     fontSize: 14,
   },
-  flowHint: {
-    color: '#67e8f9',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  stepTag: {
-    flex: 1,
+  langBtn: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#0b1220',
-    paddingVertical: 8,
-    alignItems: 'center',
+    borderColor: '#3a6fb8',
+    backgroundColor: '#0e2d62',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  stepTagDone: {
-    borderColor: '#0891b2',
-    backgroundColor: '#083344',
-  },
-  stepTagText: {
-    color: '#94a3b8',
+  langBtnText: {
+    color: '#d9f9ff',
     fontSize: 12,
-    fontWeight: '600',
-  },
-  stepTagTextDone: {
-    color: '#67e8f9',
-  },
-  section: {
-    marginTop: 4,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#111827',
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#e2e8f0',
-    fontSize: 15,
     fontWeight: '700',
+  },
+  flowHint: {
+    color: '#87d9ff',
+    fontSize: 12,
     marginBottom: 2,
   },
-  label: {
-    color: '#64748b',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  value: {
-    color: '#22d3ee',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  primaryBtn: {
-    marginTop: 4,
-    borderRadius: 12,
-    backgroundColor: '#06b6d4',
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryBtnText: {
-    color: '#082f49',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryBtn: {
-    borderRadius: 12,
-    backgroundColor: '#1e293b',
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  disabledBtn: {
-    opacity: 0.55,
-  },
-  secondaryBtnText: {
-    color: '#e2e8f0',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  groupBox: {
-    marginTop: 8,
-    gap: 8,
+  profileCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2d7bc4',
+    backgroundColor: '#0b45a1',
+    padding: 14,
+    gap: 6,
   },
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  rowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#020617',
-    color: '#e2e8f0',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+  profileId: {
+    color: '#f0fbff',
+    fontSize: 22,
+    fontWeight: '800',
   },
-  status: {
-    color: '#94a3b8',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  hint: {
-    color: '#94a3b8',
+  vipTag: {
+    color: '#ffd6ee',
     fontSize: 12,
-    flex: 1,
+    fontWeight: '700',
+    backgroundColor: '#7f1d63',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
   },
-  refreshText: {
-    color: '#22d3ee',
+  unbindText: {
+    color: '#d5f4ff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  profileExpire: {
+    color: '#c8ebff',
+    fontSize: 13,
+  },
+  walletText: {
+    color: '#effbff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  walletHint: {
+    color: '#96cfff',
+    fontSize: 12,
+  },
+  statusCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1f4f96',
+    backgroundColor: '#08306f',
+    padding: 14,
+    gap: 8,
+  },
+  statusTitle: {
+    color: '#e6f4ff',
+    fontSize: 19,
+    fontWeight: '700',
+  },
+  dotPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  dotOnline: {
+    backgroundColor: '#0f766e',
+  },
+  dotOffline: {
+    backgroundColor: '#475569',
+  },
+  dotPillText: {
+    color: '#ecfeff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  hashingText: {
+    color: '#b8ecff',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a5ea8',
+    backgroundColor: '#0d2a63',
+    padding: 12,
+    gap: 6,
+  },
+  metricValue: {
+    color: '#ecfeff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  metricLabel: {
+    color: '#9eceff',
+    fontSize: 12,
+  },
+  chartCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2a5ea8',
+    backgroundColor: '#0d2554',
+    padding: 14,
+    gap: 10,
+  },
+  sectionTitle: {
+    color: '#e9f8ff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  chartAxis: {
+    color: '#9cc6ff',
+    fontSize: 11,
+  },
+  chartBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    height: 126,
+    paddingTop: 4,
+  },
+  barWrap: {
+    flex: 1,
+    borderRadius: 8,
+    backgroundColor: '#0a1a3d',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBar: {
+    width: '100%',
+    backgroundColor: '#38bdf8',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  ruleHint: {
+    color: '#9ec8ff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  swapCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#36a7ff',
+    backgroundColor: '#0a3a7f',
+    padding: 14,
+    gap: 10,
+  },
+  refreshText: {
+    color: '#d6f6ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  label: {
+    color: '#bcdcff',
+    fontSize: 12,
+  },
+  input: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    backgroundColor: '#062656',
+    color: '#e8fbff',
+    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  hint: {
+    color: '#b8dcff',
+    fontSize: 12,
+  },
+  previewBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4aa8ff',
+    backgroundColor: '#072f67',
+    padding: 10,
+    gap: 8,
+  },
+  previewLabel: {
+    color: '#b7dbff',
+    fontSize: 12,
+  },
+  previewValue: {
+    color: '#f0fdff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  primarySwapBtn: {
+    borderRadius: 12,
+    backgroundColor: '#22d3ee',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  primarySwapBtnText: {
+    color: '#083344',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  txStageCard: {
+    marginTop: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4aa8ff',
+    backgroundColor: '#072f67',
+    padding: 10,
+    gap: 10,
+  },
+  txStageTitle: {
+    color: '#d7f3ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  txStageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  txStageItem: {
+    alignItems: 'center',
+    gap: 4,
+    width: 82,
+  },
+  txDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: '#31557f',
+  },
+  txDotActive: {
+    backgroundColor: '#38bdf8',
+  },
+  txDotSuccess: {
+    backgroundColor: '#22c55e',
+  },
+  txDotFailed: {
+    backgroundColor: '#ef4444',
+  },
+  txStageLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#31557f',
+    marginHorizontal: 4,
+  },
+  txStageLineActive: {
+    backgroundColor: '#38bdf8',
+  },
+  txStageText: {
+    color: '#b7dbff',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  actionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2a5ea8',
+    backgroundColor: '#0d2554',
+    padding: 14,
+    gap: 10,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickBtn: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#143e7a',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  quickBtnText: {
+    color: '#dbf4ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  secondaryBtn: {
+    borderRadius: 10,
+    backgroundColor: '#184680',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  secondaryBtnText: {
+    color: '#dbf4ff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   loadingRow: {
     flexDirection: 'row',
@@ -782,11 +1226,90 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   loadingText: {
-    color: '#67e8f9',
+    color: '#a9def9',
     fontSize: 12,
   },
   txHash: {
-    color: '#cbd5e1',
+    color: '#dbecff',
     fontSize: 12,
   },
-});
+  statusText: {
+    color: '#b4d9ff',
+    fontSize: 12,
+    lineHeight: 18,
+    paddingBottom: 8,
+  },
+  disabledBtn: {
+    opacity: 0.55,
+  },
+  modalMask: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.6)',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4aa8ff',
+    backgroundColor: '#082a5d',
+    padding: 16,
+    gap: 10,
+  },
+  modalTitle: {
+    color: '#ecfeff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalHint: {
+    color: '#b6dcff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalLabel: {
+    color: '#a9d3ff',
+    fontSize: 12,
+  },
+  modalValue: {
+    color: '#ebfbff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  modalGhostBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#4aa8ff',
+    backgroundColor: '#0a2f66',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  modalGhostBtnText: {
+    color: '#d8f4ff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalPrimaryBtn: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#22d3ee',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  modalPrimaryBtnText: {
+    color: '#083344',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+}
+);

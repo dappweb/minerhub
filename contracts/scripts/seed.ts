@@ -1,5 +1,5 @@
-import { ethers } from 'hardhat';
 import * as fs from 'fs';
+import { ethers } from 'hardhat';
 import * as path from 'path';
 
 async function main() {
@@ -49,7 +49,7 @@ async function main() {
   }
 
   for (const amount of ['5', '8']) {
-    const amountUsdt = ethers.parseUnits(amount, 6);
+    const amountUsdt = ethers.parseUnits(amount, 18);
     const approveUsdtTx = await usdt.approve(await swapRouter.getAddress(), amountUsdt);
     await approveUsdtTx.wait();
     txHashes.push(approveUsdtTx.hash);

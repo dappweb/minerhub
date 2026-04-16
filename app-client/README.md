@@ -20,7 +20,7 @@ npm run start
 鍦ㄥ惎鍔ㄥ墠閰嶇疆 Expo 鍏叡鍙橀噺锛堝彲鍐欏叆绯荤粺鐜鎴?`.env`锛夛細
 
 - `EXPO_PUBLIC_API_BASE_URL`锛氬悗绔?API 鍦板潃锛堟湰鍦伴粯璁?`http://127.0.0.1:8788`锛?
-- `EXPO_PUBLIC_CHAIN_ID`锛氶摼 ID锛圫epolia 涓?`11155111`锛?
+- `EXPO_PUBLIC_CHAIN_ID`锛氶摼 ID锛圫epolia 涓?`97`锛?
 - `EXPO_PUBLIC_RPC_URL`锛歊PC 鍦板潃
 - `EXPO_PUBLIC_MINING_POOL_ADDRESS`锛歁iningPool 鍚堢害鍦板潃
 - `EXPO_PUBLIC_SWAP_ROUTER_ADDRESS`锛歋wapRouter 鍚堢害鍦板潃
