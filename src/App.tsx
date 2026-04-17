@@ -38,6 +38,7 @@ export default function App() {
   const [adminLoginStatus, setAdminLoginStatus] = React.useState<string>('请先使用钱包登录后台');
   const [ownerAuthorityAddress, setOwnerAuthorityAddress] = React.useState<string>('');
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
+  const autoVerifyAttemptedWalletRef = React.useRef<string>('');
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
@@ -115,6 +116,7 @@ export default function App() {
 
   React.useEffect(() => {
     if (!adminWallet) {
+      autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
       setAdminLoginStatus('请先使用钱包登录后台');
       setViewMode('website');
@@ -122,6 +124,7 @@ export default function App() {
     }
 
     if (!isOwnerAddress(adminWallet)) {
+      autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
       setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
       setViewMode('website');
@@ -180,6 +183,22 @@ export default function App() {
     },
     [isOwnerAddress, signMessageAsync],
   );
+
+  React.useEffect(() => {
+    if (!adminWallet) return;
+    if (!isOwnerAddress(adminWallet)) return;
+    if (isSignatureVerified) {
+      setViewMode('admin');
+      return;
+    }
+    if (isSignaturePending) return;
+
+    const normalizedWallet = adminWallet.toLowerCase();
+    if (autoVerifyAttemptedWalletRef.current === normalizedWallet) return;
+
+    autoVerifyAttemptedWalletRef.current = normalizedWallet;
+    void verifyOwnerSignatureAndEnter(adminWallet);
+  }, [adminWallet, isOwnerAddress, isSignaturePending, isSignatureVerified, verifyOwnerSignatureAndEnter]);
 
   const renderConnectAction = (className: string, showConnectedLabel: boolean) => (
     <ConnectButton.Custom>

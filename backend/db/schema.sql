@@ -190,3 +190,79 @@ CREATE INDEX IF NOT EXISTS idx_sub_accounts_owner_user_id ON sub_accounts(owner_
 CREATE INDEX IF NOT EXISTS idx_payout_wallets_user_id ON payout_wallets(user_id);
 CREATE INDEX IF NOT EXISTS idx_device_status_history_device_id ON device_status_history(device_id);
 CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_id ON reward_ledger(user_id);
+
+CREATE TABLE IF NOT EXISTS exchange_orders (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  wallet TEXT NOT NULL,
+  amount_super TEXT NOT NULL DEFAULT '0',
+  amount_usdt TEXT NOT NULL DEFAULT '0',
+  mode TEXT NOT NULL DEFAULT 'manual',
+  status TEXT NOT NULL DEFAULT 'manual_pending',
+  request_note TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  completed_at TEXT,
+  payout_wallet TEXT,
+  tx_hash TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS payout_batches (
+  id TEXT PRIMARY KEY,
+  wallet_address TEXT NOT NULL,
+  total_usdt TEXT NOT NULL DEFAULT '0',
+  status TEXT NOT NULL DEFAULT 'pending',
+  note TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payout_batch_items (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL,
+  exchange_order_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  amount_usdt TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  tx_hash TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (batch_id) REFERENCES payout_batches(id),
+  FOREIGN KEY (exchange_order_id) REFERENCES exchange_orders(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS swap_price_history (
+  id TEXT PRIMARY KEY,
+  price_super_per_usdt TEXT NOT NULL,
+  source TEXT NOT NULL,
+  operator_wallet TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS swap_trade_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  wallet TEXT,
+  direction TEXT NOT NULL,
+  amount_in TEXT NOT NULL,
+  amount_out TEXT NOT NULL,
+  price_snapshot TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'submitted',
+  tx_hash TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_exchange_orders_user_id ON exchange_orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status);
+CREATE INDEX IF NOT EXISTS idx_payout_batches_status ON payout_batches(status);
+CREATE INDEX IF NOT EXISTS idx_payout_batch_items_batch_id ON payout_batch_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_swap_trade_logs_user_id ON swap_trade_logs(user_id);

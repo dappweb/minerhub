@@ -34,6 +34,12 @@ const DEFAULT_STATUS: SystemStatus = {
   payoutWallets: [],
 };
 
+function isNormalizedPayoutWallet(
+  item: { walletAddress: string; priority: number; isPrimary: boolean } | null
+): item is { walletAddress: string; priority: number; isPrimary: boolean } {
+  return item !== null && Boolean(item.walletAddress);
+}
+
 function isOwner(request: Request, env: Env): boolean {
   const wallet = request.headers.get("x-wallet") ?? "";
   return Boolean(env.OWNER_ADDRESS) && wallet.toLowerCase() === env.OWNER_ADDRESS!.toLowerCase();
@@ -166,7 +172,7 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
         }
         return null;
       })
-      .filter((item): item is { walletAddress: string; priority: number; isPrimary: boolean } => Boolean(item) && Boolean(item.walletAddress));
+      .filter(isNormalizedPayoutWallet);
 
     updates.push(["payout_wallets_json", JSON.stringify(normalized)]);
   }

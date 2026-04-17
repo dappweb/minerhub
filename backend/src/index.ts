@@ -4,6 +4,7 @@ import { handleClaims } from "./routes/claims";
 import { handleDevices } from "./routes/devices";
 import { handleDownloads } from "./routes/downloads";
 import { handleGas } from "./routes/gas";
+import { handleOperations } from "./routes/operations";
 import { handleSystem } from "./routes/system";
 import { handleUsers } from "./routes/users";
 import type { Env } from "./types/env";
@@ -42,6 +43,7 @@ export default {
       if (scope === "claims") return handleClaims(request, env, pathParts);
       if (scope === "downloads") return handleDownloads(request, env, pathParts);
       if (scope === "gas") return handleGas(request, env, pathParts);
+      if (scope === "operations") return handleOperations(request, env, pathParts);
 
       return notFound("API route not found");
     } catch (error) {

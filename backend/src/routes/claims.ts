@@ -1,7 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { badRequest, json, unauthorized } from "../lib/response";
-import { isMaintenanceEnabled } from "../lib/system";
+import { isExchangeAutoEnabled, isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
 
 async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
@@ -19,6 +19,102 @@ async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
 }
 
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "exchange-request") {
+    if (await isMaintenanceEnabled(env)) {
+      return json({ error: "System is under maintenance" }, 503);
+    }
+
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      userId?: string;
+      wallet?: string;
+      amountSuper?: string;
+      amountUsdt?: string;
+      note?: string;
+    } | null;
+
+    if (!body?.userId || !body.wallet) {
+      return badRequest("userId and wallet are required");
+    }
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch");
+    }
+
+    const amountSuper = Number(body.amountSuper ?? "0");
+    const amountUsdt = Number(body.amountUsdt ?? "0");
+    if (!Number.isFinite(amountSuper) || amountSuper <= 0) {
+      return badRequest("amountSuper must be a positive number");
+    }
+
+    await ensureCustomerProfile(env, body.userId);
+    const profile = await env.DB.prepare(
+      "SELECT exchange_auto_enabled FROM customer_profiles WHERE user_id = ?"
+    )
+      .bind(body.userId)
+      .first<{ exchange_auto_enabled: number }>();
+
+    const globalAuto = await isExchangeAutoEnabled(env);
+    const userAuto = Number(profile?.exchange_auto_enabled ?? 1) === 1;
+    const autoEnabled = globalAuto && userAuto;
+    const mode = autoEnabled ? "auto" : "manual";
+    const status = autoEnabled ? "auto_processing" : "manual_pending";
+
+    const now = nowIso();
+    const exchangeId = createId("exr");
+    await env.DB.prepare(
+      `INSERT INTO exchange_orders (
+        id, user_id, wallet, amount_super, amount_usdt, mode, status,
+        request_note, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        exchangeId,
+        body.userId,
+        body.wallet.toLowerCase(),
+        amountSuper.toString(),
+        Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+        mode,
+        status,
+        body.note?.trim() || null,
+        now,
+        now,
+      )
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO swap_trade_logs (
+        id, user_id, wallet, direction, amount_in, amount_out,
+        price_snapshot, status, note, created_at, updated_at
+      ) VALUES (?, ?, ?, 'SUPER_TO_USDT', ?, ?, '0', ?, ?, ?, ?)`
+    )
+      .bind(
+        createId("swl"),
+        body.userId,
+        body.wallet.toLowerCase(),
+        amountSuper.toString(),
+        Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+        status,
+        autoEnabled ? "auto exchange request" : "manual exchange request",
+        now,
+        now,
+      )
+      .run();
+
+    return json({
+      id: exchangeId,
+      mode,
+      status,
+      autoEnabled,
+      amountSuper: amountSuper.toString(),
+      amountUsdt: Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+      createdAt: now,
+    }, 201);
+  }
+
   if (request.method === "POST" && pathParts.length === 0) {
     if (await isMaintenanceEnabled(env)) {
       return json({ error: "System is under maintenance" }, 503);

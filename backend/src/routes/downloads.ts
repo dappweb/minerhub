@@ -128,8 +128,8 @@ async function uploadAndroid(request: Request, env: Env): Promise<Response> {
 
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
-    const file = formData.get("file");
-    if (!file || !(file instanceof File)) {
+    const file = formData.get("file") as { arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+    if (!file || typeof file.arrayBuffer !== "function") {
       return badRequest("multipart field 'file' is required");
     }
     body = await file.arrayBuffer();

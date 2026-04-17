@@ -107,6 +107,12 @@ function parsePayoutWallets(raw: string | null): Array<{ walletAddress: string; 
   }
 }
 
+function isNormalizedPayoutWallet(
+  item: { walletAddress: string; priority: number; isPrimary: boolean } | null
+): item is { walletAddress: string; priority: number; isPrimary: boolean } {
+  return item !== null && Boolean(item.walletAddress);
+}
+
 async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
   const { results } = await env.DB.prepare(
     `SELECT
@@ -358,7 +364,7 @@ async function handleCustomerUpdate(request: Request, env: Env, userId: string):
         }
         return null;
       })
-      .filter((item): item is { walletAddress: string; priority: number; isPrimary: boolean } => Boolean(item) && Boolean(item.walletAddress));
+      .filter(isNormalizedPayoutWallet);
 
     await env.DB.prepare("DELETE FROM payout_wallets WHERE user_id = ?").bind(userId).run();
     for (const wallet of normalized) {

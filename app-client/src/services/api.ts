@@ -280,6 +280,24 @@ export async function createClaim(payload: { userId: string; amount: string; wal
   return signedRequest<{ id: string; status: string }>("/api/claims", "POST", payload);
 }
 
+export async function createExchangeRequest(payload: {
+  userId: string;
+  wallet: string;
+  amountSuper: string;
+  amountUsdt?: string;
+  note?: string;
+}) {
+  return signedRequest<{
+    id: string;
+    mode: "auto" | "manual";
+    status: string;
+    autoEnabled: boolean;
+    amountSuper: string;
+    amountUsdt: string;
+    createdAt: string;
+  }>("/api/claims/exchange-request", "POST", payload);
+}
+
 export async function getUser(userId: string): Promise<UserDto | null> {
   try {
     return await request<UserDto>(`/api/users/${userId}`);
