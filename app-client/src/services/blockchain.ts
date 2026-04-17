@@ -19,8 +19,12 @@ const chain = defineChain({
   },
 });
 
-const miningPoolAddress = process.env.EXPO_PUBLIC_MINING_POOL_ADDRESS as Address | undefined;
-const swapRouterAddress = process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined;
+const miningPoolAddress =
+  (process.env.EXPO_PUBLIC_MINING_POOL_ADDRESS as Address | undefined) ??
+  ('0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1' as Address);
+const swapRouterAddress =
+  (process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined) ??
+  ('0x1C094012b17461C26938752549E367011443592f' as Address);
 const GAS_BUFFER_NUMERATOR = 12n;
 const GAS_BUFFER_DENOMINATOR = 10n;
 

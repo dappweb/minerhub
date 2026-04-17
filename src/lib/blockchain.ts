@@ -291,15 +291,15 @@ const erc20Abi = [
   },
 ] as const;
 
-const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 8453);
-const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://mainnet.base.org';
+const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 97);
+const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
 
 const chain = defineChain({
   id: chainId,
   name: 'Coin Planet Chain',
   nativeCurrency: {
-    name: 'Ether',
-    symbol: 'ETH',
+    name: 'BNB',
+    symbol: 'BNB',
     decimals: 18,
   },
   rpcUrls: {
@@ -310,11 +310,15 @@ const chain = defineChain({
 
 const minerContractAddress =
   (import.meta.env.VITE_MINING_POOL_ADDRESS as Address | undefined) ??
-  (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined);
+  (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined) ??
+  ('0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1' as Address);
 const swapContractAddress =
   (import.meta.env.VITE_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined);
-const superTokenAddress = import.meta.env.VITE_SUPER_ADDRESS as Address | undefined;
+  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined) ??
+  ('0x1C094012b17461C26938752549E367011443592f' as Address);
+const superTokenAddress =
+  (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined) ??
+  ('0x24cd69bd4C0137aA836dB9935D37EAe701C81139' as Address);
 
 function getWalletClient() {
   if (!window.ethereum) {

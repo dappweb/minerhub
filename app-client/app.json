@@ -19,10 +19,10 @@
       "package": "com.coinplanet.mobile"
     },
     "extra": {
-      "rpcUrl": "https://mainnet.base.org",
-      "chainId": 8453,
-      "minerContractAddress": "0x0000000000000000000000000000000000000000",
-      "swapContractAddress": "0x0000000000000000000000000000000000000000"
+      "rpcUrl": "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      "chainId": 97,
+      "minerContractAddress": "0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1",
+      "swapContractAddress": "0x1C094012b17461C26938752549E367011443592f"
     },
     "plugins": [
       "expo-asset",

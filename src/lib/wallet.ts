@@ -1,15 +1,15 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { defineChain } from 'viem';
 
-const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 8453);
-const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://mainnet.base.org';
+const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 97);
+const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
 
 const coinPlanetChain = defineChain({
   id: chainId,
   name: 'Coin Planet Chain',
   nativeCurrency: {
-    name: 'Ether',
-    symbol: 'ETH',
+    name: 'BNB',
+    symbol: 'BNB',
     decimals: 18,
   },
   rpcUrls: {
