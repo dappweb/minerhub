@@ -14,6 +14,8 @@ import {
     View,
 } from 'react-native';
 import type { Address } from 'viem';
+import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
+import GuideCard from './components/mobile/GuideCard';
 import {
     createClaim,
     createGasIntent,
@@ -98,6 +100,30 @@ const translations = {
     setupMiner: 'Setup Miner',
     syncIdentity: 'Sync Identity',
     advancedSettings: 'Advanced Settings',
+    tabHome: 'Home',
+    tabEarnings: 'Rewards',
+    tabExchange: 'Swap',
+    tabDevice: 'Device',
+    tabProfile: 'Me',
+    guideTitle: 'Getting Started',
+    guideReadyTitle: 'Daily Console Ready',
+    guideDescInit: 'Create your local identity first, then unlock on-chain operations and account sync.',
+    guideDescMine: 'Activate your miner so rewards and online time can start accruing.',
+    guideDescReady: 'Identity and miner are ready. Use the bottom menu for daily rewards and swaps.',
+    guideStepIdentity: 'Identity Sync',
+    guideStepMiner: 'Miner Activation',
+    guideStepReward: 'Rewards & Swap',
+    guideStepDone: 'Done',
+    guideStepTodo: 'Next',
+    guideStepLocked: 'Locked',
+    homeOverview: 'Overview',
+    homePrimaryAction: 'Next Step',
+    rewardsSummary: 'Reward Summary',
+    deviceSummary: 'Device Console',
+    profileSummary: 'Account Center',
+    walletCardTitle: 'Wallet',
+    contractExpiredTitle: 'Contract Expired',
+    contractExpiredBody: 'Renew or update your contract before rewards can continue.',
     hashrate: 'Hashrate',
     hashratePlaceholder: 'e.g. 2600',
     transferTitle: 'Native Transfer',
@@ -198,6 +224,30 @@ const translations = {
     setupMiner: '矿机设置',
     syncIdentity: '身份同步',
     advancedSettings: '高级设置',
+    tabHome: '首页',
+    tabEarnings: '收益',
+    tabExchange: '兑换',
+    tabDevice: '设备',
+    tabProfile: '我的',
+    guideTitle: '启动引导',
+    guideReadyTitle: '日常控制台已就绪',
+    guideDescInit: '先完成本机身份建立，再解锁链上操作与账户同步。',
+    guideDescMine: '完成矿机激活后，收益与在线时长才会开始累计。',
+    guideDescReady: '身份和矿机都已准备完成，后续可通过底部菜单进入日常收益与兑换。',
+    guideStepIdentity: '身份同步',
+    guideStepMiner: '矿机激活',
+    guideStepReward: '收益与兑换',
+    guideStepDone: '完成',
+    guideStepTodo: '下一步',
+    guideStepLocked: '待解锁',
+    homeOverview: '总览',
+    homePrimaryAction: '下一步操作',
+    rewardsSummary: '收益总览',
+    deviceSummary: '设备控制台',
+    profileSummary: '账户中心',
+    walletCardTitle: '钱包信息',
+    contractExpiredTitle: '合约已过期',
+    contractExpiredBody: '请先续期或更新合约，之后才能继续累计收益。',
     hashrate: '算力值',
     hashratePlaceholder: '例如 2600',
     transferTitle: '原生代币转账',
@@ -303,6 +353,7 @@ export default function App() {
   const [activeAction, setActiveAction] = useState<ActionType>('');
   const [swapPriceValue, setSwapPriceValue] = useState<number | null>(null);
   const [lang, setLang] = useState<Lang>('zh');
+  const [activeTab, setActiveTab] = useState<BottomTab>('home');
   const [swapConfirmVisible, setSwapConfirmVisible] = useState(false);
   const [swapTxStage, setSwapTxStage] = useState<SwapTxStage>('idle');
   const [gasAssistVisible, setGasAssistVisible] = useState(false);
@@ -449,6 +500,8 @@ export default function App() {
   }, [monthProgressMinutes]);
 
   const chartMax = Math.max(...chartValues, 1);
+  const totalRewardUsdt = Number(userDetails?.totalRewardUsdt ?? '0');
+  const totalRewardSuper = Number(userDetails?.totalRewardSuper ?? '0');
 
   const refreshGasFundedBalance = async (wallet: string) => {
     const balance = await getGasWalletBalance(wallet);
@@ -942,6 +995,55 @@ export default function App() {
     }
   };
 
+  const guideTitle = identityReady && minerReady ? t.guideReadyTitle : t.guideTitle;
+  const guideDescription = !identityReady
+    ? t.guideDescInit
+    : !minerReady
+      ? t.guideDescMine
+      : contractExpired
+        ? t.contractExpiredBody
+        : t.guideDescReady;
+  const guideCtaLabel = !identityReady
+    ? t.syncIdentity
+    : !minerReady
+      ? t.setupMiner
+      : t.claimReward;
+  const guideAction = !identityReady
+    ? initializeAccount
+    : !minerReady
+      ? startMining
+      : claimReward;
+  const guideSteps = [
+    {
+      key: 'identity',
+      label: t.guideStepIdentity,
+      status: identityReady ? t.guideStepDone : t.guideStepTodo,
+      active: !identityReady,
+      complete: identityReady,
+    },
+    {
+      key: 'miner',
+      label: t.guideStepMiner,
+      status: minerReady ? t.guideStepDone : identityReady ? t.guideStepTodo : t.guideStepLocked,
+      active: identityReady && !minerReady,
+      complete: minerReady,
+    },
+    {
+      key: 'reward',
+      label: t.guideStepReward,
+      status: identityReady && minerReady ? t.guideStepTodo : t.guideStepLocked,
+      active: identityReady && minerReady,
+      complete: false,
+    },
+  ];
+  const bottomTabs: Array<{ key: BottomTab; label: string }> = [
+    { key: 'home', label: t.tabHome },
+    { key: 'earnings', label: t.tabEarnings },
+    { key: 'exchange', label: t.tabExchange },
+    { key: 'device', label: t.tabDevice },
+    { key: 'profile', label: t.tabProfile },
+  ];
+
   if (maintenanceEnabled) {
     const title = lang === 'zh' ? '系统维护中' : 'Maintenance Mode';
     const body = lang === 'zh'
@@ -965,220 +1067,300 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>{t.appTitle}</Text>
-            <Text style={styles.subtitle}>{t.subtitle}</Text>
-          </View>
-          <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
-            <Text style={styles.langBtnText}>{t.langToggle}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.flowHint}>{flowHint}</Text>
-
-        <View style={styles.profileCard}>
-          <View style={styles.rowBetween}>
-            <View style={styles.rowInline}>
-              <Text style={styles.profileId}>{t.profileId}:{displayId}</Text>
-              <Text style={styles.vipTag}>{t.profileVip}</Text>
+      <View style={styles.mainShell}>
+        <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.title}>{t.appTitle}</Text>
+              <Text style={styles.subtitle}>{activeTab === 'home' ? t.subtitle : flowHint}</Text>
             </View>
-            <Text style={styles.unbindText}>{t.profileUnbind}</Text>
-          </View>
-          <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
-          <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
-          <Text style={styles.walletHint}>{t.short}{shortAddress}</Text>
-        </View>
-
-        <View style={styles.statusCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.statusTitle}>{t.phoneStatus}</Text>
-            <View style={[styles.dotPill, identityReady ? styles.dotOnline : styles.dotOffline]}>
-              <Text style={styles.dotPillText}>{onlineState}</Text>
-            </View>
-          </View>
-          <Text style={styles.hashingText}>{t.hashing}</Text>
-        </View>
-
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
-            <Text style={styles.metricLabel}>{t.totalOnline}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
-            <Text style={styles.metricLabel}>{t.monthOnline}</Text>
-          </View>
-        </View>
-
-        <View style={styles.chartCard}>
-          <Text style={styles.sectionTitle}>{t.earningsChart}</Text>
-          <Text style={styles.chartAxis}>{t.chartYAxis}</Text>
-          <View style={styles.chartBars}>
-            {chartValues.map((item, idx) => (
-              <View key={`${item}-${idx}`} style={styles.barWrap}>
-                <View style={[styles.chartBar, { height: Math.max(12, (item / chartMax) * 120) }]} />
-              </View>
-            ))}
-          </View>
-          <Text style={styles.ruleHint}>{t.ruleHint}</Text>
-        </View>
-
-        <View style={styles.swapCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>{t.swapPanelTitle}</Text>
-            <TouchableOpacity onPress={refreshSwapPrice} disabled={isBusy}>
-              <Text style={styles.refreshText}>{t.refreshPrice}</Text>
+            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+              <Text style={styles.langBtnText}>{t.langToggle}</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>{t.swapAmount}</Text>
-          <TextInput
-            style={styles.input}
-            value={swapAmount}
-            onChangeText={setSwapAmount}
-            keyboardType="decimal-pad"
-            placeholder={t.swapAmountPlaceholder}
-            placeholderTextColor="#93a9d1"
-            editable={!isBusy}
+          <GuideCard
+            title={guideTitle}
+            description={guideDescription}
+            buttonLabel={contractExpired ? t.contractExpiredTitle : guideCtaLabel}
+            disabled={isBusy || contractExpired}
+            steps={guideSteps}
+            onPress={guideAction}
           />
 
-          <Text style={styles.hint}>{swapPriceText}</Text>
-
-          <View style={styles.previewBox}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.previewLabel}>{t.quote}</Text>
-              <Text style={styles.previewValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
-            </View>
-            <View style={styles.rowBetween}>
-              <Text style={styles.previewLabel}>{t.fee}</Text>
-              <Text style={styles.previewValue}>{feeUsdt.toFixed(6)} USDT</Text>
-            </View>
-            <View style={styles.rowBetween}>
-              <Text style={styles.previewLabel}>{t.minReceive}</Text>
-              <Text style={styles.previewValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primarySwapBtn, (isBusy || !identityReady) && styles.disabledBtn]}
-            onPress={openSwapConfirm}
-            disabled={isBusy || !identityReady}
-          >
-            <Text style={styles.primarySwapBtnText}>{t.swapButton}</Text>
-          </TouchableOpacity>
-
-          {swapTxStage !== 'idle' && (
-            <View style={styles.txStageCard}>
-              <Text style={styles.txStageTitle}>{t.txProgressTitle}</Text>
-              <View style={styles.txStageRow}>
-                <View style={styles.txStageItem}>
-                  <View style={[styles.txDot, styles.txDotActive]} />
-                  <Text style={styles.txStageText}>{txStageLabels.submitting}</Text>
+          {activeTab === 'home' && (
+            <>
+              <View style={styles.profileCard}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.rowInline}>
+                    <Text style={styles.profileId}>{t.profileId}:{displayId}</Text>
+                    <Text style={styles.vipTag}>{t.profileVip}</Text>
+                  </View>
+                  <Text style={styles.unbindText}>{t.homeOverview}</Text>
                 </View>
-                <View style={[styles.txStageLine, (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
-                <View style={styles.txStageItem}>
-                  <View
-                    style={[
-                      styles.txDot,
-                      (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txDotActive,
-                    ]}
-                  />
-                  <Text style={styles.txStageText}>{txStageLabels.confirming}</Text>
+                <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+                <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
+                <Text style={styles.walletHint}>{t.short}{shortAddress}</Text>
+              </View>
+
+              <View style={styles.statusCard}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.statusTitle}>{t.phoneStatus}</Text>
+                  <View style={[styles.dotPill, identityReady ? styles.dotOnline : styles.dotOffline]}>
+                    <Text style={styles.dotPillText}>{onlineState}</Text>
+                  </View>
                 </View>
-                <View style={[styles.txStageLine, (swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
-                <View style={styles.txStageItem}>
-                  <View
-                    style={[
-                      styles.txDot,
-                      (swapTxStage === 'success' || swapTxStage === 'failed') && (swapTxStage === 'success' ? styles.txDotSuccess : styles.txDotFailed),
-                    ]}
-                  />
-                  <Text style={styles.txStageText}>
-                    {swapTxStage === 'failed' ? txStageLabels.failed : txStageLabels.success}
-                  </Text>
+                <Text style={styles.hashingText}>{t.hashing}</Text>
+              </View>
+
+              <View style={styles.metricsRow}>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
+                  <Text style={styles.metricLabel}>{t.totalOnline}</Text>
+                </View>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
+                  <Text style={styles.metricLabel}>{t.monthOnline}</Text>
                 </View>
               </View>
+
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.homePrimaryAction}</Text>
+                <View style={styles.quickRow}>
+                  <TouchableOpacity style={styles.quickBtn} onPress={guideAction} disabled={isBusy || contractExpired}>
+                    <Text style={styles.quickBtnText}>{guideCtaLabel}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.quickBtn} onPress={() => setActiveTab('earnings')}>
+                    <Text style={styles.quickBtnText}>{t.tabEarnings}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.quickBtn} onPress={() => setActiveTab('exchange')}>
+                    <Text style={styles.quickBtnText}>{t.tabExchange}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+
+          {activeTab === 'earnings' && (
+            <>
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.rewardsSummary}</Text>
+                <View style={styles.metricsRow}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricValue}>{Number.isFinite(totalRewardUsdt) ? totalRewardUsdt.toFixed(3) : '0.000'} USDT</Text>
+                    <Text style={styles.metricLabel}>{t.claimReward}</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricValue}>{Number.isFinite(totalRewardSuper) ? totalRewardSuper.toFixed(3) : '0.000'} SUPER</Text>
+                    <Text style={styles.metricLabel}>{t.quote}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={[styles.secondaryBtn, (isBusy || !identityReady) && styles.disabledBtn]} onPress={claimReward} disabled={isBusy || !identityReady}>
+                  <Text style={styles.secondaryBtnText}>{t.claimReward}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.chartCard}>
+                <Text style={styles.sectionTitle}>{t.earningsChart}</Text>
+                <Text style={styles.chartAxis}>{t.chartYAxis}</Text>
+                <View style={styles.chartBars}>
+                  {chartValues.map((item, idx) => (
+                    <View key={`${item}-${idx}`} style={styles.barWrap}>
+                      <View style={[styles.chartBar, { height: Math.max(12, (item / chartMax) * 120) }]} />
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.ruleHint}>{t.ruleHint}</Text>
+              </View>
+            </>
+          )}
+
+          {activeTab === 'exchange' && (
+            <>
+              <View style={styles.swapCard}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.sectionTitle}>{t.swapPanelTitle}</Text>
+                  <TouchableOpacity onPress={refreshSwapPrice} disabled={isBusy}>
+                    <Text style={styles.refreshText}>{t.refreshPrice}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.label}>{t.swapAmount}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={swapAmount}
+                  onChangeText={setSwapAmount}
+                  keyboardType="decimal-pad"
+                  placeholder={t.swapAmountPlaceholder}
+                  placeholderTextColor="#93a9d1"
+                  editable={!isBusy}
+                />
+
+                <Text style={styles.hint}>{swapPriceText}</Text>
+
+                <View style={styles.previewBox}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.previewLabel}>{t.quote}</Text>
+                    <Text style={styles.previewValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
+                  </View>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.previewLabel}>{t.fee}</Text>
+                    <Text style={styles.previewValue}>{feeUsdt.toFixed(6)} USDT</Text>
+                  </View>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.previewLabel}>{t.minReceive}</Text>
+                    <Text style={styles.previewValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.primarySwapBtn, (isBusy || !identityReady) && styles.disabledBtn]}
+                  onPress={openSwapConfirm}
+                  disabled={isBusy || !identityReady}
+                >
+                  <Text style={styles.primarySwapBtnText}>{t.swapButton}</Text>
+                </TouchableOpacity>
+
+                {swapTxStage !== 'idle' && (
+                  <View style={styles.txStageCard}>
+                    <Text style={styles.txStageTitle}>{t.txProgressTitle}</Text>
+                    <View style={styles.txStageRow}>
+                      <View style={styles.txStageItem}>
+                        <View style={[styles.txDot, styles.txDotActive]} />
+                        <Text style={styles.txStageText}>{txStageLabels.submitting}</Text>
+                      </View>
+                      <View style={[styles.txStageLine, (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
+                      <View style={styles.txStageItem}>
+                        <View
+                          style={[
+                            styles.txDot,
+                            (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txDotActive,
+                          ]}
+                        />
+                        <Text style={styles.txStageText}>{txStageLabels.confirming}</Text>
+                      </View>
+                      <View style={[styles.txStageLine, (swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
+                      <View style={styles.txStageItem}>
+                        <View
+                          style={[
+                            styles.txDot,
+                            (swapTxStage === 'success' || swapTxStage === 'failed') && (swapTxStage === 'success' ? styles.txDotSuccess : styles.txDotFailed),
+                          ]}
+                        />
+                        <Text style={styles.txStageText}>
+                          {swapTxStage === 'failed' ? txStageLabels.failed : txStageLabels.success}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.gasAssistTitle}</Text>
+                <View style={styles.gasInfoBox}>
+                  <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
+                  {!!phase2IntentId && <Text style={styles.gasInfoHint}>Intent: {phase2IntentId.slice(0, 16)}...</Text>}
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, !identityReady && styles.disabledBtn]}
+                    onPress={() => openGasAssist('gas', async () => Promise.resolve())}
+                    disabled={!identityReady || isBusy}
+                  >
+                    <Text style={styles.secondaryBtnText}>{t.gasBuyAndRetry}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+
+          {activeTab === 'device' && (
+            <>
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.deviceSummary}</Text>
+                <View style={styles.statusCardCompact}>
+                  <Text style={styles.metricLabel}>{t.phoneStatus}</Text>
+                  <Text style={styles.metricValue}>{onlineState}</Text>
+                  <Text style={styles.walletHint}>{deviceId || t.notInit}</Text>
+                </View>
+                <Text style={styles.label}>{t.hashrate}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={hashrateInput}
+                  onChangeText={setHashrateInput}
+                  keyboardType="number-pad"
+                  placeholder={t.hashratePlaceholder}
+                  placeholderTextColor="#93a9d1"
+                  editable={!isBusy}
+                />
+                <View style={styles.quickRow}>
+                  <TouchableOpacity style={styles.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
+                    <Text style={styles.quickBtnText}>{t.setupMiner}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.quickBtn} onPress={initializeAccount} disabled={isBusy}>
+                    <Text style={styles.quickBtnText}>{t.syncIdentity}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+
+          {activeTab === 'profile' && (
+            <>
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.profileSummary}</Text>
+                <Text style={styles.metricLabel}>{t.walletCardTitle}</Text>
+                <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
+                <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+                {contractExpired && (
+                  <View style={styles.expiredBanner}>
+                    <Text style={styles.expiredBannerTitle}>{t.contractExpiredTitle}</Text>
+                    <Text style={styles.expiredBannerBody}>{t.contractExpiredBody}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.actionCard}>
+                <Text style={styles.sectionTitle}>{t.advancedSettings}</Text>
+                <Text style={styles.label}>{t.transferTitle}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={transferTo}
+                  onChangeText={setTransferTo}
+                  placeholder={t.transferTo}
+                  placeholderTextColor="#93a9d1"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isBusy}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={transferAmount}
+                  onChangeText={setTransferAmount}
+                  keyboardType="decimal-pad"
+                  placeholder={t.transferAmount}
+                  placeholderTextColor="#93a9d1"
+                  editable={!isBusy}
+                />
+                <TouchableOpacity style={styles.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
+                  <Text style={styles.secondaryBtnText}>{t.sendTransfer}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {isBusy && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color="#7dd3fc" />
+              <Text style={styles.loadingText}>{t.processing}</Text>
             </View>
           )}
-        </View>
 
-        <View style={styles.actionCard}>
-          <Text style={styles.sectionTitle}>{t.quickActions}</Text>
-          <View style={styles.quickRow}>
-            <TouchableOpacity style={styles.quickBtn} onPress={claimReward} disabled={isBusy || !identityReady}>
-              <Text style={styles.quickBtnText}>{t.claimReward}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
-              <Text style={styles.quickBtnText}>{t.setupMiner}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.quickBtn} onPress={initializeAccount} disabled={isBusy}>
-              <Text style={styles.quickBtnText}>{t.syncIdentity}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.gasInfoBox}>
-            <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
-            {!!phase2IntentId && <Text style={styles.gasInfoHint}>Intent: {phase2IntentId.slice(0, 16)}...</Text>}
-            <TouchableOpacity
-              style={[styles.secondaryBtn, !identityReady && styles.disabledBtn]}
-              onPress={() => openGasAssist('gas', async () => Promise.resolve())}
-              disabled={!identityReady || isBusy}
-            >
-              <Text style={styles.secondaryBtnText}>{t.gasBuyAndRetry}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          {!!lastTxHash && <Text style={styles.txHash}>{t.latestTx}{lastTxHash}</Text>}
+          <Text style={styles.statusText}>{status}</Text>
+        </ScrollView>
 
-        <View style={styles.actionCard}>
-          <Text style={styles.sectionTitle}>{t.advancedSettings}</Text>
-
-          <Text style={styles.label}>{t.hashrate}</Text>
-          <TextInput
-            style={styles.input}
-            value={hashrateInput}
-            onChangeText={setHashrateInput}
-            keyboardType="number-pad"
-            placeholder={t.hashratePlaceholder}
-            placeholderTextColor="#93a9d1"
-            editable={!isBusy}
-          />
-
-          <Text style={styles.label}>{t.transferTitle}</Text>
-          <TextInput
-            style={styles.input}
-            value={transferTo}
-            onChangeText={setTransferTo}
-            placeholder={t.transferTo}
-            placeholderTextColor="#93a9d1"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isBusy}
-          />
-          <TextInput
-            style={styles.input}
-            value={transferAmount}
-            onChangeText={setTransferAmount}
-            keyboardType="decimal-pad"
-            placeholder={t.transferAmount}
-            placeholderTextColor="#93a9d1"
-            editable={!isBusy}
-          />
-          <TouchableOpacity style={styles.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
-            <Text style={styles.secondaryBtnText}>{t.sendTransfer}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {isBusy && (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color="#7dd3fc" />
-            <Text style={styles.loadingText}>{t.processing}</Text>
-          </View>
-        )}
-
-        {!!lastTxHash && <Text style={styles.txHash}>{t.latestTx}{lastTxHash}</Text>}
-        <Text style={styles.statusText}>{status}</Text>
-      </ScrollView>
+        <BottomNav activeTab={activeTab} tabs={bottomTabs} onChange={setActiveTab} />
+      </View>
 
       <Modal
         visible={gasAssistVisible}
@@ -1304,8 +1486,14 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 14,
-    paddingBottom: 24,
+    paddingBottom: 32,
     gap: 10,
+  },
+  mainShell: {
+    flex: 1,
+  },
+  mainScroll: {
+    flex: 1,
   },
   headerRow: {
     marginTop: 6,
@@ -1341,6 +1529,81 @@ const styles = StyleSheet.create({
     color: '#87d9ff',
     fontSize: 12,
     marginBottom: 2,
+  },
+  guideCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2e90d1',
+    backgroundColor: '#071d44',
+    padding: 14,
+    gap: 14,
+  },
+  guideHeaderMain: {
+    flex: 1,
+    gap: 6,
+    paddingRight: 12,
+  },
+  guideTitle: {
+    color: '#ecfeff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  guideBody: {
+    color: '#9cc6ff',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  guidePrimaryBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  guidePrimaryBtnText: {
+    color: '#083344',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  guideStepsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  guideStepItem: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#184680',
+    backgroundColor: '#082754',
+    padding: 10,
+    gap: 6,
+  },
+  guideStepBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#1f3e70',
+  },
+  guideStepBadgeDone: {
+    backgroundColor: '#14532d',
+  },
+  guideStepBadgeActive: {
+    backgroundColor: '#0f766e',
+  },
+  guideStepBadgeText: {
+    color: '#dffaff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  guideStepLabel: {
+    color: '#effbff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  guideStepStatus: {
+    color: '#90c8ff',
+    fontSize: 11,
   },
   profileCard: {
     borderRadius: 16,
@@ -1662,6 +1925,33 @@ const styles = StyleSheet.create({
     color: '#8dc6ff',
     fontSize: 11,
   },
+  statusCardCompact: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0b2d60',
+    padding: 12,
+    gap: 6,
+  },
+  expiredBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+    backgroundColor: '#3f0d17',
+    padding: 10,
+    gap: 4,
+    marginTop: 6,
+  },
+  expiredBannerTitle: {
+    color: '#ffe4e6',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  expiredBannerBody: {
+    color: '#fecdd3',
+    fontSize: 12,
+    lineHeight: 18,
+  },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1776,6 +2066,36 @@ const styles = StyleSheet.create({
     color: '#083344',
     fontSize: 14,
     fontWeight: '800',
+  },
+  bottomNavWrap: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#123565',
+    backgroundColor: '#05142f',
+  },
+  bottomNavItem: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#0a2148',
+  },
+  bottomNavItemActive: {
+    backgroundColor: '#0b45a1',
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  bottomNavLabel: {
+    color: '#8fc8ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bottomNavLabelActive: {
+    color: '#ecfeff',
   },
 }
 );
