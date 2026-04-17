@@ -1,0 +1,46 @@
+flowchart LR
+    subgraph 输入层["每日输入"]
+        P1[全网总释放<br/>Ed = 12000 SUPER]
+        P2[用户锁仓量<br/>L_i SUPER]
+        P3[在线时长<br/>T_i 小时]
+        P4[锁仓年限<br/>1年 or 2年]
+        P5[月卡状态<br/>有效/过期]
+    end
+
+    subgraph 计算层["收益引擎计算"]
+        C1["权重<br/>W_i = √L_i"]
+        C2["在线系数<br/>C_i = min(T_i/24, 1)"]
+        C3["倍数<br/>M_i = 1.00 or 1.35"]
+        C4["月卡系数<br/>A_i = 1 or 0"]
+        C5["全网总权重<br/>ΣW = Σ√L_j"]
+        C6["日收益<br/>R_i = Ed × W_i/ΣW × C_i × M_i × A_i"]
+    end
+
+    subgraph 输出层["结算输出"]
+        O1[SUPER 到账<br/>发放到用户钱包]
+        O2[平台手续费<br/>累积 USDT]
+        O3[链上记录<br/>不可篡改]
+        O4[前端展示<br/>日收益 / 累计收益]
+    end
+
+    subgraph 退出层["用户退出"]
+        E1[SUPER → USDT<br/>Pancake SUPER/USDT 池]
+        E2[USDT → BNB<br/>Pancake WBNB/USDT 池]
+        E3[SUPER → BNB<br/>直连或多跳路由]
+    end
+
+    P1 --> C6
+    P2 --> C1 --> C6
+    P3 --> C2 --> C6
+    P4 --> C3 --> C6
+    P5 --> C4 --> C6
+    P2 --> C5 --> C6
+
+    C6 --> O1
+    C6 --> O2
+    C6 --> O3
+    C6 --> O4
+
+    O1 --> E1
+    O1 --> E3
+    E1 --> E2

@@ -1,33 +1,49 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import type { Address } from 'viem';
-import { createClaim, createUser, getUser, getUserByWallet, registerDevice } from './services/api';
 import {
-  claimRewardOnChain,
-  getSwapPriceOnChain,
-  getWalletAddress,
-  registerMinerOnChain,
-  sendNativeTokenOnChain,
-  swapUsdtToSuperOnChain,
-  updateHashrateOnChain,
+    createClaim,
+    createGasIntent,
+    createUser,
+    getGasOrder,
+    getGasWalletBalance,
+    getSystemStatus,
+    getUser,
+    getUserByWallet,
+    getUserDetails,
+    purchaseGasPackage,
+    quoteGasPackage,
+    registerDevice,
+    relayGasIntent,
+    reportDeviceHeartbeat,
+    type GasPayToken
+} from './services/api';
+import {
+    claimRewardOnChain,
+    getSwapPriceOnChain,
+    getWalletAddress,
+    registerMinerOnChain,
+    sendNativeTokenOnChain,
+    swapUsdtToSuperOnChain,
+    updateHashrateOnChain,
 } from './services/blockchain';
 
 type Lang = 'en' | 'zh';
 
-type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | '';
+type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | 'gas' | '';
 type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
 const LANG_KEY = 'coinplanet.lang';
@@ -36,6 +52,7 @@ const MINER_READY_KEY = 'coinplanet.miner_ready';
 const USER_ID_KEY = 'coinplanet.user_id';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
+const INIT_RETRY_DELAY_MS = 8_000;
 
 const translations = {
   en: {
@@ -56,7 +73,9 @@ const translations = {
     monthOnline: 'Current Month Online',
     earningsChart: 'Earnings Trend',
     chartYAxis: 'USDT',
-    ruleHint: 'Interest is based on online duration and settles every 30 days.',
+    ruleHint: 'Rewards accrue by online duration and settle according to backend policy.',
+    maintenanceTitle: 'Maintenance Mode',
+    maintenanceBody: 'System maintenance in progress. Please try again later.',
     swapPanelTitle: 'USDT -> SUPER',
     swapAmount: 'Swap Amount (USDT)',
     swapAmountPlaceholder: 'Enter USDT amount',
@@ -114,6 +133,21 @@ const translations = {
     transferDoing: 'Submitting transfer...',
     transferSuccess: 'Transfer success: ',
     transferFail: 'Transfer failed: ',
+    errInsufficientBnb: 'Insufficient BNB for gas. Please top up testnet BNB and try again.',
+    errRejected: 'Transaction was cancelled in wallet.',
+    errReverted: 'On-chain execution failed. Please check parameters and contract state.',
+    errNetwork: 'Network is unstable. Please retry in a moment.',
+    gasAssistTitle: 'Gas Booster',
+    gasAssistHint: 'No BNB needed. Use SUPER/USDT to buy BNB from treasury and retry automatically.',
+    gasTokenLabel: 'Pay token',
+    gasAmountLabel: 'Pay amount',
+    gasQuoteLabel: 'Estimated BNB',
+    gasBalanceLabel: 'Funded BNB (history)',
+    gasBuyAndRetry: 'Buy Gas and Retry',
+    gasBuying: 'Purchasing gas package...',
+    gasReady: 'Gas package completed. Retrying transaction...',
+    gasFailed: 'Gas purchase failed: ',
+    gasIntentPhase2: 'Phase-2 relay intent registered.',
     priceUnavailable: 'Pool price unavailable',
     priceFetchFailed: 'Failed to fetch pool price',
     priceFormat: (val: string) => `1 USDT ~= ${val} SUPER`,
@@ -139,7 +173,9 @@ const translations = {
     monthOnline: '当月收益累计时长',
     earningsChart: '收益数据统计',
     chartYAxis: 'USDT',
-    ruleHint: '收益按在线时长计算，每30天结算一次。',
+    ruleHint: '收益按在线时长累计，并按后台策略实时结算。',
+    maintenanceTitle: '系统维护中',
+    maintenanceBody: '系统正在维护，请稍后再试。',
     swapPanelTitle: 'USDT -> SUPER',
     swapAmount: '兑换数量（USDT）',
     swapAmountPlaceholder: '输入USDT数量',
@@ -197,6 +233,21 @@ const translations = {
     transferDoing: '正在提交转账...',
     transferSuccess: '转账成功：',
     transferFail: '转账失败：',
+    errInsufficientBnb: 'BNB 余额不足，无法支付 Gas。请先补充测试网 BNB。',
+    errRejected: '你已在钱包中取消本次交易。',
+    errReverted: '链上执行失败，请检查参数或合约状态。',
+    errNetwork: '网络不稳定，请稍后重试。',
+    gasAssistTitle: 'Gas 补能',
+    gasAssistHint: '无需先买 BNB，可用 SUPER/USDT 兑换平台 BNB，并自动重试交易。',
+    gasTokenLabel: '支付代币',
+    gasAmountLabel: '支付数量',
+    gasQuoteLabel: '预计到账 BNB',
+    gasBalanceLabel: '累计补能 BNB',
+    gasBuyAndRetry: '兑换并重试',
+    gasBuying: '正在购买 Gas 包...',
+    gasReady: 'Gas 包购买完成，正在重试交易...',
+    gasFailed: 'Gas 兑换失败：',
+    gasIntentPhase2: '二期 Relay 意图已登记。',
     priceUnavailable: '池子价格不可用',
     priceFetchFailed: '获取池子价格失败',
     priceFormat: (val: string) => `1 USDT ≈ ${val} SUPER`,
@@ -254,11 +305,59 @@ export default function App() {
   const [lang, setLang] = useState<Lang>('zh');
   const [swapConfirmVisible, setSwapConfirmVisible] = useState(false);
   const [swapTxStage, setSwapTxStage] = useState<SwapTxStage>('idle');
+  const [gasAssistVisible, setGasAssistVisible] = useState(false);
+  const [gasPayToken, setGasPayToken] = useState<GasPayToken>('SUPER');
+  const [gasPayAmount, setGasPayAmount] = useState<string>('10');
+  const [gasQuoteBnb, setGasQuoteBnb] = useState<string>('0');
+  const [gasFundedBnbTotal, setGasFundedBnbTotal] = useState<string>('0');
+  const [phase2IntentId, setPhase2IntentId] = useState<string>('');
+  const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
+  const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryActionRef = useRef<(() => Promise<void>) | null>(null);
+  const retryActionNameRef = useRef<ActionType>('');
 
   const t = translations[lang];
   const isBusy = activeAction !== '';
   const identityReady = Boolean(walletAddress && userId && deviceId);
+  const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
+  const contractExpired = Boolean(userDetails?.contractEndAt && new Date(userDetails.contractEndAt).getTime() < Date.now());
+  const actionsBlocked = maintenanceEnabled || contractExpired;
+
+  const isInsufficientBnbError = (message: string) => {
+    const msg = message.toLowerCase();
+    return msg.includes('insufficient bnb') || msg.includes('insufficient funds') || msg.includes('exceeds the balance');
+  };
+
+  const toFriendlyErrorMessage = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message : '';
+    const msg = raw.toLowerCase();
+
+    if (msg.includes('insufficient bnb') || msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
+      return t.errInsufficientBnb;
+    }
+    if (msg.includes('user rejected') || msg.includes('rejected') || msg.includes('denied')) {
+      return t.errRejected;
+    }
+    if (msg.includes('reverted')) {
+      return t.errReverted;
+    }
+    if (
+      msg.includes('network request failed') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('timeout') ||
+      msg.includes('api unavailable')
+    ) {
+      return t.errNetwork;
+    }
+
+    if (!raw) {
+      return t.errNetwork;
+    }
+
+    return raw.split('\n').find((line) => line.trim())?.trim() ?? raw;
+  };
 
   const shortAddress = useMemo(() => {
     if (!walletAddress) return t.notInit;
@@ -277,10 +376,17 @@ export default function App() {
   }, [userId]);
 
   const expireDate = useMemo(() => {
-    const now = new Date();
-    now.setFullYear(now.getFullYear() + 2);
-    return formatDate(now);
-  }, []);
+    if (!userDetails?.contractEndAt) {
+      return '----';
+    }
+
+    const end = new Date(userDetails.contractEndAt);
+    if (Number.isNaN(end.getTime())) {
+      return '----';
+    }
+
+    return formatDate(end);
+  }, [userDetails?.contractEndAt]);
 
   const monthProgressMinutes = useMemo(() => {
     const hashrateNum = Number(hashrateInput);
@@ -344,6 +450,95 @@ export default function App() {
 
   const chartMax = Math.max(...chartValues, 1);
 
+  const refreshGasFundedBalance = async (wallet: string) => {
+    const balance = await getGasWalletBalance(wallet);
+    if (!balance) return;
+    setGasFundedBnbTotal(balance.total_bnb_funded ?? '0');
+  };
+
+  const openGasAssist = (actionName: ActionType, retryAction: () => Promise<void>, message?: string) => {
+    retryActionRef.current = retryAction;
+    retryActionNameRef.current = actionName;
+    if (message) {
+      setStatus(message);
+    }
+    setGasAssistVisible(true);
+  };
+
+  const refreshGasQuote = async (wallet: string, token: GasPayToken, amount: string) => {
+    const quote = await quoteGasPackage({
+      wallet,
+      payToken: token,
+      payAmount: amount,
+    });
+    setGasQuoteBnb(quote.estimatedBnb);
+    return quote;
+  };
+
+  const buyGasAndRetry = async () => {
+    if (!walletAddress) return;
+
+    const payAmountNum = Number(gasPayAmount);
+    if (!Number.isFinite(payAmountNum) || payAmountNum <= 0) {
+      setStatus(`${t.gasFailed}${lang === 'zh' ? '请输入有效的兑换数量。' : 'Please enter a valid gas purchase amount.'}`);
+      return;
+    }
+
+    setActiveAction('gas');
+    setStatus(t.gasBuying);
+
+    try {
+      const quote = await refreshGasQuote(walletAddress, gasPayToken, gasPayAmount);
+      const order = await purchaseGasPackage({
+        quoteId: quote.quoteId,
+        wallet: walletAddress,
+        userId,
+      });
+
+      const orderId = order.orderId ?? order.id;
+      if (!orderId) {
+        throw new Error('Gas order ID missing');
+      }
+
+      const finalOrder = await getGasOrder(orderId);
+      const finalStatus = finalOrder?.status ?? order.status;
+      if (finalStatus !== 'done') {
+        throw new Error(finalOrder?.errorMessage ?? finalOrder?.error_message ?? 'Gas order failed');
+      }
+
+      // Phase-2 relay intent (MVP placeholder): record user intent for gasless workflow telemetry.
+      const intent = await createGasIntent({
+        wallet: walletAddress,
+        userId,
+        payToken: gasPayToken,
+        maxTokenSpend: gasPayAmount,
+        action: retryActionNameRef.current || 'unknown',
+        actionPayload: { source: 'app-gas-assist' },
+      });
+
+      const intentId = intent.intentId ?? intent.id;
+      if (intentId) {
+        setPhase2IntentId(intentId);
+        await relayGasIntent({ intentId, wallet: walletAddress });
+      }
+
+      await refreshGasFundedBalance(walletAddress);
+      setStatus(`${t.gasReady}${intentId ? ` ${t.gasIntentPhase2}` : ''}`);
+      setGasAssistVisible(false);
+
+      const retryAction = retryActionRef.current;
+      if (retryAction) {
+        retryActionRef.current = null;
+        await retryAction();
+      }
+    } catch (error) {
+      const message = toFriendlyErrorMessage(error);
+      setStatus(`${t.gasFailed}${message}`);
+    } finally {
+      setActiveAction('');
+    }
+  };
+
   const toggleLang = async () => {
     const next: Lang = lang === 'zh' ? 'en' : 'zh';
     setLang(next);
@@ -397,6 +592,9 @@ export default function App() {
       if (swapConfirmTimerRef.current) {
         clearTimeout(swapConfirmTimerRef.current);
       }
+      if (initRetryTimerRef.current) {
+        clearTimeout(initRetryTimerRef.current);
+      }
     };
   }, []);
 
@@ -432,11 +630,19 @@ export default function App() {
   };
 
   const initializeAccount = async () => {
+    if (initRetryTimerRef.current) {
+      clearTimeout(initRetryTimerRef.current);
+      initRetryTimerRef.current = null;
+    }
+
     setActiveAction('init');
     setLastTxHash('');
     setStatus(t.initDoing);
 
     try {
+      const status = await getSystemStatus();
+      setSystemStatus(status);
+
       const address = await getWalletAddress();
       setWalletAddress(address);
 
@@ -446,6 +652,8 @@ export default function App() {
         const existing = await getUser(cachedUserId);
         if (existing) {
           setUserId(existing.id);
+          const details = await getUserDetails(existing.id);
+          setUserDetails(details);
           await refreshSwapPrice();
           setStatus(t.initDone);
           return;
@@ -457,6 +665,8 @@ export default function App() {
       if (existingByWallet) {
         setUserId(existingByWallet.id);
         await AsyncStorage.setItem(USER_ID_KEY, existingByWallet.id).catch(() => null);
+        const details = await getUserDetails(existingByWallet.id);
+        setUserDetails(details);
         await refreshSwapPrice();
         setStatus(t.initDone);
         return;
@@ -466,11 +676,29 @@ export default function App() {
       const user = await createUser(address);
       setUserId(user.id);
       await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
+      const details = await getUserDetails(user.id);
+      setUserDetails(details);
       await refreshSwapPrice();
       setStatus(t.initDone);
     } catch (error) {
       const message = error instanceof Error ? error.message : t.initFail;
-      setStatus(`${t.initFail}${message}`);
+      const lower = message.toLowerCase();
+      const isNetworkIssue =
+        lower.includes('network request failed') ||
+        lower.includes('failed to fetch') ||
+        lower.includes('api request timeout') ||
+        lower.includes('api unavailable') ||
+        lower.includes('timeout');
+
+      if (isNetworkIssue) {
+        const retryHint = lang === 'zh' ? '（网络异常，8秒后自动重试）' : ' (Network issue, auto retry in 8s)';
+        setStatus(`${t.initFail}${message}${retryHint}`);
+        initRetryTimerRef.current = setTimeout(() => {
+          void initializeAccount();
+        }, INIT_RETRY_DELAY_MS);
+      } else {
+        setStatus(`${t.initFail}${message}`);
+      }
     } finally {
       setActiveAction('');
     }
@@ -482,9 +710,51 @@ export default function App() {
     void initializeAccount();
   }, [deviceId]);
 
+  useEffect(() => {
+    if (!walletAddress) return;
+    void refreshGasFundedBalance(walletAddress);
+    void refreshGasQuote(walletAddress, gasPayToken, gasPayAmount).catch(() => null);
+  }, [walletAddress]);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    void refreshGasQuote(walletAddress, gasPayToken, gasPayAmount).catch(() => null);
+  }, [walletAddress, gasPayToken, gasPayAmount]);
+
+  useEffect(() => {
+    if (!walletAddress || !userId || !deviceId) return;
+
+    const sendHeartbeat = async () => {
+      const hashrateNum = Number(hashrateInput);
+      await reportDeviceHeartbeat({
+        deviceId,
+        userId,
+        wallet: walletAddress,
+        status: 'active',
+        hashrate: Number.isFinite(hashrateNum) ? Math.max(0, Math.floor(hashrateNum)) : 0,
+      });
+      const details = await getUserDetails(userId);
+      setUserDetails(details);
+    };
+
+    void sendHeartbeat();
+    const timer = setInterval(() => {
+      void sendHeartbeat();
+    }, 60_000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [walletAddress, userId, deviceId, hashrateInput]);
+
   const startMining = async () => {
     if (!identityReady) {
       setStatus(t.identityNotReady);
+      return;
+    }
+
+    if (actionsBlocked) {
+      setStatus(maintenanceEnabled ? `${t.maintenanceTitle}: ${systemStatus?.maintenanceMessageZh ?? t.maintenanceBody}` : `${t.profileExpire}: ${expireDate}`);
       return;
     }
 
@@ -520,8 +790,10 @@ export default function App() {
       await markMinerReady();
       setLastTxHash(txHash);
       setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
+      const details = await getUserDetails(userId);
+      setUserDetails(details);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.minerFail;
+      const message = toFriendlyErrorMessage(error);
       const lower = message.toLowerCase();
       const alreadyRegistered = lower.includes('already') && lower.includes('register');
 
@@ -532,10 +804,14 @@ export default function App() {
           setLastTxHash(txHash);
           setStatus(`${t.minerRecovered}${shortHash(txHash)}`);
         } catch (fallbackError) {
-          const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : t.minerRecoverFail;
+          const fallbackMsg = toFriendlyErrorMessage(fallbackError);
           setStatus(`${t.minerRecoverFail}${fallbackMsg}`);
         }
       } else {
+        if (isInsufficientBnbError(message)) {
+          openGasAssist('mine', () => startMining(), `${t.minerFail}${message}`);
+          return;
+        }
         setStatus(`${t.minerFail}${message}`);
       }
     } finally {
@@ -546,6 +822,11 @@ export default function App() {
   const claimReward = async () => {
     if (!identityReady) {
       setStatus(t.identityNotReady);
+      return;
+    }
+
+    if (actionsBlocked) {
+      setStatus(maintenanceEnabled ? `${t.maintenanceTitle}: ${systemStatus?.maintenanceMessageZh ?? t.maintenanceBody}` : `${t.profileExpire}: ${expireDate}`);
       return;
     }
 
@@ -562,8 +843,14 @@ export default function App() {
       const txHash = await claimRewardOnChain();
       setLastTxHash(txHash);
       setStatus(`${t.claimSuccess}${shortHash(txHash)}`);
+      const details = await getUserDetails(userId);
+      setUserDetails(details);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.claimFail;
+      const message = toFriendlyErrorMessage(error);
+      if (isInsufficientBnbError(message)) {
+        openGasAssist('claim', () => claimReward(), `${t.claimFail}${message}`);
+        return;
+      }
       setStatus(`${t.claimFail}${message}`);
     } finally {
       setActiveAction('');
@@ -606,7 +893,11 @@ export default function App() {
       await refreshSwapPrice();
     } catch (error) {
       clearSwapConfirmTimer();
-      const message = error instanceof Error ? error.message : t.swapFail;
+      const message = toFriendlyErrorMessage(error);
+      if (isInsufficientBnbError(message)) {
+        openGasAssist('swap', () => swapUsdt(), `${t.swapFail}${message}`);
+        return;
+      }
       setSwapTxStage('failed');
       setStatus(`${t.swapFail}${message}`);
     } finally {
@@ -640,12 +931,36 @@ export default function App() {
       setLastTxHash(txHash);
       setStatus(`${t.transferSuccess}${shortHash(txHash)}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.transferFail;
+      const message = toFriendlyErrorMessage(error);
+      if (isInsufficientBnbError(message)) {
+        openGasAssist('transfer', () => transferNativeToken(), `${t.transferFail}${message}`);
+        return;
+      }
       setStatus(`${t.transferFail}${message}`);
     } finally {
       setActiveAction('');
     }
   };
+
+  if (maintenanceEnabled) {
+    const title = lang === 'zh' ? '系统维护中' : 'Maintenance Mode';
+    const body = lang === 'zh'
+      ? systemStatus?.maintenanceMessageZh ?? '系统正在维护，请稍后再试。'
+      : systemStatus?.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.';
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.maintenanceWrap}>
+          <Text style={styles.maintenanceTitle}>{title}</Text>
+          <Text style={styles.maintenanceBody}>{body}</Text>
+          <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+            <Text style={styles.langBtnText}>{t.langToggle}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -802,6 +1117,17 @@ export default function App() {
               <Text style={styles.quickBtnText}>{t.syncIdentity}</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.gasInfoBox}>
+            <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
+            {!!phase2IntentId && <Text style={styles.gasInfoHint}>Intent: {phase2IntentId.slice(0, 16)}...</Text>}
+            <TouchableOpacity
+              style={[styles.secondaryBtn, !identityReady && styles.disabledBtn]}
+              onPress={() => openGasAssist('gas', async () => Promise.resolve())}
+              disabled={!identityReady || isBusy}
+            >
+              <Text style={styles.secondaryBtnText}>{t.gasBuyAndRetry}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.actionCard}>
@@ -855,6 +1181,61 @@ export default function App() {
       </ScrollView>
 
       <Modal
+        visible={gasAssistVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGasAssistVisible(false)}
+      >
+        <Pressable style={styles.modalMask} onPress={() => setGasAssistVisible(false)}>
+          <Pressable style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t.gasAssistTitle}</Text>
+            <Text style={styles.modalHint}>{t.gasAssistHint}</Text>
+
+            <Text style={styles.label}>{t.gasTokenLabel}</Text>
+            <View style={styles.gasTokenRow}>
+              <TouchableOpacity
+                style={[styles.gasTokenBtn, gasPayToken === 'SUPER' && styles.gasTokenBtnActive]}
+                onPress={() => setGasPayToken('SUPER')}
+              >
+                <Text style={styles.gasTokenBtnText}>SUPER</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.gasTokenBtn, gasPayToken === 'USDT' && styles.gasTokenBtnActive]}
+                onPress={() => setGasPayToken('USDT')}
+              >
+                <Text style={styles.gasTokenBtnText}>USDT</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>{t.gasAmountLabel}</Text>
+            <TextInput
+              style={styles.input}
+              value={gasPayAmount}
+              onChangeText={setGasPayAmount}
+              keyboardType="decimal-pad"
+              placeholder="10"
+              placeholderTextColor="#93a9d1"
+              editable={!isBusy}
+            />
+
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>{t.gasQuoteLabel}</Text>
+              <Text style={styles.modalValue}>{gasQuoteBnb} BNB</Text>
+            </View>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setGasAssistVisible(false)}>
+                <Text style={styles.modalGhostBtnText}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={buyGasAndRetry}>
+                <Text style={styles.modalPrimaryBtnText}>{t.gasBuyAndRetry}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={swapConfirmVisible}
         transparent
         animationType="fade"
@@ -901,6 +1282,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#030b1d',
+  },
+  maintenanceWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 16,
+  },
+  maintenanceTitle: {
+    color: '#ecfeff',
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  maintenanceBody: {
+    color: '#9cc6ff',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
   },
   scrollContent: {
     paddingHorizontal: 14,
@@ -1245,6 +1645,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  gasInfoBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0b2d60',
+    padding: 10,
+    gap: 8,
+  },
+  gasInfoText: {
+    color: '#cde8ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  gasInfoHint: {
+    color: '#8dc6ff',
+    fontSize: 11,
+  },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1310,6 +1727,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 6,
+  },
+  gasTokenRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 2,
+  },
+  gasTokenBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    backgroundColor: '#0a2f66',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  gasTokenBtnActive: {
+    borderColor: '#22d3ee',
+    backgroundColor: '#0a4f78',
+  },
+  gasTokenBtnText: {
+    color: '#e3f7ff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   modalGhostBtn: {
     flex: 1,

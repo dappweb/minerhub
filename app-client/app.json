@@ -25,7 +25,8 @@
       "swapContractAddress": "0x0000000000000000000000000000000000000000"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store"
     ]
   }
 }

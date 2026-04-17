@@ -1,0 +1,74 @@
+graph TB
+    subgraph 用户端["用户端 (App / Web)"]
+        U1[钱包连接<br/>MetaMask / WalletConnect]
+        U2[兑换界面<br/>BNB / USDT / SUPER]
+        U3[锁仓界面<br/>首笔SUPER锁仓]
+        U4[收益看板<br/>在线时长 / 月卡 / 日收益]
+        U5[月卡购买<br/>30 USDT / 30天]
+    end
+
+    subgraph 平台服务层["平台服务层 (Backend API)"]
+        B1[用户服务<br/>注册 / 认证 / 设备指纹]
+        B2[收益引擎<br/>日结算 / 权重计算]
+        B3[在线时长服务<br/>心跳上报 / 防刷校验]
+        B4[月卡服务<br/>开通 / 续费 / 状态管理]
+        B5[参数配置中心<br/>热更新 / 权限管理]
+        B6[风控服务<br/>限额 / 黑白名单 / 熔断]
+        B7[后台管理<br/>手动承兑 / 参数 / 报表]
+    end
+
+    subgraph 合约层["链上合约层 (BSC)"]
+        C1[MiningPool<br/>锁仓 / 注册 / 收益发放]
+        C2[SwapGateway<br/>Pancake路由封装 / 平台费]
+        C3[SUPER Token<br/>ERC20 / 增发 / 销毁]
+        C4[USDT Token<br/>标准 ERC20]
+        C5[月卡合约<br/>链上权限凭证]
+    end
+
+    subgraph DEX层["去中心化流动性层"]
+        D1[PancakeSwap Router]
+        D2[SUPER/USDT 池]
+        D3[WBNB/USDT 池]
+        D4[SUPER/WBNB 池]
+    end
+
+    subgraph 基础设施["基础设施"]
+        I1[BSC 节点 / RPC]
+        I2[数据库<br/>用户 / 收益 / 月卡]
+        I3[消息队列<br/>结算任务]
+        I4[监控告警<br/>价格 / 失败率 / 储备]
+    end
+
+    U1 --> B1
+    U2 --> C2
+    U3 --> C1
+    U4 --> B2
+    U4 --> B3
+    U5 --> C5
+    U5 --> B4
+
+    B2 --> C1
+    B3 --> I2
+    B4 --> C5
+    B6 --> C2
+    B2 --> I3
+    I3 --> B2
+
+    C2 --> D1
+    D1 --> D2
+    D1 --> D3
+    D1 --> D4
+
+    C1 --> C3
+    C3 --> C4
+    C2 --> C4
+
+    B1 --> I2
+    B2 --> I2
+    B5 --> B2
+    B5 --> B6
+
+    I1 --> C1
+    I1 --> C2
+    I4 --> B6
+    I4 --> B7

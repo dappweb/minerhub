@@ -38,11 +38,10 @@ export default function App() {
   const [adminLoginStatus, setAdminLoginStatus] = React.useState<string>('请先使用钱包登录后台');
   const [ownerAuthorityAddress, setOwnerAuthorityAddress] = React.useState<string>('');
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
+  const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
 
-  const androidDownloadUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL || '#';
-  const iosDownloadUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL || '#';
   const ownerWalletAddress =
     (import.meta.env.VITE_OWNER_WALLET as string | undefined) ||
     (import.meta.env.VITE_OWNER_ADDRESS as string | undefined) ||
@@ -70,6 +69,34 @@ export default function App() {
     };
   }, [ownerWalletAddress]);
 
+  React.useEffect(() => {
+    let canceled = false;
+
+    const loadSystemStatus = async () => {
+      try {
+        const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
+        const response = await fetch(`${baseUrl}/api/system/status`);
+        const data = (await response.json()) as { maintenanceEnabled?: boolean; maintenanceMessageZh?: string; maintenanceMessageEn?: string };
+        if (!canceled) {
+          setSystemStatus({
+            maintenanceEnabled: Boolean(data.maintenanceEnabled),
+            maintenanceMessageZh: data.maintenanceMessageZh ?? '系统维护中，请稍后再试。',
+            maintenanceMessageEn: data.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.',
+          });
+        }
+      } catch {
+        if (!canceled) {
+          setSystemStatus(null);
+        }
+      }
+    };
+
+    void loadSystemStatus();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   const isOwnerAddress = React.useCallback((address: string) => {
     if (!address || !ownerAuthorityAddress) {
       return false;
@@ -84,6 +111,7 @@ export default function App() {
     adminWallet.toLowerCase() === verifiedOwnerWallet.toLowerCase();
   const isOwnerLoggedIn = Boolean(adminWallet) && isOwnerAddress(adminWallet) && isSignatureVerified;
   const isAdminView = viewMode === 'admin';
+  const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
 
   React.useEffect(() => {
     if (!adminWallet) {
@@ -223,13 +251,43 @@ export default function App() {
     </ConnectButton.Custom>
   );
 
+  if (!isAdminView && maintenanceEnabled) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 bg-slate-950 text-slate-50">
+        <div className="max-w-xl w-full rounded-3xl border border-cyan-500/20 bg-slate-900/70 p-10 text-center shadow-2xl">
+          <div className="text-sm uppercase tracking-[0.35em] text-cyan-300 mb-4">Maintenance Mode</div>
+          <h1 className="text-3xl md:text-4xl font-bold mb-4">{systemStatus?.maintenanceMessageZh ?? '系统维护中，请稍后再试。'}</h1>
+          <p className="text-slate-400 mb-6">{systemStatus?.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.'}</p>
+          <div className="flex justify-center">
+            {renderConnectAction('px-5 py-3 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors', true)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-cyan-500/30">
+      {!isAdminView && maintenanceEnabled && (
+        <div className="min-h-screen flex items-center justify-center px-6">
+          <div className="max-w-xl w-full rounded-3xl border border-cyan-500/20 bg-slate-900/70 p-10 text-center shadow-2xl">
+            <div className="text-sm uppercase tracking-[0.35em] text-cyan-300 mb-4">Maintenance Mode</div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-4">{systemStatus?.maintenanceMessageZh ?? '系统维护中，请稍后再试。'}</h1>
+            <p className="text-slate-400 mb-6">{systemStatus?.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.'}</p>
+            <div className="flex justify-center">
+              {renderConnectAction('px-5 py-3 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors', true)}
+            </div>
+          </div>
+        </div>
+      )}
       {!isAdminView && (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center font-bold text-white">
+            <div
+              className="w-8 h-8 rounded flex items-center justify-center font-bold text-white"
+              style={{ backgroundImage: 'linear-gradient(135deg, #22d3ee 0%, #2563eb 100%)' }}
+            >
               M
             </div>
             <span className="font-bold text-xl tracking-tight">Coin Planet</span>
@@ -269,20 +327,10 @@ export default function App() {
                     <p className="text-slate-400 mb-6">下载双端兼容客户端，连接钱包后一键开启链上挖矿。</p>
                     <div className="flex flex-wrap gap-3">
                       <a
-                        href={androidDownloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                        href="#download"
                         className="inline-flex px-5 py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors"
                       >
-                        下载 Android
-                      </a>
-                      <a
-                        href={iosDownloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex px-5 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold hover:bg-slate-700 transition-colors"
-                      >
-                        下载 iOS
+                        前往下载
                       </a>
                     </div>
                   </div>
@@ -317,7 +365,7 @@ export default function App() {
                 </div>
               </section>
             ) : (
-              <AdminDashboard fullScreen adminWallet={adminWallet} />
+              <AdminDashboard fullScreen adminWallet={adminWallet} signMessageAsync={signMessageAsync} />
             )}
           </>
         )}

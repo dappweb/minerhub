@@ -10,5 +10,14 @@
   SWAP_ROUTER_ADDRESS: string;
   /** Admin wallet address, used to guard upload endpoints */
   OWNER_ADDRESS?: string;
+
+  /** Phase-1 gas service pricing */
+  GAS_FEE_RATE?: string;
+  BNB_USD_PRICE?: string;
+  SUPER_USD_PRICE?: string;
+  USDT_USD_PRICE?: string;
+
+  /** Optional treasury signer for automatic BNB distribution */
+  GAS_TREASURY_PRIVATE_KEY?: string;
 }
 

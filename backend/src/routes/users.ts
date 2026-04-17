@@ -1,10 +1,29 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { badRequest, json, unauthorized } from "../lib/response";
+import { isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
+
+async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
+  const now = nowIso();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO customer_profiles (
+      user_id, contract_term_days, monthly_card_days, contract_active,
+      activation_status, exchange_auto_enabled, payout_wallets_json,
+      reward_rate_usdt_per_hour, total_reward_usdt, total_reward_super,
+      online_status, created_at, updated_at
+    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 'offline', ?, ?)`
+  )
+    .bind(userId, now, now)
+    .run();
+}
 
 export async function handleUsers(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
+    if (await isMaintenanceEnabled(env)) {
+      return json({ error: "System is under maintenance" }, 503);
+    }
+
     // 验证签名
     const authResult = await extractAndVerifyAuth(request, env);
     if (!authResult.valid) {
@@ -27,6 +46,8 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .bind(id, body.wallet.toLowerCase(), body.email ?? null, now, now)
       .run();
 
+    await ensureCustomerProfile(env, id);
+
     return json({ id, wallet: body.wallet.toLowerCase(), email: body.email ?? null, createdAt: now }, 201);
   }
 
@@ -38,6 +59,59 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
 
     if (!user) return json({ error: "User not found" }, 404);
     return json(user);
+  }
+
+  if (request.method === "GET" && pathParts.length === 2 && pathParts[1] === "details") {
+    const userId = pathParts[0];
+    await ensureCustomerProfile(env, userId);
+
+    const user = await env.DB.prepare(
+      `SELECT
+        u.id, u.wallet, u.email, u.role, u.status, u.created_at, u.updated_at,
+        cp.nickname, cp.machine_code, cp.parent_user_id, cp.contract_start_at, cp.contract_end_at,
+        COALESCE(cp.contract_term_days, 1095) AS contract_term_days,
+        COALESCE(cp.monthly_card_days, 30) AS monthly_card_days,
+        COALESCE(cp.contract_active, 0) AS contract_active,
+        COALESCE(cp.activation_status, 'pending') AS activation_status,
+        COALESCE(cp.exchange_auto_enabled, 1) AS exchange_auto_enabled,
+        COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS reward_rate_usdt_per_hour,
+        COALESCE(cp.total_reward_usdt, '0') AS total_reward_usdt,
+        COALESCE(cp.total_reward_super, '0') AS total_reward_super,
+        cp.last_seen_at, COALESCE(cp.online_status, 'offline') AS online_status,
+        cp.agreement_accepted_at, cp.offline_alerted_at, cp.notes
+      FROM users u
+      LEFT JOIN customer_profiles cp ON cp.user_id = u.id
+      WHERE u.id = ?`
+    )
+      .bind(userId)
+      .first();
+
+    if (!user) return json({ error: "User not found" }, 404);
+
+    const devices = await env.DB.prepare(
+      "SELECT id, device_id, hashrate, status, created_at, updated_at FROM devices WHERE user_id = ? ORDER BY created_at DESC"
+    )
+      .bind(userId)
+      .all();
+
+    const rewards = await env.DB.prepare(
+      "SELECT id, device_id, reward_usdt, reward_super, rate_usdt_per_hour, source, note, created_at, updated_at FROM reward_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 50"
+    )
+      .bind(userId)
+      .all();
+
+    const wallets = await env.DB.prepare(
+      "SELECT wallet_address, priority, is_primary FROM payout_wallets WHERE user_id = ? ORDER BY priority ASC, created_at ASC"
+    )
+      .bind(userId)
+      .all();
+
+    return json({
+      ...user,
+      devices: devices.results ?? [],
+      rewards: rewards.results ?? [],
+      payoutWallets: wallets.results ?? [],
+    });
   }
 
   // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)

@@ -21,8 +21,6 @@ MINING_POOL_ADDRESS = "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE"
 SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
 OWNER_ADDRESS = "0x744447d8580EB900b199e852C132F626247a36F7"
 
-# 开通 R2 后取消注释以下部分，并重新 npx wrangler deploy
-# [[r2_buckets]]
-# binding = "APP_BUCKET"
-# bucket_name = "coin-planet-apps"
-
+[[r2_buckets]]
+binding = "APP_BUCKET"
+bucket_name = "coin-planet-apps"

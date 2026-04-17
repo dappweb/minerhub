@@ -1,7 +1,10 @@
 import { internalError, json, notFound } from "./lib/response";
+import { handleAdmin } from "./routes/admin";
 import { handleClaims } from "./routes/claims";
 import { handleDevices } from "./routes/devices";
 import { handleDownloads } from "./routes/downloads";
+import { handleGas } from "./routes/gas";
+import { handleSystem } from "./routes/system";
 import { handleUsers } from "./routes/users";
 import type { Env } from "./types/env";
 
@@ -31,10 +34,14 @@ export default {
         return json({ status: "healthy", chainId: env.CHAIN_ID, timestamp: new Date().toISOString() });
       }
 
+      if (scope === "system") return handleSystem(request, env, pathParts);
+      if (scope === "admin") return handleAdmin(request, env, pathParts);
+
       if (scope === "users") return handleUsers(request, env, pathParts);
       if (scope === "devices") return handleDevices(request, env, pathParts);
       if (scope === "claims") return handleClaims(request, env, pathParts);
       if (scope === "downloads") return handleDownloads(request, env, pathParts);
+      if (scope === "gas") return handleGas(request, env, pathParts);
 
       return notFound("API route not found");
     } catch (error) {
