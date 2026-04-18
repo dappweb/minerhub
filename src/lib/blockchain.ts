@@ -42,9 +42,7 @@ export type SwapPoolStats = {
 
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-    };
+    ethereum?: any;
   }
 }
 
@@ -327,14 +325,14 @@ function getWalletClient() {
   return createWalletClient({
     chain,
     transport: custom(window.ethereum),
-  });
+  }) as any;
 }
 
 function getPublicClient() {
   return createPublicClient({
     chain,
     transport: http(rpcUrl),
-  });
+  }) as any;
 }
 
 async function ensureConnectedAddress(): Promise<Address> {

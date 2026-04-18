@@ -15,7 +15,12 @@ import {
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
+import DeviceTab from './components/mobile/DeviceTab';
+import EarningsTab from './components/mobile/EarningsTab';
+import ExchangeTab from './components/mobile/ExchangeTab';
 import GuideCard from './components/mobile/GuideCard';
+import HomeTab from './components/mobile/HomeTab';
+import ProfileTab from './components/mobile/ProfileTab';
 import {
     createClaim,
     createGasIntent,
@@ -1089,263 +1094,87 @@ export default function App() {
           />
 
           {activeTab === 'home' && (
-            <>
-              <View style={styles.profileCard}>
-                <View style={styles.rowBetween}>
-                  <View style={styles.rowInline}>
-                    <Text style={styles.profileId}>{t.profileId}:{displayId}</Text>
-                    <Text style={styles.vipTag}>{t.profileVip}</Text>
-                  </View>
-                  <Text style={styles.unbindText}>{t.homeOverview}</Text>
-                </View>
-                <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
-                <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
-                <Text style={styles.walletHint}>{t.short}{shortAddress}</Text>
-              </View>
-
-              <View style={styles.statusCard}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.statusTitle}>{t.phoneStatus}</Text>
-                  <View style={[styles.dotPill, identityReady ? styles.dotOnline : styles.dotOffline]}>
-                    <Text style={styles.dotPillText}>{onlineState}</Text>
-                  </View>
-                </View>
-                <Text style={styles.hashingText}>{t.hashing}</Text>
-              </View>
-
-              <View style={styles.metricsRow}>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
-                  <Text style={styles.metricLabel}>{t.totalOnline}</Text>
-                </View>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
-                  <Text style={styles.metricLabel}>{t.monthOnline}</Text>
-                </View>
-              </View>
-
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.homePrimaryAction}</Text>
-                <View style={styles.quickRow}>
-                  <TouchableOpacity style={styles.quickBtn} onPress={guideAction} disabled={isBusy || contractExpired}>
-                    <Text style={styles.quickBtnText}>{guideCtaLabel}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.quickBtn} onPress={() => setActiveTab('earnings')}>
-                    <Text style={styles.quickBtnText}>{t.tabEarnings}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.quickBtn} onPress={() => setActiveTab('exchange')}>
-                    <Text style={styles.quickBtnText}>{t.tabExchange}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
+            <HomeTab
+              displayId={displayId}
+              expireDate={expireDate}
+              walletAddress={walletAddress}
+              shortAddress={shortAddress}
+              onlineState={onlineState}
+              identityReady={identityReady}
+              isBusy={isBusy}
+              contractExpired={contractExpired}
+              totalOnlineMinutes={totalOnlineMinutes}
+              monthProgressMinutes={monthProgressMinutes}
+              lang={lang}
+              guideCtaLabel={guideCtaLabel}
+              guideAction={guideAction}
+              setActiveTab={setActiveTab}
+              t={t}
+            />
           )}
 
           {activeTab === 'earnings' && (
-            <>
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.rewardsSummary}</Text>
-                <View style={styles.metricsRow}>
-                  <View style={styles.metricCard}>
-                    <Text style={styles.metricValue}>{Number.isFinite(totalRewardUsdt) ? totalRewardUsdt.toFixed(3) : '0.000'} USDT</Text>
-                    <Text style={styles.metricLabel}>{t.claimReward}</Text>
-                  </View>
-                  <View style={styles.metricCard}>
-                    <Text style={styles.metricValue}>{Number.isFinite(totalRewardSuper) ? totalRewardSuper.toFixed(3) : '0.000'} SUPER</Text>
-                    <Text style={styles.metricLabel}>{t.quote}</Text>
-                  </View>
-                </View>
-                <TouchableOpacity style={[styles.secondaryBtn, (isBusy || !identityReady) && styles.disabledBtn]} onPress={claimReward} disabled={isBusy || !identityReady}>
-                  <Text style={styles.secondaryBtnText}>{t.claimReward}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.chartCard}>
-                <Text style={styles.sectionTitle}>{t.earningsChart}</Text>
-                <Text style={styles.chartAxis}>{t.chartYAxis}</Text>
-                <View style={styles.chartBars}>
-                  {chartValues.map((item, idx) => (
-                    <View key={`${item}-${idx}`} style={styles.barWrap}>
-                      <View style={[styles.chartBar, { height: Math.max(12, (item / chartMax) * 120) }]} />
-                    </View>
-                  ))}
-                </View>
-                <Text style={styles.ruleHint}>{t.ruleHint}</Text>
-              </View>
-            </>
+            <EarningsTab
+              totalRewardUsdt={totalRewardUsdt}
+              totalRewardSuper={totalRewardSuper}
+              isBusy={isBusy}
+              identityReady={identityReady}
+              chartValues={chartValues}
+              chartMax={chartMax}
+              claimReward={claimReward}
+              t={t}
+            />
           )}
 
           {activeTab === 'exchange' && (
-            <>
-              <View style={styles.swapCard}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.sectionTitle}>{t.swapPanelTitle}</Text>
-                  <TouchableOpacity onPress={refreshSwapPrice} disabled={isBusy}>
-                    <Text style={styles.refreshText}>{t.refreshPrice}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.label}>{t.swapAmount}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={swapAmount}
-                  onChangeText={setSwapAmount}
-                  keyboardType="decimal-pad"
-                  placeholder={t.swapAmountPlaceholder}
-                  placeholderTextColor="#93a9d1"
-                  editable={!isBusy}
-                />
-
-                <Text style={styles.hint}>{swapPriceText}</Text>
-
-                <View style={styles.previewBox}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.previewLabel}>{t.quote}</Text>
-                    <Text style={styles.previewValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
-                  </View>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.previewLabel}>{t.fee}</Text>
-                    <Text style={styles.previewValue}>{feeUsdt.toFixed(6)} USDT</Text>
-                  </View>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.previewLabel}>{t.minReceive}</Text>
-                    <Text style={styles.previewValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.primarySwapBtn, (isBusy || !identityReady) && styles.disabledBtn]}
-                  onPress={openSwapConfirm}
-                  disabled={isBusy || !identityReady}
-                >
-                  <Text style={styles.primarySwapBtnText}>{t.swapButton}</Text>
-                </TouchableOpacity>
-
-                {swapTxStage !== 'idle' && (
-                  <View style={styles.txStageCard}>
-                    <Text style={styles.txStageTitle}>{t.txProgressTitle}</Text>
-                    <View style={styles.txStageRow}>
-                      <View style={styles.txStageItem}>
-                        <View style={[styles.txDot, styles.txDotActive]} />
-                        <Text style={styles.txStageText}>{txStageLabels.submitting}</Text>
-                      </View>
-                      <View style={[styles.txStageLine, (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
-                      <View style={styles.txStageItem}>
-                        <View
-                          style={[
-                            styles.txDot,
-                            (swapTxStage === 'confirming' || swapTxStage === 'success' || swapTxStage === 'failed') && styles.txDotActive,
-                          ]}
-                        />
-                        <Text style={styles.txStageText}>{txStageLabels.confirming}</Text>
-                      </View>
-                      <View style={[styles.txStageLine, (swapTxStage === 'success' || swapTxStage === 'failed') && styles.txStageLineActive]} />
-                      <View style={styles.txStageItem}>
-                        <View
-                          style={[
-                            styles.txDot,
-                            (swapTxStage === 'success' || swapTxStage === 'failed') && (swapTxStage === 'success' ? styles.txDotSuccess : styles.txDotFailed),
-                          ]}
-                        />
-                        <Text style={styles.txStageText}>
-                          {swapTxStage === 'failed' ? txStageLabels.failed : txStageLabels.success}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.gasAssistTitle}</Text>
-                <View style={styles.gasInfoBox}>
-                  <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
-                  {!!phase2IntentId && <Text style={styles.gasInfoHint}>Intent: {phase2IntentId.slice(0, 16)}...</Text>}
-                  <TouchableOpacity
-                    style={[styles.secondaryBtn, !identityReady && styles.disabledBtn]}
-                    onPress={() => openGasAssist('gas', async () => Promise.resolve())}
-                    disabled={!identityReady || isBusy}
-                  >
-                    <Text style={styles.secondaryBtnText}>{t.gasBuyAndRetry}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
+            <ExchangeTab
+              swapAmount={swapAmount}
+              setSwapAmount={setSwapAmount}
+              swapPriceText={swapPriceText}
+              estimatedSuper={estimatedSuper}
+              feeUsdt={feeUsdt}
+              minReceiveSuper={minReceiveSuper}
+              isBusy={isBusy}
+              identityReady={identityReady}
+              swapTxStage={swapTxStage}
+              gasFundedBnbTotal={gasFundedBnbTotal}
+              phase2IntentId={phase2IntentId}
+              refreshSwapPrice={refreshSwapPrice}
+              openSwapConfirm={openSwapConfirm}
+              openGasAssist={openGasAssist}
+              txStageLabels={txStageLabels}
+              t={t}
+            />
           )}
 
           {activeTab === 'device' && (
-            <>
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.deviceSummary}</Text>
-                <View style={styles.statusCardCompact}>
-                  <Text style={styles.metricLabel}>{t.phoneStatus}</Text>
-                  <Text style={styles.metricValue}>{onlineState}</Text>
-                  <Text style={styles.walletHint}>{deviceId || t.notInit}</Text>
-                </View>
-                <Text style={styles.label}>{t.hashrate}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={hashrateInput}
-                  onChangeText={setHashrateInput}
-                  keyboardType="number-pad"
-                  placeholder={t.hashratePlaceholder}
-                  placeholderTextColor="#93a9d1"
-                  editable={!isBusy}
-                />
-                <View style={styles.quickRow}>
-                  <TouchableOpacity style={styles.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
-                    <Text style={styles.quickBtnText}>{t.setupMiner}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.quickBtn} onPress={initializeAccount} disabled={isBusy}>
-                    <Text style={styles.quickBtnText}>{t.syncIdentity}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
+            <DeviceTab
+              onlineState={onlineState}
+              deviceId={deviceId}
+              hashrateInput={hashrateInput}
+              setHashrateInput={setHashrateInput}
+              isBusy={isBusy}
+              identityReady={identityReady}
+              startMining={startMining}
+              initializeAccount={initializeAccount}
+              t={t}
+            />
           )}
 
           {activeTab === 'profile' && (
-            <>
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.profileSummary}</Text>
-                <Text style={styles.metricLabel}>{t.walletCardTitle}</Text>
-                <Text style={styles.walletText}>{walletAddress || t.notInit}</Text>
-                <Text style={styles.profileExpire}>{t.profileExpire}: {expireDate}</Text>
-                {contractExpired && (
-                  <View style={styles.expiredBanner}>
-                    <Text style={styles.expiredBannerTitle}>{t.contractExpiredTitle}</Text>
-                    <Text style={styles.expiredBannerBody}>{t.contractExpiredBody}</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.actionCard}>
-                <Text style={styles.sectionTitle}>{t.advancedSettings}</Text>
-                <Text style={styles.label}>{t.transferTitle}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={transferTo}
-                  onChangeText={setTransferTo}
-                  placeholder={t.transferTo}
-                  placeholderTextColor="#93a9d1"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isBusy}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={transferAmount}
-                  onChangeText={setTransferAmount}
-                  keyboardType="decimal-pad"
-                  placeholder={t.transferAmount}
-                  placeholderTextColor="#93a9d1"
-                  editable={!isBusy}
-                />
-                <TouchableOpacity style={styles.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
-                  <Text style={styles.secondaryBtnText}>{t.sendTransfer}</Text>
-                </TouchableOpacity>
-              </View>
-            </>
+            <ProfileTab
+              walletAddress={walletAddress}
+              expireDate={expireDate}
+              contractExpired={contractExpired}
+              transferTo={transferTo}
+              setTransferTo={setTransferTo}
+              transferAmount={transferAmount}
+              setTransferAmount={setTransferAmount}
+              isBusy={isBusy}
+              identityReady={identityReady}
+              transferNativeToken={transferNativeToken}
+              t={t}
+            />
           )}
 
           {isBusy && (

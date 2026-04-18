@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Coin Planet",
-    "slug": "coin-planet-mobile",
+    "slug": "-coin-planet",
     "scheme": "coinplanet",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,11 +22,15 @@
       "rpcUrl": "https://data-seed-prebsc-1-s1.binance.org:8545/",
       "chainId": 97,
       "minerContractAddress": "0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1",
-      "swapContractAddress": "0x1C094012b17461C26938752549E367011443592f"
+      "swapContractAddress": "0x1C094012b17461C26938752549E367011443592f",
+      "eas": {
+        "projectId": "a0f26ed6-a709-4c2e-aaca-a88554167a00"
+      }
     },
     "plugins": [
       "expo-asset",
       "expo-secure-store"
-    ]
+    ],
+    "owner": "dappweb"
   }
 }

@@ -43,6 +43,20 @@ export default function App() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
 
+  const signAdminMessage = React.useCallback(
+    async (walletAddress: string, message: string) => {
+      if (!walletAddress) {
+        throw new Error('请先连接钱包。');
+      }
+
+      return signMessageAsync({
+        account: walletAddress as Address,
+        message,
+      });
+    },
+    [signMessageAsync],
+  );
+
   const ownerWalletAddress =
     (import.meta.env.VITE_OWNER_WALLET as string | undefined) ||
     (import.meta.env.VITE_OWNER_ADDRESS as string | undefined) ||
@@ -160,7 +174,7 @@ export default function App() {
           'Purpose: 进入链上数据管理面板',
         ].join('\n');
 
-        const signature = await signMessageAsync({ message });
+        const signature = await signAdminMessage(walletAddress, message);
         const valid = await verifyMessage({
           address: walletAddress as Address,
           message,
@@ -181,7 +195,7 @@ export default function App() {
         setViewMode('website');
       }
     },
-    [isOwnerAddress, signMessageAsync],
+    [isOwnerAddress, signAdminMessage],
   );
 
   React.useEffect(() => {
@@ -384,7 +398,7 @@ export default function App() {
                 </div>
               </section>
             ) : (
-              <AdminDashboard fullScreen adminWallet={adminWallet} signMessageAsync={signMessageAsync} />
+              <AdminDashboard fullScreen adminWallet={adminWallet} signMessageAsync={signAdminMessage} />
             )}
           </>
         )}

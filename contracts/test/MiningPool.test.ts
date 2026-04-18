@@ -12,28 +12,29 @@ describe("Coin Planet Contracts", () => {
   let miner1: SignerWithAddress;
   let miner2: SignerWithAddress;
 
-  before(async () => {
+  async function deployContracts() {
     [deployer, miner1, miner2] = await ethers.getSigners();
 
-    // 閮ㄧ讲 SUPER Token
     const SUPERFactory = await ethers.getContractFactory("SUPER");
     SUPER = await SUPERFactory.deploy();
 
-    // 閮ㄧ讲 USDT Mock
     const USDTFactory = await ethers.getContractFactory("USDT_Mock");
     usdt = await USDTFactory.deploy();
 
-    // 閮ㄧ讲 MiningPool
     const MiningPoolFactory = await ethers.getContractFactory("MiningPool");
     miningPool = await MiningPoolFactory.deploy(await SUPER.getAddress());
 
-    // 閮ㄧ讲 SwapRouter
     const SwapRouterFactory = await ethers.getContractFactory("SwapRouter");
     swapRouter = await SwapRouterFactory.deploy(await SUPER.getAddress(), await usdt.getAddress());
 
-    // 娣诲姞 Minter 鏉冮檺
     await SUPER.addMinter(await miningPool.getAddress());
     await SUPER.addMinter(await swapRouter.getAddress());
+
+    return { SUPER, usdt, miningPool, swapRouter, deployer, miner1, miner2 };
+  }
+
+  beforeEach(async () => {
+    await deployContracts();
   });
 
   describe("SUPER Token", () => {
@@ -91,8 +92,10 @@ describe("Coin Planet Contracts", () => {
   });
 
   describe("SwapRouter", () => {
-    before(async () => {
-      // 鍒濆鍖栨祦鍔ㄦ€?
+    beforeEach(async () => {
+      const initialSuper = ethers.parseEther("50000000");
+      await SUPER.mint(deployer.address, initialSuper);
+
       const superAmount = ethers.parseEther("50000000");  // 5000 涓?SUPER
       const usdtAmount = ethers.parseUnits("50000", 18); // 5 涓?USDT
 
@@ -133,21 +136,16 @@ describe("Coin Planet Contracts", () => {
 
   describe("Integration", () => {
     it("End-to-end mining flow", async () => {
-      // 1. 娉ㄥ唽鐭垮伐
       await miningPool.connect(miner1).registerMiner(5000, "device-1");
 
-      // 2. 绛夊緟鍖哄潡鏇存柊
       await ethers.provider.send("hardhat_mine", ["0x10"]); // 16 涓尯鍧?
 
-      // 3. 鏌ョ湅寰呴鍙栧鍔?
       const pending = await miningPool.calculatePendingReward(miner1.address);
-      console.log("Pending reward:", ethers.formatEther(pending));
+      const info = await miningPool.getMinerInfo(miner1.address);
 
-      // 4. 棰嗗彇濂栧姳
-      if (pending > 0n) {
-        // 姝ゆ椂浼氬け璐ュ洜涓哄湪閿佷粨鏈燂紝杩欐槸娴嬭瘯姝ｇ‘鐨勯槻浣滃紛鏈哄埗
-        // 瀹為檯閮ㄧ讲鏃堕渶瑕佽烦杩囨椂闂?
-      }
+      expect(info.hashrate).to.equal(5000);
+      expect(info.active).to.equal(true);
+      expect(pending).to.equal(0n);
     });
   });
 });

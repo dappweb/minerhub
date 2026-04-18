@@ -25,7 +25,7 @@ import {
 type AdminDashboardProps = {
   fullScreen?: boolean;
   adminWallet: string;
-  signMessageAsync: (args: { message: string }) => Promise<string>;
+  signMessageAsync: (walletAddress: string, message: string) => Promise<string>;
 };
 
 const HASHRATE_UNIT = 1000;
@@ -122,7 +122,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const buildSignedHeaders = useCallback(async (path: string, body: Record<string, unknown>) => {
     const nonce = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
     const message = `coinplanet|${nonce}|${path}|${JSON.stringify(body)}`;
-    const signature = await signMessageAsync({ message });
+    const signature = await signMessageAsync(adminWallet, message);
 
     return {
       'content-type': 'application/json',
