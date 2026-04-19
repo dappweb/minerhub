@@ -393,6 +393,11 @@ export default function App() {
                       'px-5 py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors',
                       false,
                     )}
+                    <p className="mt-3 text-xs text-slate-500">
+                      {hasWalletConnectProjectId
+                        ? '点击「连接钱包」后，可在弹窗中选择 WalletConnect，使用手机钱包（MetaMask、Trust、imToken、OKX Wallet 等）扫码登录。'
+                        : '提示：当前未配置 WalletConnect 项目 ID，手机钱包扫码功能不可用。请在 .env 中设置 VITE_WALLETCONNECT_PROJECT_ID（https://cloud.reown.com 免费申请）。'}
+                    </p>
                     <p className="mt-4 text-sm text-slate-400 break-all">{adminLoginStatus}</p>
                   </div>
                 </div>

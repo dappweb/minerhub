@@ -20,6 +20,18 @@ const coinPlanetChain = defineChain({
 
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'demo';
 
+export const hasWalletConnectProjectId =
+  typeof walletConnectProjectId === 'string' &&
+  walletConnectProjectId.length > 0 &&
+  walletConnectProjectId !== 'demo';
+
+if (!hasWalletConnectProjectId && typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[wallet] VITE_WALLETCONNECT_PROJECT_ID 未配置，手机钱包扫码连接将不可用。请在 https://cloud.reown.com 申请项目后配置到 .env。',
+  );
+}
+
 export const wagmiConfig = getDefaultConfig({
   appName: 'Coin Planet Admin',
   projectId: walletConnectProjectId,
