@@ -1,4 +1,4 @@
-﻿import { Activity, CheckCircle2, LayoutDashboard } from 'lucide-react';
+import { Activity, CheckCircle2, Eye, EyeOff, LayoutDashboard, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
@@ -65,6 +65,67 @@ type SupportContact = {
   value: string;
   note: string;
 };
+
+type AnnouncementItem = {
+  id: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+  level: 'info' | 'warning' | 'critical';
+  target: 'all' | 'active_contract';
+  isPublished: boolean;
+  isPinned: boolean;
+  publishAt: string | null;
+  expireAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AnnouncementFormState = {
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+  level: 'info' | 'warning' | 'critical';
+  target: 'all' | 'active_contract';
+  isPinned: boolean;
+  isPublished: boolean;
+  publishAt: string;
+  expireAt: string;
+};
+
+function formatDateTimeLocalInput(value?: string | null): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const offset = parsed.getTimezoneOffset();
+  const local = new Date(parsed.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function parseDateTimeLocalInput(value: string): string | null {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function createEmptyAnnouncementForm(): AnnouncementFormState {
+  return {
+    titleZh: '',
+    titleEn: '',
+    contentZh: '',
+    contentEn: '',
+    level: 'info',
+    target: 'all',
+    isPinned: false,
+    isPublished: false,
+    publishAt: '',
+    expireAt: '',
+  };
+}
 
 const CONTACT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'weixin', label: '微信 WeChat' },
@@ -167,7 +228,7 @@ type ExchangeRecord = {
   updatedAt: string;
 };
 
-type AdminSection = 'overview' | 'owner' | 'onchain' | 'tokens' | 'funding' | 'customers' | 'records' | 'system';
+type AdminSection = 'overview' | 'owner' | 'onchain' | 'tokens' | 'funding' | 'customers' | 'records' | 'system' | 'docs';
 
 const SECTION_LABELS: Array<{ id: AdminSection; labelKey: TranslationKey; descKey: TranslationKey }> = [
   { id: 'overview',  labelKey: 'admin.section.overview',  descKey: 'admin.section.overview.desc' },
@@ -178,6 +239,7 @@ const SECTION_LABELS: Array<{ id: AdminSection; labelKey: TranslationKey; descKe
   { id: 'customers', labelKey: 'admin.section.customers', descKey: 'admin.section.customers.desc' },
   { id: 'records',   labelKey: 'admin.section.records',   descKey: 'admin.section.records.desc' },
   { id: 'system',    labelKey: 'admin.section.system',    descKey: 'admin.section.system.desc' },
+  { id: 'docs',      labelKey: 'admin.section.docs',      descKey: 'admin.section.docs.desc' },
 ];
 
 export default function AdminDashboard({ fullScreen = false, adminWallet, signMessageAsync }: AdminDashboardProps) {
@@ -228,6 +290,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [agreementContentZh, setAgreementContentZh] = useState<string>('');
   const [agreementContentEn, setAgreementContentEn] = useState<string>('');
   const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(() => createEmptyAnnouncementForm());
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string>('');
+  const [announcementFilter, setAnnouncementFilter] = useState<'all' | 'active' | 'published' | 'draft' | 'expired'>('all');
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
 
   const poolAddress = getMiningPoolAddress();
@@ -286,22 +352,24 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('');
       setBackendLoading(true);
 
-      const [statusResponse, customersResponse] = await Promise.all([
+      const [statusResponse, customersResponse, announcementsResponse] = await Promise.all([
         fetch(`${apiBaseUrl}/api/system/status`).then(async (response) => {
           if (!response.ok) return null;
           return (await response.json()) as SystemStatus;
         }).catch(() => null),
         ownerReadRequest<{ items: CustomerItem[] }>('/api/admin/customers'),
+        ownerReadRequest<{ items: AnnouncementItem[] }>(`/api/announcements/admin${announcementFilter === 'all' ? '' : `?status=${announcementFilter}`}`),
       ]);
 
       setSystemStatus(statusResponse);
       setCustomers(customersResponse.items ?? []);
+      setAnnouncements(announcementsResponse.items ?? []);
     } catch (loadError) {
       setBackendError(loadError instanceof Error ? loadError.message : '读取后台数据失败');
     } finally {
       setBackendLoading(false);
     }
-  }, [adminWallet, apiBaseUrl, ownerReadRequest]);
+  }, [adminWallet, apiBaseUrl, announcementFilter, ownerReadRequest]);
 
   const loadRecords = useCallback(async () => {
     if (!adminWallet) return;
@@ -736,6 +804,97 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const resetAnnouncementForm = () => {
+    setEditingAnnouncementId('');
+    setAnnouncementForm(createEmptyAnnouncementForm());
+  };
+
+  const handleAnnouncementFieldChange = <K extends keyof AnnouncementFormState>(field: K, value: AnnouncementFormState[K]) => {
+    setAnnouncementForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleEditAnnouncement = (item: AnnouncementItem) => {
+    setEditingAnnouncementId(item.id);
+    setAnnouncementForm({
+      titleZh: item.titleZh,
+      titleEn: item.titleEn,
+      contentZh: item.contentZh,
+      contentEn: item.contentEn,
+      level: item.level,
+      target: item.target,
+      isPinned: item.isPinned,
+      isPublished: item.isPublished,
+      publishAt: formatDateTimeLocalInput(item.publishAt),
+      expireAt: formatDateTimeLocalInput(item.expireAt),
+    });
+  };
+
+  const handleSaveAnnouncement = async () => {
+    if (!announcementForm.titleZh.trim() || !announcementForm.titleEn.trim() || !announcementForm.contentZh.trim() || !announcementForm.contentEn.trim()) {
+      setBackendError('公告标题和正文（中英文）都不能为空');
+      return;
+    }
+
+    setAdminActionLoading('announcementSave');
+    setBackendError('');
+    try {
+      const payload = {
+        titleZh: announcementForm.titleZh.trim(),
+        titleEn: announcementForm.titleEn.trim(),
+        contentZh: announcementForm.contentZh.trim(),
+        contentEn: announcementForm.contentEn.trim(),
+        level: announcementForm.level,
+        target: announcementForm.target,
+        isPinned: announcementForm.isPinned,
+        isPublished: announcementForm.isPublished,
+        publishAt: parseDateTimeLocalInput(announcementForm.publishAt),
+        expireAt: parseDateTimeLocalInput(announcementForm.expireAt),
+      };
+
+      if (editingAnnouncementId) {
+        await signedRequest(`/api/announcements/admin/${editingAnnouncementId}`, 'PUT', payload);
+      } else {
+        await signedRequest('/api/announcements/admin', 'POST', payload);
+      }
+      resetAnnouncementForm();
+      await loadBackendData();
+    } catch (saveError) {
+      setBackendError(saveError instanceof Error ? saveError.message : '保存公告失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleToggleAnnouncementPublish = async (item: AnnouncementItem) => {
+    setAdminActionLoading(`announcement-${item.id}`);
+    setBackendError('');
+    try {
+      await signedRequest(`/api/announcements/admin/${item.id}/${item.isPublished ? 'unpublish' : 'publish'}`, 'POST', {});
+      await loadBackendData();
+    } catch (actionError) {
+      setBackendError(actionError instanceof Error ? actionError.message : '更新公告状态失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleDeleteAnnouncement = async (item: AnnouncementItem) => {
+    if (!window.confirm(`确认删除公告「${item.titleZh}」？`)) return;
+    setAdminActionLoading(`announcement-delete-${item.id}`);
+    setBackendError('');
+    try {
+      await signedRequest(`/api/announcements/admin/${item.id}`, 'DELETE', {});
+      if (editingAnnouncementId === item.id) {
+        resetAnnouncementForm();
+      }
+      await loadBackendData();
+    } catch (actionError) {
+      setBackendError(actionError instanceof Error ? actionError.message : '删除公告失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
   const handleActivateCustomer = async () => {
     if (!activateCustomerId) {
       setBackendError('请先选择客户');
@@ -1122,6 +1281,229 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 >
                   {adminActionLoading === 'systemSettings' ? '保存中...' : '保存用户协议'}
                 </button>
+              </div>
+
+              <div className="rounded-2xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4 xl:col-span-2">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-fuchsia-200">
+                      <Megaphone size={16} />
+                      APP 公告管理
+                    </div>
+                    <p className="mt-2 text-xs text-fuchsia-100/80">
+                      管理员可创建、发布、下线公告。APP 会拉取当前有效公告，并对未读置顶公告弹窗提醒。
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={announcementFilter}
+                      onChange={(event) => setAnnouncementFilter(event.target.value as 'all' | 'active' | 'published' | 'draft' | 'expired')}
+                      className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                    >
+                      <option value="all">全部</option>
+                      <option value="active">当前生效</option>
+                      <option value="published">已发布</option>
+                      <option value="draft">草稿</option>
+                      <option value="expired">已过期</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={resetAnnouncementForm}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800"
+                    >
+                      <Plus size={14} />
+                      新建公告
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_1.4fr]">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-white">{editingAnnouncementId ? '编辑公告' : '创建公告'}</div>
+                      {editingAnnouncementId && (
+                        <button type="button" onClick={resetAnnouncementForm} className="text-xs text-slate-400 hover:text-slate-200">
+                          取消编辑
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <input
+                        value={announcementForm.titleZh}
+                        onChange={(event) => handleAnnouncementFieldChange('titleZh', event.target.value)}
+                        placeholder="公告标题（中文）"
+                        className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                      />
+                      <input
+                        value={announcementForm.titleEn}
+                        onChange={(event) => handleAnnouncementFieldChange('titleEn', event.target.value)}
+                        placeholder="Announcement title (EN)"
+                        className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                      />
+                      <div className="grid grid-cols-2 gap-3">
+                        <select
+                          value={announcementForm.level}
+                          onChange={(event) => handleAnnouncementFieldChange('level', event.target.value as AnnouncementFormState['level'])}
+                          className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                        >
+                          <option value="info">普通公告</option>
+                          <option value="warning">提醒公告</option>
+                          <option value="critical">重要公告</option>
+                        </select>
+                        <select
+                          value={announcementForm.target}
+                          onChange={(event) => handleAnnouncementFieldChange('target', event.target.value as AnnouncementFormState['target'])}
+                          className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                        >
+                          <option value="all">全部用户</option>
+                          <option value="active_contract">仅有效合约用户</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                          <input
+                            type="checkbox"
+                            checked={announcementForm.isPinned}
+                            onChange={(event) => handleAnnouncementFieldChange('isPinned', event.target.checked)}
+                            className="accent-fuchsia-500"
+                          />
+                          置顶
+                        </label>
+                        <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                          <input
+                            type="checkbox"
+                            checked={announcementForm.isPublished}
+                            onChange={(event) => handleAnnouncementFieldChange('isPublished', event.target.checked)}
+                            className="accent-fuchsia-500"
+                          />
+                          立即发布
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="text-xs text-slate-400">
+                          发布时间
+                          <input
+                            type="datetime-local"
+                            value={announcementForm.publishAt}
+                            onChange={(event) => handleAnnouncementFieldChange('publishAt', event.target.value)}
+                            className="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-400">
+                          过期时间
+                          <input
+                            type="datetime-local"
+                            value={announcementForm.expireAt}
+                            onChange={(event) => handleAnnouncementFieldChange('expireAt', event.target.value)}
+                            className="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        value={announcementForm.contentZh}
+                        onChange={(event) => handleAnnouncementFieldChange('contentZh', event.target.value)}
+                        placeholder="公告正文（中文）"
+                        rows={6}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                      />
+                      <textarea
+                        value={announcementForm.contentEn}
+                        onChange={(event) => handleAnnouncementFieldChange('contentEn', event.target.value)}
+                        placeholder="Announcement content (EN)"
+                        rows={6}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-fuchsia-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveAnnouncement}
+                        disabled={adminActionLoading === 'announcementSave'}
+                        className="rounded-lg bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-fuchsia-400 disabled:opacity-60"
+                      >
+                        {adminActionLoading === 'announcementSave' ? '保存中...' : editingAnnouncementId ? '保存公告修改' : '创建公告'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-white">公告列表</div>
+                      <div className="text-xs text-slate-400">共 {announcements.length} 条</div>
+                    </div>
+
+                    <div className="space-y-3 max-h-176 overflow-y-auto pr-1">
+                      {announcements.length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-400">
+                          当前筛选下暂无公告。
+                        </div>
+                      )}
+
+                      {announcements.map((item) => (
+                        <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-slate-100">{item.titleZh}</span>
+                                {item.isPinned && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-500/20 px-2 py-1 text-[11px] text-fuchsia-200">
+                                    <Pin size={11} />
+                                    置顶
+                                  </span>
+                                )}
+                                <span className={`rounded-full px-2 py-1 text-[11px] ${item.level === 'critical' ? 'bg-red-500/20 text-red-200' : item.level === 'warning' ? 'bg-amber-500/20 text-amber-200' : 'bg-sky-500/20 text-sky-200'}`}>
+                                  {item.level}
+                                </span>
+                                <span className={`rounded-full px-2 py-1 text-[11px] ${item.isPublished ? 'bg-emerald-500/20 text-emerald-200' : 'bg-slate-700 text-slate-300'}`}>
+                                  {item.isPublished ? '已发布' : '草稿'}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-xs text-slate-400">{item.titleEn}</div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditAnnouncement(item)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+                              >
+                                <Pencil size={12} />
+                                编辑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleAnnouncementPublish(item)}
+                                disabled={adminActionLoading === `announcement-${item.id}`}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                              >
+                                {item.isPublished ? <EyeOff size={12} /> : <Eye size={12} />}
+                                {item.isPublished ? '下线' : '发布'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAnnouncement(item)}
+                                disabled={adminActionLoading === `announcement-delete-${item.id}`}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                              >
+                                <Trash2 size={12} />
+                                删除
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-3">
+                            <div>目标用户：{item.target === 'active_contract' ? '有效合约用户' : '全部用户'}</div>
+                            <div>发布时间：{item.publishAt ? new Date(item.publishAt).toLocaleString('zh-CN') : '未设置'}</div>
+                            <div>过期时间：{item.expireAt ? new Date(item.expireAt).toLocaleString('zh-CN') : '不过期'}</div>
+                          </div>
+
+                          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm text-slate-300">
+                            <div className="line-clamp-3 whitespace-pre-wrap">{item.contentZh}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             )}
@@ -1824,6 +2206,320 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             )}
           </div>
         </motion.div>
+
+        {/* ────────────────────────── 使用手册 / Admin Docs ────────────────────────── */}
+        {section === 'docs' && (
+          <motion.div
+            key="docs"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            {/* 业务功能概览 */}
+            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6">
+              <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-purple-400" />
+                {locale === 'zh' ? '业务功能概览' : 'Business Feature Overview'}
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                {locale === 'zh'
+                  ? 'Coin Planet 是一套「挖矿+代币+Swap」一体化运营平台，核心链路如下：'
+                  : 'Coin Planet is an integrated mining + token + swap operating platform. The core flow is:'}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  {
+                    icon: '📱',
+                    title: locale === 'zh' ? '用户侧 APP' : 'User App',
+                    items: locale === 'zh'
+                      ? ['用户在 APP 完成实名 / 钱包绑定', '注册矿机并提交链上 hashrate', '按在线时长自动累计 USDT/SUPER 收益', '每日可领取（Claim）或兑换（Swap）']
+                      : ['User completes KYC / wallet binding in app', 'Registers miner & submits on-chain hashrate', 'Earnings accrue by online duration (USDT/SUPER)', 'Daily claim or swap rewards'],
+                  },
+                  {
+                    icon: '⛓️',
+                    title: locale === 'zh' ? '链上合约' : 'Smart Contracts',
+                    items: locale === 'zh'
+                      ? ['MiningPool：矿机注册 / 收益分发 / 领取', 'SUPER ERC-20：收益代币增发与授权', 'SwapRouter：USDT ↔ SUPER 内盘兑换', '链上数据所有人为 owner 钱包控制']
+                      : ['MiningPool: registration / reward distribution / claim', 'SUPER ERC-20: mint & approve', 'SwapRouter: USDT ↔ SUPER swap', 'Owner wallet controls all on-chain data'],
+                  },
+                  {
+                    icon: '🖥️',
+                    title: locale === 'zh' ? '后台管理' : 'Admin Backend',
+                    items: locale === 'zh'
+                      ? ['激活 / 续期 / 批量修改客户合同', '系统维护模式 / 参数配置', '公告发布与客服联系方式管理', '充值 / 提现 / 兑换记录审查']
+                      : ['Activate / extend / bulk-modify customer contracts', 'Maintenance mode & parameter config', 'Announcements & support contact management', 'Review recharge / withdrawal / exchange records'],
+                  },
+                ].map((card) => (
+                  <div key={card.title} className="bg-slate-800/60 rounded-xl p-4 border border-slate-700">
+                    <div className="text-2xl mb-2">{card.icon}</div>
+                    <div className="text-sm font-semibold text-white mb-2">{card.title}</div>
+                    <ul className="space-y-1">
+                      {card.items.map((item) => (
+                        <li key={item} className="text-xs text-slate-300 flex gap-1.5">
+                          <span className="text-purple-400 shrink-0">•</span>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 各导航功能说明 */}
+            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-cyan-400" />
+                {locale === 'zh' ? '导航功能说明' : 'Navigation Sections'}
+              </h3>
+              <div className="space-y-3">
+                {(locale === 'zh' ? [
+                  { section: '概览', icon: '📊', desc: '展示链上 KPI（矿工数、算力、已发 SUPER）和当前钱包矿工状态。数据来自链上合约，每 15 秒自动刷新。' },
+                  { section: 'Owner 控制台', icon: '🔑', desc: '包含链上安全操作：转账、费率调整、出款审核等，均需 owner 钱包签名。' },
+                  { section: '链上数据', icon: '⛓️', desc: '链上全局数据与当前 owner 矿工的注册/算力/待领取收益明细。' },
+                  { section: '代币 & Swap', icon: '🪙', desc: 'SUPER 代币增发（mint），Swap 资金池初始化与流动性管理，平台手续费 / 生态费收取。' },
+                  { section: '设备充值', icon: '⛽', desc: '向指定用户钱包转入测试 Gas（BNB）或 SUPER 代币，用于用户 Gas 费补贴。' },
+                  { section: '客户列表', icon: '👥', desc: '查看所有用户合同状态、收益率和在线情况；支持激活、续期、批量修改收益率。' },
+                  { section: '交易记录', icon: '📋', desc: '查看充值（Gas 购买）、提现（SUPER→USDT）、兑换记录；支持批准和完成操作。' },
+                  { section: '系统设置', icon: '⚙️', desc: '维护模式开关、系统参数、用户协议、公告管理、客服联系方式配置。' },
+                  { section: '使用手册', icon: '📖', desc: '即本页，包含参数配置说明、操作手册和业务功能说明，仅管理员可见。' },
+                ] : [
+                  { section: 'Overview', icon: '📊', desc: 'On-chain KPIs (miner count, hashrate, SUPER emitted) and current owner miner status. Auto-refreshes every 15s.' },
+                  { section: 'Owner Console', icon: '🔑', desc: 'Secure on-chain operations: transfers, fee adjustments, payout review — all require owner wallet signature.' },
+                  { section: 'On-chain', icon: '⛓️', desc: 'Global on-chain stats and current owner miner registration / hashrate / pending reward.' },
+                  { section: 'Tokens & Swap', icon: '🪙', desc: 'SUPER mint, swap pool initialization & liquidity management, platform and ecosystem fee collection.' },
+                  { section: 'Device Funding', icon: '⛽', desc: 'Transfer test gas (BNB) or SUPER tokens to specified user wallets as gas subsidies.' },
+                  { section: 'Customers', icon: '👥', desc: 'View all user contract status, yield rates and online status; support activation, extension, bulk rate changes.' },
+                  { section: 'Transactions', icon: '📋', desc: 'View recharge (gas purchase), withdrawal (SUPER→USDT) and exchange records; support approve and complete.' },
+                  { section: 'System', icon: '⚙️', desc: 'Maintenance toggle, system parameters, user agreement, announcements, and support contact config.' },
+                  { section: 'Admin Docs', icon: '📖', desc: 'This page. Contains parameter config guide, operation manual, and business overview. Admin-only.' },
+                ]).map((row) => (
+                  <div key={row.section} className="flex gap-3 py-2 border-b border-slate-800 last:border-0">
+                    <span className="text-lg w-7 shrink-0">{row.icon}</span>
+                    <div>
+                      <span className="text-sm font-semibold text-white mr-2">{row.section}</span>
+                      <span className="text-xs text-slate-400">{row.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 参数配置说明 */}
+            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                {locale === 'zh' ? '参数配置说明' : 'Parameter Configuration Guide'}
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-2 pr-4 text-slate-400 font-medium w-48">
+                        {locale === 'zh' ? '参数名' : 'Parameter'}
+                      </th>
+                      <th className="text-left py-2 pr-4 text-slate-400 font-medium w-28">
+                        {locale === 'zh' ? '默认值' : 'Default'}
+                      </th>
+                      <th className="text-left py-2 text-slate-400 font-medium">
+                        {locale === 'zh' ? '说明' : 'Description'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {(locale === 'zh' ? [
+                      { name: 'rewardRateUsdtPerHour', default: '0.084', desc: '每台设备每小时的基础 USDT 收益率。调整此值会立即影响新结算周期的收益。' },
+                      { name: 'monthlyCardDays', default: '30', desc: '月卡对应的合同有效天数，客服激活时以此为基准延长合同期限。' },
+                      { name: 'contractTermDaysDefault', default: '1095', desc: '新用户激活时默认的合同期限（天），1095 ≈ 3 年。' },
+                      { name: 'maintenanceEnabled', default: 'false', desc: '维护模式开关，开启后 APP 用户会看到维护提示，所有业务操作暂停。' },
+                      { name: 'maintenanceMessageZh/En', default: '系统维护中', desc: '维护模式下展示给用户的中英文提示语。' },
+                      { name: 'exchangeAutoEnabled', default: 'true', desc: '自动兑换开关（预留），当前控制 APP 内 Swap 功能是否对用户可见。' },
+                      { name: 'payoutWallets', default: '[]', desc: '出款钱包列表，用于 SUPER→USDT 提现的目标钱包，priority 越小优先级越高。' },
+                      { name: 'userAgreementRequired', default: 'false', desc: '用户协议强制阅读开关，开启后新用户首次进入 APP 必须同意协议。' },
+                      { name: 'userAgreementVersion', default: '1.0.0', desc: '协议版本号，更新版本号后所有用户会被要求重新阅读并同意。' },
+                      { name: 'supportContacts', default: '[]', desc: '客服联系方式列表，APP 个人中心页展示，每条包含类型、标签、内容和备注。' },
+                    ] : [
+                      { name: 'rewardRateUsdtPerHour', default: '0.084', desc: 'Base USDT reward rate per device per hour. Changes take effect in the next settlement cycle.' },
+                      { name: 'monthlyCardDays', default: '30', desc: 'Contract days per monthly card activation. Used as the base extension when support activates a user.' },
+                      { name: 'contractTermDaysDefault', default: '1095', desc: 'Default contract duration in days for new users (1095 ≈ 3 years).' },
+                      { name: 'maintenanceEnabled', default: 'false', desc: 'Maintenance mode toggle. When on, app users see a maintenance notice and all operations are paused.' },
+                      { name: 'maintenanceMessageZh/En', default: 'System maintenance', desc: 'Localized maintenance message shown to users in Chinese and English.' },
+                      { name: 'exchangeAutoEnabled', default: 'true', desc: 'Auto-exchange toggle (reserved). Controls whether the Swap feature is visible to users in the app.' },
+                      { name: 'payoutWallets', default: '[]', desc: 'Payout wallet list for SUPER→USDT withdrawals. Lower priority number = higher priority.' },
+                      { name: 'userAgreementRequired', default: 'false', desc: 'Mandatory user agreement toggle. When enabled, new users must accept the agreement on first launch.' },
+                      { name: 'userAgreementVersion', default: '1.0.0', desc: 'Agreement version. Bumping the version will require all users to re-read and re-accept.' },
+                      { name: 'supportContacts', default: '[]', desc: 'Support contact list shown in the app profile page. Each entry has type, label, value, and note.' },
+                    ]).map((row) => (
+                      <tr key={row.name} className="hover:bg-slate-800/30">
+                        <td className="py-2.5 pr-4 font-mono text-xs text-cyan-300 align-top">{row.name}</td>
+                        <td className="py-2.5 pr-4 text-xs text-amber-300 align-top">{row.default}</td>
+                        <td className="py-2.5 text-xs text-slate-300">{row.desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 操作手册 */}
+            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+                {locale === 'zh' ? '操作手册' : 'Operation Manual'}
+              </h3>
+              <div className="space-y-5">
+                {(locale === 'zh' ? [
+                  {
+                    title: '🆕 激活新用户',
+                    steps: [
+                      '在「客户列表」找到目标用户（按钱包地址或 ID 搜索）',
+                      '点击「激活」，填入机器码（可选）和合同年限',
+                      '确认后系统自动设置 contract_start_at / contract_end_at，并将 activation_status 改为 active',
+                      '激活成功后用户 APP 将显示正常收益状态',
+                    ],
+                  },
+                  {
+                    title: '🔄 续期合同',
+                    steps: [
+                      '在「客户列表」找到目标用户',
+                      '填写「续期天数」输入框（默认 30 天）',
+                      '点击行末「续期」按钮，系统在现有 contract_end_at 基础上累加天数',
+                      '若合同已过期，续期将从当前时间开始计算',
+                    ],
+                  },
+                  {
+                    title: '📢 发布公告',
+                    steps: [
+                      '进入「系统设置」→「公告管理」',
+                      '填写中英文标题和正文，选择级别（info/warning/critical）和推送对象（全员/有效合同）',
+                      '勾选「立即发布」或设置定时发布时间',
+                      '保存后 APP 用户首页将收到公告推送',
+                    ],
+                  },
+                  {
+                    title: '💰 修改收益率',
+                    steps: [
+                      '单个修改：「客户列表」找到目标用户，暂无单独入口，请用批量功能选中一人操作',
+                      '批量修改：在「客户列表」勾选多个用户 → 填写「批量收益率」→ 点击「应用」',
+                      '修改后下一个结算周期自动生效',
+                      '全局默认收益率在「系统设置」→「每小时 USDT 收益率」修改',
+                    ],
+                  },
+                  {
+                    title: '🔧 开启/关闭维护模式',
+                    steps: [
+                      '进入「系统设置」→「维护模式」区块',
+                      '编辑中英文维护提示语后点击「开启维护」',
+                      '维护模式下 APP 所有操作暂停，用户看到维护提示',
+                      '完成维护后点击「关闭维护」恢复正常',
+                    ],
+                  },
+                  {
+                    title: '🪙 提现/兑换审批',
+                    steps: [
+                      '进入「交易记录」→「提现记录」或「兑换记录」',
+                      '状态为 pending 的记录可点击「批准」进入审批流程',
+                      '确认链上打款后点击「完成」，填写实际收款钱包和 tx hash',
+                      '完成后记录状态更新为 done',
+                    ],
+                  },
+                ] : [
+                  {
+                    title: '🆕 Activate a New User',
+                    steps: [
+                      'Find the target user in "Customers" (search by wallet or ID)',
+                      'Click "Activate", enter machine code (optional) and contract term in years',
+                      'System sets contract_start_at / contract_end_at and changes activation_status to active',
+                      'After activation the user's app will show normal reward status',
+                    ],
+                  },
+                  {
+                    title: '🔄 Extend a Contract',
+                    steps: [
+                      'Find the target user in "Customers"',
+                      'Fill the "Extend" days input (default 30)',
+                      'Click the "Extend" button at the end of the row — days are added to existing contract_end_at',
+                      'If the contract has already expired, extension starts from the current time',
+                    ],
+                  },
+                  {
+                    title: '📢 Publish an Announcement',
+                    steps: [
+                      'Go to "System" → "Announcement Management"',
+                      'Fill in Chinese and English title/content, select level and audience',
+                      'Check "Publish Immediately" or set a scheduled publish time',
+                      'After saving, users will see the announcement on the app home page',
+                    ],
+                  },
+                  {
+                    title: '💰 Change Reward Rate',
+                    steps: [
+                      'Single change: use the bulk feature in "Customers" with only one user selected',
+                      'Bulk change: check multiple users → fill "Bulk Rate" → click "Apply"',
+                      'The new rate takes effect in the next settlement cycle',
+                      'Global default rate: change "Reward Rate per Hour" in "System" settings',
+                    ],
+                  },
+                  {
+                    title: '🔧 Toggle Maintenance Mode',
+                    steps: [
+                      'Go to "System" → "Maintenance Mode" block',
+                      'Edit Chinese and English messages, then click "Enable Maintenance"',
+                      'All app operations are paused and users see the maintenance notice',
+                      'Click "Disable Maintenance" to restore normal operation',
+                    ],
+                  },
+                  {
+                    title: '🪙 Approve Withdrawal / Exchange',
+                    steps: [
+                      'Go to "Transactions" → "Withdrawal" or "Exchange" records',
+                      'Records with status "pending" can be clicked to "Approve"',
+                      'After confirming on-chain transfer, click "Complete" and enter payout wallet and tx hash',
+                      'Status updates to "done" after completion',
+                    ],
+                  },
+                ]).map((item) => (
+                  <div key={item.title} className="border border-slate-700 rounded-xl p-4">
+                    <div className="text-sm font-semibold text-white mb-2">{item.title}</div>
+                    <ol className="space-y-1 list-decimal list-inside">
+                      {item.steps.map((step, idx) => (
+                        <li key={idx} className="text-xs text-slate-300">{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 安全提示 */}
+            <div className="bg-amber-900/20 rounded-2xl border border-amber-700/40 p-5">
+              <h3 className="text-sm font-bold text-amber-300 mb-2 flex items-center gap-2">
+                <span>⚠️</span>
+                {locale === 'zh' ? '安全注意事项' : 'Security Notice'}
+              </h3>
+              <ul className="space-y-1.5">
+                {(locale === 'zh' ? [
+                  '本后台仅 owner 钱包（链上合约部署者）可访问，请勿将 owner 私钥托管给第三方。',
+                  '所有敏感操作均需链上钱包签名验证，签名消息包含 nonce 防重放。',
+                  '批量修改收益率为不可逆操作，请在确认数量和数值后再提交。',
+                  '维护模式会立即影响所有在线用户，请提前发布公告并在低峰期操作。',
+                  '私钥 / 助记词请勿以任何形式出现在本系统中，链上操作通过浏览器钱包签名完成。',
+                ] : [
+                  'This admin panel is only accessible by the owner wallet (the contract deployer). Never entrust your private key to third parties.',
+                  'All sensitive operations require on-chain wallet signature. Messages include a nonce to prevent replay attacks.',
+                  'Bulk rate changes are irreversible — double-check the count and value before submitting.',
+                  'Enabling maintenance mode immediately affects all online users. Post an announcement and operate during off-peak hours.',
+                  'Never input private keys or seed phrases into this system. All on-chain actions go through browser wallet signing.',
+                ]).map((item) => (
+                  <li key={item} className="text-xs text-amber-200/80 flex gap-2">
+                    <span className="text-amber-400 shrink-0">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </motion.div>
+        )}
       </div>
     </section>
   );

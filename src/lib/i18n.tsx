@@ -12,6 +12,7 @@ const dict = {
     'admin.section.customers': '客户列表',
     'admin.section.records': '交易记录',
     'admin.section.system': '系统设置',
+    'admin.section.docs': '使用手册',
 
     'admin.section.overview.desc': '核心 KPI 与系统状态',
     'admin.section.owner.desc': '代币 / 收益 / 出款 / 审计',
@@ -21,6 +22,7 @@ const dict = {
     'admin.section.customers.desc': '客户合同与收益',
     'admin.section.records.desc': '充值 / 提现 / 兑换记录',
     'admin.section.system.desc': '维护 / 协议 / 客服',
+    'admin.section.docs.desc': '参数配置说明 / 操作手册 / 业务功能',
 
     'common.language': '语言',
     'common.refresh': '刷新',
@@ -73,6 +75,7 @@ const dict = {
     'admin.section.customers': 'Customers',
     'admin.section.records': 'Transactions',
     'admin.section.system': 'System',
+    'admin.section.docs': 'Admin Docs',
 
     'admin.section.overview.desc': 'Key KPIs and system status',
     'admin.section.owner.desc': 'Tokens / earnings / payouts / audit',
@@ -82,6 +85,7 @@ const dict = {
     'admin.section.customers.desc': 'Customer contracts and rewards',
     'admin.section.records.desc': 'Recharge / withdrawal / exchange',
     'admin.section.system.desc': 'Maintenance / agreements / support',
+    'admin.section.docs.desc': 'Parameter guide / operation manual / business overview',
 
     'common.language': 'Language',
     'common.refresh': 'Refresh',

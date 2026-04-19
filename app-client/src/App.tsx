@@ -27,17 +27,20 @@ import {
     createClaim,
     createGasIntent,
     createUser,
+    getAnnouncements,
     getGasOrder,
     getGasWalletBalance,
     getSystemStatus,
     getUser,
     getUserByWallet,
     getUserDetails,
+    markAnnouncementRead as markAnnouncementReadApi,
     purchaseGasPackage,
     quoteGasPackage,
     registerDevice,
     relayGasIntent,
     reportDeviceHeartbeat,
+    type AnnouncementDto,
     type GasPayToken
 } from './services/api';
 import {
@@ -61,6 +64,7 @@ const MINER_READY_KEY = 'coinplanet.miner_ready';
 const USER_ID_KEY = 'coinplanet.user_id';
 const AGREEMENT_ACCEPTED_KEY = 'coinplanet.agreement_accepted_version';
 const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
+const ANNOUNCEMENT_READ_KEY = 'coinplanet.announcements.read_ids';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
@@ -128,6 +132,18 @@ const translations = {
     homeOverview: 'Overview',
     homePrimaryAction: 'Next Step',
     rewardsSummary: 'Reward Summary',
+    marketStatusTitle: 'Market Yield Status',
+    marketTrendLabel: 'Market Trend',
+    marketRiskLabel: 'Risk Level',
+    rewardTokenTitle: 'Reward Token',
+    totalRewardLabel: 'Total Reward',
+    todayRewardLabel: 'Today Reward',
+    claimableRewardLabel: 'Estimated Claimable',
+    yieldRateTitle: 'Yield Rate',
+    rewardRatePerHourLabel: 'Base Rate',
+    rewardRateDailyChangeLabel: '24h Change',
+    earningsCurveTitle: 'Earnings Curve',
+    range7dLabel: '7D',
     deviceSummary: 'Device Console',
     profileSummary: 'Account Center',
     walletCardTitle: 'Wallet',
@@ -210,6 +226,13 @@ const translations = {
     agreementFailed: 'Failed to submit acceptance: ',
     supportContactsTitle: 'Customer Support',
     supportContactsEmpty: 'Support contact info is not configured yet.',
+    announcementCenter: 'Latest Announcements',
+    announcementEmpty: 'No announcements right now.',
+    announcementPinned: 'Pinned',
+    announcementReadMore: 'Read More',
+    announcementDismiss: 'Close',
+    announcementGotIt: 'Got it',
+    announcementPublishedAt: 'Published',
     exportPrivateKeyTitle: 'Export Private Key',
     exportPrivateKeyButton: 'Export Private Key',
     exportPrivateKeyWarning: 'WARNING: Anyone with this key controls your wallet. Never share it. Keep it offline.',
@@ -281,6 +304,18 @@ const translations = {
     homeOverview: '总览',
     homePrimaryAction: '下一步操作',
     rewardsSummary: '收益总览',
+    marketStatusTitle: '市场收益状态',
+    marketTrendLabel: '市场趋势',
+    marketRiskLabel: '风险等级',
+    rewardTokenTitle: '收益代币',
+    totalRewardLabel: '累计收益',
+    todayRewardLabel: '今日收益',
+    claimableRewardLabel: '预计可领取',
+    yieldRateTitle: '收益率',
+    rewardRatePerHourLabel: '基础时收益',
+    rewardRateDailyChangeLabel: '24小时变化',
+    earningsCurveTitle: '收益曲线',
+    range7dLabel: '近7天',
     deviceSummary: '设备控制台',
     profileSummary: '账户中心',
     walletCardTitle: '钱包信息',
@@ -363,6 +398,13 @@ const translations = {
     agreementFailed: '提交同意失败：',
     supportContactsTitle: '客服联系方式',
     supportContactsEmpty: '尚未配置客服联系方式。',
+    announcementCenter: '最新公告',
+    announcementEmpty: '当前暂无公告。',
+    announcementPinned: '置顶',
+    announcementReadMore: '查看详情',
+    announcementDismiss: '关闭',
+    announcementGotIt: '我知道了',
+    announcementPublishedAt: '发布时间',
     exportPrivateKeyTitle: '导出账户私钥',
     exportPrivateKeyButton: '导出私钥',
     exportPrivateKeyWarning: '警告：掌握私钥即拥有账户全部权限。请勿截图、拍照或泄露给任何人，建议抄写后离线妥善保管。',
@@ -417,6 +459,18 @@ function formatDate(input: Date) {
   return `${y}.${m}.${d}`;
 }
 
+function toDateKey(input: Date) {
+  const y = input.getFullYear();
+  const m = `${input.getMonth() + 1}`.padStart(2, '0');
+  const d = `${input.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseFiniteNumber(value: unknown): number {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
 export default function App() {
   const [walletAddress, setWalletAddress] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
@@ -449,13 +503,18 @@ export default function App() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [agreementDeclined, setAgreementDeclined] = useState(false);
   const [agreementError, setAgreementError] = useState('');
+  const [announcements, setAnnouncements] = useState<AnnouncementDto[]>([]);
+  const [announcementReadIds, setAnnouncementReadIds] = useState<string[]>([]);
+  const [announcementVisible, setAnnouncementVisible] = useState(false);
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryActionNameRef = useRef<ActionType>('');
+  const announcementAutoShownRef = useRef(false);
 
-  const t = translations[lang];
+  const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
   const identityReady = Boolean(walletAddress && userId && deviceId);
   const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
@@ -468,6 +527,22 @@ export default function App() {
   const agreementNeedsAcceptance = agreementRequired
     && userAgreement
     && acceptedAgreementVersion !== userAgreement.version;
+  const hasActiveContract = Boolean(userDetails?.contractActive) && !contractExpired;
+  const announcementReadSet = useMemo(() => new Set(announcementReadIds), [announcementReadIds]);
+  const visibleAnnouncements = useMemo(
+    () => announcements.filter((item) => item.target === 'all' || hasActiveContract),
+    [announcements, hasActiveContract],
+  );
+  const selectedAnnouncement = useMemo(
+    () => visibleAnnouncements.find((item) => item.id === selectedAnnouncementId) ?? null,
+    [visibleAnnouncements, selectedAnnouncementId],
+  );
+  const unreadAnnouncement = useMemo(
+    () => visibleAnnouncements.find((item) => item.isPinned && !announcementReadSet.has(item.id))
+      ?? visibleAnnouncements.find((item) => !announcementReadSet.has(item.id))
+      ?? null,
+    [announcementReadSet, visibleAnnouncements],
+  );
 
   const isInsufficientBnbError = (message: string) => {
     const msg = message.toLowerCase();
@@ -613,21 +688,80 @@ export default function App() {
     [t.txSubmit, t.txConfirming, t.txSuccess, t.txFailed]
   );
 
+  const rewardRows = useMemo(() => {
+    return (userDetails?.rewards ?? []).map((item) => ({
+      rewardUsdt: parseFiniteNumber(item.reward_usdt),
+      createdAt: item.created_at,
+    }));
+  }, [userDetails?.rewards]);
+
   const chartValues = useMemo(() => {
-    const base = Math.max(800, Math.floor(monthProgressMinutes * 1.6));
+    const totalDays = 7;
+    const values = new Array<number>(totalDays).fill(0);
+    const dayIndexMap = new Map<string, number>();
+
+    for (let idx = totalDays - 1; idx >= 0; idx -= 1) {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() - idx);
+      dayIndexMap.set(toDateKey(date), totalDays - 1 - idx);
+    }
+
+    rewardRows.forEach((row) => {
+      const date = new Date(row.createdAt);
+      if (Number.isNaN(date.getTime())) return;
+      const bucketIndex = dayIndexMap.get(toDateKey(date));
+      if (bucketIndex === undefined) return;
+      values[bucketIndex] += row.rewardUsdt;
+    });
+
+    const hasRealData = values.some((value) => value > 0);
+    if (hasRealData) {
+      return values.map((value) => Number(value.toFixed(3)));
+    }
+
+    const base = Math.max(80, Math.floor(monthProgressMinutes * 0.18));
     return [
-      Math.floor(base * 0.46),
-      Math.floor(base * 0.62),
-      Math.floor(base * 0.51),
-      Math.floor(base * 0.75),
-      Math.floor(base * 0.68),
-      Math.floor(base * 0.89),
+      Number((base * 0.46).toFixed(3)),
+      Number((base * 0.62).toFixed(3)),
+      Number((base * 0.51).toFixed(3)),
+      Number((base * 0.75).toFixed(3)),
+      Number((base * 0.68).toFixed(3)),
+      Number((base * 0.89).toFixed(3)),
+      Number((base * 0.84).toFixed(3)),
     ];
-  }, [monthProgressMinutes]);
+  }, [rewardRows, monthProgressMinutes]);
 
   const chartMax = Math.max(...chartValues, 1);
-  const totalRewardUsdt = Number(userDetails?.totalRewardUsdt ?? '0');
-  const totalRewardSuper = Number(userDetails?.totalRewardSuper ?? '0');
+  const totalRewardUsdt = parseFiniteNumber(userDetails?.totalRewardUsdt);
+  const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
+  const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
+  const claimableRewardUsdt = Math.max(0, Math.min(totalRewardUsdt, todayRewardUsdt));
+  const rewardRatePerHour = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
+  const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
+  const rewardRateDailyChange = yesterdayRewardUsdt > 0
+    ? ((todayRewardUsdt - yesterdayRewardUsdt) / yesterdayRewardUsdt) * 100
+    : todayRewardUsdt > 0 ? 100 : 0;
+
+  const curveAvg = chartValues.reduce((sum, item) => sum + item, 0) / Math.max(1, chartValues.length);
+  const variance = chartValues.reduce((sum, item) => sum + (item - curveAvg) ** 2, 0) / Math.max(1, chartValues.length);
+  const volatility = curveAvg > 0 ? (Math.sqrt(variance) / curveAvg) * 100 : 100;
+
+  const marketTrend = rewardRateDailyChange >= 8
+    ? (lang === 'zh' ? '上涨' : 'Uptrend')
+    : rewardRateDailyChange <= -8
+      ? (lang === 'zh' ? '回调' : 'Pullback')
+      : (lang === 'zh' ? '震荡' : 'Sideways');
+
+  const marketRisk = volatility >= 40
+    ? (lang === 'zh' ? '高风险' : 'High Risk')
+    : volatility >= 20
+      ? (lang === 'zh' ? '中风险' : 'Medium Risk')
+      : (lang === 'zh' ? '低风险' : 'Low Risk');
+
+  const marketHint = lang === 'zh'
+    ? `近7天波动率 ${volatility.toFixed(1)}%，建议关注收益稳定性。`
+    : `7-day volatility ${volatility.toFixed(1)}%. Keep an eye on yield stability.`;
 
   const refreshGasFundedBalance = async (wallet: string) => {
     const balance = await getGasWalletBalance(wallet);
@@ -806,6 +940,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const restoreAnnouncementReads = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(ANNOUNCEMENT_READ_KEY);
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as unknown;
+        if (Array.isArray(parsed)) {
+          setAnnouncementReadIds(parsed.filter((item): item is string => typeof item === 'string'));
+        }
+      } catch {
+        setAnnouncementReadIds([]);
+      }
+    };
+    void restoreAnnouncementReads();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const items = await getAnnouncements();
+      if (!cancelled) {
+        setAnnouncements(items);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (maintenanceEnabled || agreementNeedsAcceptance || onboardingVisible) return;
+    if (announcementAutoShownRef.current) return;
+    if (announcementVisible) return;
+    if (!unreadAnnouncement) return;
+    announcementAutoShownRef.current = true;
+    setSelectedAnnouncementId(unreadAnnouncement.id);
+    setAnnouncementVisible(true);
+  }, [agreementNeedsAcceptance, announcementVisible, maintenanceEnabled, onboardingVisible, unreadAnnouncement]);
+
+  useEffect(() => {
     return () => {
       if (swapConfirmTimerRef.current) {
         clearTimeout(swapConfirmTimerRef.current);
@@ -823,6 +996,41 @@ export default function App() {
     } catch {
       // ignore
     }
+  };
+
+  const persistAnnouncementReads = async (ids: string[]) => {
+    setAnnouncementReadIds(ids);
+    try {
+      await AsyncStorage.setItem(ANNOUNCEMENT_READ_KEY, JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+  };
+
+  const markAnnouncementAsRead = async (announcementId: string) => {
+    if (!announcementId || announcementReadSet.has(announcementId)) return;
+    const next = Array.from(new Set([...announcementReadIds, announcementId]));
+    await persistAnnouncementReads(next);
+    if (userId && walletAddress) {
+      try {
+        await markAnnouncementReadApi(userId, announcementId, walletAddress);
+      } catch {
+        // ignore server sync failures, local read state already recorded
+      }
+    }
+  };
+
+  const handleOpenAnnouncement = (announcementId: string) => {
+    setSelectedAnnouncementId(announcementId);
+    setAnnouncementVisible(true);
+  };
+
+  const handleDismissAnnouncement = async () => {
+    if (selectedAnnouncementId) {
+      await markAnnouncementAsRead(selectedAnnouncementId);
+    }
+    setAnnouncementVisible(false);
+    setSelectedAnnouncementId(null);
   };
 
   const handleAcceptAgreement = async () => {
@@ -929,8 +1137,12 @@ export default function App() {
     setStatus(t.initDoing);
 
     try {
-      const status = await getSystemStatus();
+      const [status, announcementItems] = await Promise.all([
+        getSystemStatus(),
+        getAnnouncements(),
+      ]);
       setSystemStatus(status);
+      setAnnouncements(announcementItems);
 
       const address = await getWalletAddress();
       setWalletAddress(address);
@@ -1381,6 +1593,41 @@ export default function App() {
             />
           )}
 
+          {visibleAnnouncements.length > 0 && (
+            <View style={styles.announcementCard}>
+              <View style={styles.announcementCardHeader}>
+                <Text style={styles.announcementCardTitle}>{t.announcementCenter}</Text>
+                <Text style={styles.announcementCount}>{visibleAnnouncements.length}</Text>
+              </View>
+              {visibleAnnouncements.slice(0, 3).map((item) => {
+                const isRead = announcementReadSet.has(item.id);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.announcementItem}
+                    onPress={() => handleOpenAnnouncement(item.id)}
+                  >
+                    <View style={styles.announcementItemTop}>
+                      <View style={styles.announcementBadgeRow}>
+                        {item.isPinned && <Text style={styles.announcementPinned}>{t.announcementPinned}</Text>}
+                        <Text style={[styles.announcementLevel, item.level === 'critical' ? styles.announcementLevelCritical : item.level === 'warning' ? styles.announcementLevelWarning : styles.announcementLevelInfo]}>{item.level}</Text>
+                      </View>
+                      {!isRead && <View style={styles.announcementUnreadDot} />}
+                    </View>
+                    <Text style={styles.announcementItemTitle}>{lang === 'zh' ? item.titleZh : item.titleEn}</Text>
+                    <Text style={styles.announcementItemBody} numberOfLines={2}>{lang === 'zh' ? item.contentZh : item.contentEn}</Text>
+                    <View style={styles.announcementItemFooter}>
+                      <Text style={styles.announcementMetaText}>
+                        {t.announcementPublishedAt}: {new Date(item.publishAt ?? item.createdAt).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')}
+                      </Text>
+                      <Text style={styles.announcementReadMore}>{t.announcementReadMore}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           {activeTab === 'home' && (
             <HomeTab
               displayId={displayId}
@@ -1406,8 +1653,16 @@ export default function App() {
 
           {activeTab === 'earnings' && (
             <EarningsTab
+              marketTrend={marketTrend}
+              marketRisk={marketRisk}
+              marketHint={marketHint}
               totalRewardUsdt={totalRewardUsdt}
               totalRewardSuper={totalRewardSuper}
+              todayRewardUsdt={todayRewardUsdt}
+              claimableRewardUsdt={claimableRewardUsdt}
+              rewardTokenSymbol="SUPER"
+              rewardRatePerHour={rewardRatePerHour}
+              rewardRateDailyChange={rewardRateDailyChange}
               isBusy={isBusy}
               identityReady={identityReady}
               chartValues={chartValues}
@@ -1484,6 +1739,41 @@ export default function App() {
 
         <BottomNav activeTab={activeTab} tabs={bottomTabs} onChange={setActiveTab} />
       </View>
+
+      <Modal
+        visible={announcementVisible && Boolean(selectedAnnouncement)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => void handleDismissAnnouncement()}
+      >
+        <Pressable style={styles.modalMask} onPress={() => void handleDismissAnnouncement()}>
+          <Pressable style={styles.modalCardLarge}>
+            <View style={styles.announcementModalHeader}>
+              <View style={styles.announcementBadgeRow}>
+                {selectedAnnouncement?.isPinned && <Text style={styles.announcementPinned}>{t.announcementPinned}</Text>}
+                {selectedAnnouncement && <Text style={[styles.announcementLevel, selectedAnnouncement.level === 'critical' ? styles.announcementLevelCritical : selectedAnnouncement.level === 'warning' ? styles.announcementLevelWarning : styles.announcementLevelInfo]}>{selectedAnnouncement.level}</Text>}
+              </View>
+              <Text style={styles.announcementMetaText}>
+                {selectedAnnouncement ? `${t.announcementPublishedAt}: ${new Date(selectedAnnouncement.publishAt ?? selectedAnnouncement.createdAt).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}` : ''}
+              </Text>
+            </View>
+
+            <Text style={styles.modalTitle}>{selectedAnnouncement ? (lang === 'zh' ? selectedAnnouncement.titleZh : selectedAnnouncement.titleEn) : ''}</Text>
+            <ScrollView style={styles.announcementScroll} contentContainerStyle={styles.announcementScrollContent}>
+              <Text style={styles.announcementModalBody}>{selectedAnnouncement ? (lang === 'zh' ? selectedAnnouncement.contentZh : selectedAnnouncement.contentEn) : ''}</Text>
+            </ScrollView>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalGhostBtn} onPress={() => void handleDismissAnnouncement()}>
+                <Text style={styles.modalGhostBtnText}>{t.announcementDismiss}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => void handleDismissAnnouncement()}>
+                <Text style={styles.modalPrimaryBtnText}>{t.announcementGotIt}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={gasAssistVisible}
@@ -2183,6 +2473,117 @@ const styles = StyleSheet.create({
   disabledBtn: {
     opacity: 0.55,
   },
+  announcementCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7c3aed',
+    backgroundColor: '#160a36',
+    padding: 14,
+    gap: 10,
+  },
+  announcementCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  announcementCardTitle: {
+    color: '#f5f3ff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  announcementCount: {
+    minWidth: 24,
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#7c3aed',
+    color: '#f8fafc',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  announcementItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#312e81',
+    backgroundColor: '#1e123f',
+    padding: 12,
+    gap: 6,
+  },
+  announcementItemTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  announcementBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  announcementPinned: {
+    borderRadius: 999,
+    backgroundColor: '#c026d3',
+    color: '#fdf4ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: '800',
+    overflow: 'hidden',
+  },
+  announcementLevel: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: '800',
+    overflow: 'hidden',
+    textTransform: 'uppercase',
+  },
+  announcementLevelInfo: {
+    backgroundColor: '#0f3f63',
+    color: '#bae6fd',
+  },
+  announcementLevelWarning: {
+    backgroundColor: '#5b3a03',
+    color: '#fde68a',
+  },
+  announcementLevelCritical: {
+    backgroundColor: '#5b1020',
+    color: '#fecdd3',
+  },
+  announcementUnreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#f59e0b',
+  },
+  announcementItemTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  announcementItemBody: {
+    color: '#d8d4fe',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  announcementItemFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  announcementMetaText: {
+    color: '#a5b4fc',
+    fontSize: 11,
+    flex: 1,
+  },
+  announcementReadMore: {
+    color: '#f0abfc',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   modalMask: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.6)',
@@ -2196,6 +2597,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#082a5d',
     padding: 16,
     gap: 10,
+  },
+  modalCardLarge: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#8b5cf6',
+    backgroundColor: '#120a2e',
+    padding: 16,
+    gap: 12,
+    maxHeight: '80%',
   },
   modalTitle: {
     color: '#ecfeff',
@@ -2225,6 +2635,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 6,
+  },
+  announcementModalHeader: {
+    gap: 8,
+  },
+  announcementScroll: {
+    maxHeight: 320,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#312e81',
+    backgroundColor: '#1a1040',
+  },
+  announcementScrollContent: {
+    padding: 14,
+  },
+  announcementModalBody: {
+    color: '#ede9fe',
+    fontSize: 14,
+    lineHeight: 22,
   },
   gasTokenRow: {
     flexDirection: 'row',

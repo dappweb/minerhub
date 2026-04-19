@@ -1,4 +1,5 @@
 import { internalError, json, notFound } from "./lib/response";
+import { handleAnnouncements } from "./routes/announcements";
 import { runScheduledTasks } from "./lib/scheduled";
 import { handleAdmin } from "./routes/admin";
 import { handleClaims } from "./routes/claims";
@@ -38,6 +39,7 @@ export default {
       }
 
       if (scope === "system") return await handleSystem(request, env, pathParts);
+      if (scope === "announcements") return await handleAnnouncements(request, env, pathParts);
       if (scope === "admin") return await handleAdmin(request, env, pathParts);
       if (scope === "owner") return await handleOwner(request, env, pathParts);
 

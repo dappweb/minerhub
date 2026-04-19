@@ -228,6 +228,23 @@ export type SystemStatusDto = {
   timestamp?: string;
 };
 
+export type AnnouncementDto = {
+  id: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+  level: 'info' | 'warning' | 'critical';
+  target: 'all' | 'active_contract';
+  isPublished: boolean;
+  isPinned: boolean;
+  publishAt: string | null;
+  expireAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type UserDetailsDto = UserDto & {
   status?: string | null;
   nickname?: string | null;
@@ -281,6 +298,19 @@ export async function getSystemStatus(): Promise<SystemStatusDto | null> {
   } catch {
     return null;
   }
+}
+
+export async function getAnnouncements(): Promise<AnnouncementDto[]> {
+  try {
+    const result = await request<{ items: AnnouncementDto[] }>("/api/announcements");
+    return result.items ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function markAnnouncementRead(userId: string, announcementId: string, wallet: string): Promise<{ ok: boolean; announcementId: string; readAt: string }> {
+  return signedRequest<{ ok: boolean; announcementId: string; readAt: string }>(`/api/announcements/users/${userId}/read/${announcementId}`, 'POST', { wallet });
 }
 
 export async function registerDevice(payload: {

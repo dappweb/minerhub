@@ -125,6 +125,33 @@ CREATE TABLE IF NOT EXISTS user_agreement_acceptances (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS announcements (
+  id TEXT PRIMARY KEY,
+  title_zh TEXT NOT NULL,
+  title_en TEXT NOT NULL,
+  content_zh TEXT NOT NULL,
+  content_en TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT 'info',
+  target TEXT NOT NULL DEFAULT 'all',
+  is_published INTEGER NOT NULL DEFAULT 0,
+  is_pinned INTEGER NOT NULL DEFAULT 0,
+  publish_at TEXT,
+  expire_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS announcement_reads (
+  announcement_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  wallet TEXT,
+  read_at TEXT NOT NULL,
+  PRIMARY KEY (announcement_id, user_id),
+  FOREIGN KEY (announcement_id) REFERENCES announcements(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS customer_profiles (
   user_id TEXT PRIMARY KEY,
   parent_user_id TEXT,
@@ -202,6 +229,9 @@ CREATE TABLE IF NOT EXISTS reward_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_parent_user_id ON customer_profiles(parent_user_id);
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_contract_active ON customer_profiles(contract_active);
+CREATE INDEX IF NOT EXISTS idx_announcements_publish_at ON announcements(publish_at);
+CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published, is_pinned);
+CREATE INDEX IF NOT EXISTS idx_announcement_reads_user_id ON announcement_reads(user_id);
 CREATE INDEX IF NOT EXISTS idx_sub_accounts_owner_user_id ON sub_accounts(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_payout_wallets_user_id ON payout_wallets(user_id);
 CREATE INDEX IF NOT EXISTS idx_device_status_history_device_id ON device_status_history(device_id);
