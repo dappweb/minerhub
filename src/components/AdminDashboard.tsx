@@ -352,13 +352,17 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('');
       setBackendLoading(true);
 
+      const announcementsPath = `/api/announcements/admin${announcementFilter === 'all' ? '' : `?status=${announcementFilter}`}`;
+      const announcementsPromise = ownerReadRequest<{ items: AnnouncementItem[] }>(announcementsPath)
+        .catch(() => ({ items: [] }));
+
       const [statusResponse, customersResponse, announcementsResponse] = await Promise.all([
         fetch(`${apiBaseUrl}/api/system/status`).then(async (response) => {
           if (!response.ok) return null;
           return (await response.json()) as SystemStatus;
         }).catch(() => null),
         ownerReadRequest<{ items: CustomerItem[] }>('/api/admin/customers'),
-        ownerReadRequest<{ items: AnnouncementItem[] }>(`/api/announcements/admin${announcementFilter === 'all' ? '' : `?status=${announcementFilter}`}`),
+        announcementsPromise,
       ]);
 
       setSystemStatus(statusResponse);
