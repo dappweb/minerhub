@@ -8,7 +8,9 @@ import React, { Suspense } from 'react';
 import type { Address } from 'viem';
 import { verifyMessage } from 'viem';
 import { useAccount, useChainId, useSignMessage, useSwitchChain } from 'wagmi';
+import BscBadge from './components/BscBadge';
 import Hero from './components/Hero';
+import SuperLogo from './components/SuperLogo';
 import { getMiningPoolOwnerOnChain } from './lib/blockchain';
 import { coinPlanetChain } from './lib/wallet';
 
@@ -357,16 +359,15 @@ export default function App() {
       {!isAdminView && (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-8 h-8 rounded flex items-center justify-center font-bold text-white"
-              style={{ backgroundImage: 'linear-gradient(135deg, #22d3ee 0%, #2563eb 100%)' }}
-            >
-              M
+          <div className="flex items-center gap-3">
+            <SuperLogo variant="mark" size={32} />
+            <div className="flex flex-col leading-tight">
+              <span className="font-bold text-lg tracking-tight">Coin Planet</span>
+              <span className="text-[10px] uppercase tracking-widest text-[#F0B90B]">SUPER on BNB Chain</span>
             </div>
-            <span className="font-bold text-xl tracking-tight">Coin Planet</span>
           </div>
           <div className="hidden md:flex items-center gap-3 text-sm font-medium text-slate-300">
+            <BscBadge className="hidden lg:inline-flex" />
             {renderOwnerDashboardEntry(
               'px-4 py-2 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors',
             )}
@@ -449,8 +450,19 @@ export default function App() {
 
       {!isAdminView && (
       <footer className="bg-slate-900 py-12 border-t border-slate-800 text-center text-slate-400 text-sm">
-        <p>Coin Planet 手机挖矿系统 v1.0</p>
-        <p className="mt-2">将手机从"消费电子产品"升级为"生产力工具"</p>
+        <div className="flex flex-col items-center gap-3">
+          <BscBadge />
+          <p>Coin Planet · SUPER (BEP-20) 手机挖矿系统 v1.0</p>
+          <p className="text-slate-500">Built on BNB Smart Chain · 将手机从"消费电子产品"升级为"生产力工具"</p>
+          <a
+            href="https://testnet.bscscan.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#F0B90B] hover:text-[#FCD535] text-xs"
+          >
+            View on BscScan →
+          </a>
+        </div>
       </footer>
       )}
     </div>

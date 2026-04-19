@@ -72,7 +72,7 @@ const INIT_RETRY_DELAY_MS = 8_000;
 const translations = {
   en: {
     appTitle: 'Coin Planet',
-    subtitle: 'Device Center',
+    subtitle: 'Device Center · BNB Smart Chain',
     flow1: 'Finish identity setup to unlock on-chain actions',
     flow2: 'Register miner to start rewards',
     flow3: 'Daily mode: swap and claim rewards',
@@ -244,7 +244,7 @@ const translations = {
   },
   zh: {
     appTitle: 'Coin Planet',
-    subtitle: '设备中心',
+    subtitle: '设备中心 · BNB 智能链',
     flow1: '请先完成身份初始化，解锁链上操作',
     flow2: '请先注册矿机，开始计收益',
     flow3: '日常模式：兑换与领取收益',

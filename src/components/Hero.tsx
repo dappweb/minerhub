@@ -1,30 +1,34 @@
 ﻿import { ArrowRight, Coins, Shield, Smartphone, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
+import BscBadge from './BscBadge';
 
 export default function Hero() {
   return (
     <section className="relative pt-32 pb-20 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-slate-950 to-slate-950"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#F0B90B]/15 via-slate-950 to-slate-950"></div>
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         <div className="text-center max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-sm font-medium mb-8"
+            className="inline-flex items-center gap-3 mb-8"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            <BscBadge />
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-sm font-medium">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
+              Android / iOS 挖矿客户端已发布
             </span>
-            Android / iOS 挖矿客户端已发布
           </motion.div>
           
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-cyan-100 to-cyan-400"
+            className="text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-[#FCD535] via-white to-[#22D3EE]"
           >
             手机即节点，链上即收益
           </motion.h1>
@@ -35,7 +39,7 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-xl text-slate-400 mb-10 leading-relaxed"
           >
-            连接管理员钱包后可直接进入数据面板，实时查看矿工状态、全网算力与链上收益发放。下载客户端即可开始设备注册和算力同步。
+            基于 <span className="text-[#F0B90B] font-semibold">BNB Smart Chain</span> 的 SUPER (BEP-20) 挖矿生态。连接管理员钱包后可直接进入数据面板，实时查看矿工状态、全网算力与链上收益发放。
           </motion.p>
           
           <motion.div 

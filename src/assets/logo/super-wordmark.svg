@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" fill="none">
+  <defs>
+    <linearGradient id="wm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F0B90B"/>
+      <stop offset="0.55" stop-color="#FCD535"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <!-- diamond as the "U" accent -->
+  <g transform="translate(260 80) rotate(45)">
+    <rect x="-38" y="-38" width="76" height="76" rx="10" fill="#0B0E11" stroke="url(#wm)" stroke-width="5"/>
+  </g>
+  <text x="20"  y="112" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-weight="800" font-size="104" letter-spacing="6" fill="url(#wm)">S</text>
+  <text x="108" y="112" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-weight="800" font-size="104" letter-spacing="6" fill="url(#wm)">P</text>
+  <text x="198" y="112" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-weight="800" font-size="104" letter-spacing="6" fill="url(#wm)">E</text>
+  <text x="320" y="112" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-weight="800" font-size="104" letter-spacing="6" fill="url(#wm)">R</text>
+  <!-- BSC tag -->
+  <g transform="translate(410 62)">
+    <rect width="210" height="38" rx="19" fill="#F0B90B"/>
+    <text x="105" y="25" text-anchor="middle" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-weight="700" font-size="18" fill="#0B0E11">on BNB SMART CHAIN</text>
+  </g>
+</svg>
