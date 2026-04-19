@@ -17,4 +17,9 @@ export const wagmiConfig = createConfig({
   transports: { [coinPlanetChain.id]: http(rpcUrl) },
 });
 
-export const privyAppId = (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() ?? '';
+// Privy App ID is a public client-side identifier (not a secret). We fall back
+// to the known app ID so that deployments without the env var configured still
+// work. Override via VITE_PRIVY_APP_ID when needed.
+const DEFAULT_PRIVY_APP_ID = 'cmnmwq14i01dc0cjl06ehqrem';
+export const privyAppId =
+  (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() || DEFAULT_PRIVY_APP_ID;
