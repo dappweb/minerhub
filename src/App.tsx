@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { usePrivy } from '@privy-io/react-auth';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import React, { Suspense } from 'react';
 import type { Address } from 'viem';
 import { verifyMessage } from 'viem';
@@ -261,71 +261,75 @@ export default function App() {
     void verifyOwnerSignatureAndEnter(adminWallet);
   }, [adminWallet, isOwnerAddress, isSignaturePending, isSignatureVerified, verifyOwnerSignatureAndEnter]);
 
-  const { login: privyLogin, ready: privyReady, authenticated: privyAuthenticated } = usePrivy();
+  const renderConnectAction = (className: string, showConnectedLabel: boolean) => (
+    <ConnectButton.Custom>
+      {({ account, mounted, openConnectModal }) => {
+        const ready = mounted;
+        const connected = Boolean(ready && account);
 
-  const renderConnectAction = (className: string, showConnectedLabel: boolean) => {
-    const connected = Boolean(privyReady && privyAuthenticated && address);
+        const label = !connected
+          ? '连接钱包'
+          : isOwnerAddress(account.address)
+            ? showConnectedLabel
+              ? isSignatureVerified
+                ? `已验证 ${formatWallet(account.address)}`
+                : `待签名 ${formatWallet(account.address)}`
+              : isSignaturePending
+                ? '签名验证中...'
+                : '签名验证进入后台'
+            : '非 owner 钱包';
 
-    const label = !connected
-      ? '连接钱包'
-      : isOwnerAddress(address)
-        ? showConnectedLabel
-          ? isSignatureVerified
-            ? `已验证 ${formatWallet(address!)}`
-            : `待签名 ${formatWallet(address!)}`
-          : isSignaturePending
-            ? '签名验证中...'
-            : '签名验证进入后台'
-        : '非 owner 钱包';
+        return (
+          <button
+            onClick={() => {
+              if (!connected) {
+                openConnectModal();
+                return;
+              }
 
-    return (
-      <button
-        onClick={() => {
-          if (!privyReady) return;
-          if (!connected) {
-            privyLogin();
-            return;
-          }
+              if (!isOwnerAddress(account.address)) {
+                setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
+                setViewMode('website');
+                return;
+              }
 
-          if (!isOwnerAddress(address)) {
-            setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
-            setViewMode('website');
-            return;
-          }
+              void verifyOwnerSignatureAndEnter(account.address);
+            }}
+            className={className}
+            type="button"
+          >
+            {label}
+          </button>
+        );
+      }}
+    </ConnectButton.Custom>
+  );
 
-          void verifyOwnerSignatureAndEnter(address!);
-        }}
-        className={className}
-        type="button"
-        disabled={!privyReady}
-      >
-        {label}
-      </button>
-    );
-  };
+  const renderOwnerDashboardEntry = (className: string) => (
+    <ConnectButton.Custom>
+      {({ account, mounted, openConnectModal }) => {
+        const ready = mounted;
+        const connected = Boolean(ready && account);
 
-  const renderOwnerDashboardEntry = (className: string) => {
-    const connected = Boolean(privyReady && privyAuthenticated && address);
+        return (
+          <button
+            onClick={() => {
+              if (!connected) {
+                openConnectModal();
+                return;
+              }
 
-    return (
-      <button
-        onClick={() => {
-          if (!privyReady) return;
-          if (!connected) {
-            privyLogin();
-            return;
-          }
-
-          void verifyOwnerSignatureAndEnter(address!);
-        }}
-        className={className}
-        type="button"
-        disabled={!privyReady}
-      >
-        数据面板
-      </button>
-    );
-  };
+              void verifyOwnerSignatureAndEnter(account.address);
+            }}
+            className={className}
+            type="button"
+          >
+            数据面板
+          </button>
+        );
+      }}
+    </ConnectButton.Custom>
+  );
 
   if (!isAdminView && maintenanceEnabled) {
     return (

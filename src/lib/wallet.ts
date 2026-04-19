@@ -1,6 +1,13 @@
-import { createConfig } from '@privy-io/wagmi';
+import {
+  coinbaseWallet,
+  injectedWallet,
+  metaMaskWallet,
+  okxWallet,
+  walletConnectWallet,
+} from '@rainbow-me/rainbowkit/wallets';
 import { defineChain } from 'viem';
-import { http } from 'wagmi';
+import { createConfig, http } from 'wagmi';
+import { connectorsForWallets } from '@rainbow-me/rainbowkit';
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 97);
 const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
@@ -12,14 +19,32 @@ export const coinPlanetChain = defineChain({
   rpcUrls: { default: { http: [rpcUrl] }, public: { http: [rpcUrl] } },
 });
 
+export const walletConnectProjectId = (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? '').trim();
+
+const hasWalletConnectProjectId = /^[a-z0-9]{16,}$/i.test(walletConnectProjectId);
+
+const recommendedWallets = [
+  metaMaskWallet,
+  injectedWallet,
+  coinbaseWallet,
+  okxWallet,
+  ...(hasWalletConnectProjectId ? [walletConnectWallet] : []),
+];
+
 export const wagmiConfig = createConfig({
   chains: [coinPlanetChain],
+  connectors: connectorsForWallets(
+    [
+      {
+        groupName: hasWalletConnectProjectId ? 'Recommended' : 'Browser Wallets',
+        wallets: recommendedWallets,
+      },
+    ],
+    {
+      appName: 'Coin Planet Admin',
+      projectId: hasWalletConnectProjectId ? walletConnectProjectId : 'disabled-walletconnect',
+    },
+  ),
   transports: { [coinPlanetChain.id]: http(rpcUrl) },
+  ssr: false,
 });
-
-// Privy App ID is a public client-side identifier (not a secret). We fall back
-// to the known app ID so that deployments without the env var configured still
-// work. Override via VITE_PRIVY_APP_ID when needed.
-const DEFAULT_PRIVY_APP_ID = 'cmnmwq14i01dc0cjl06ehqrem';
-export const privyAppId =
-  (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() || DEFAULT_PRIVY_APP_ID;

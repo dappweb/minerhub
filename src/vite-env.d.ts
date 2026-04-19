@@ -15,7 +15,6 @@ interface ImportMetaEnv {
   readonly VITE_SWAP_CONTRACT_ADDRESS?: string;
   readonly VITE_SWAP_ROUTER_ADDRESS?: string;
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string;
-  readonly VITE_PRIVY_APP_ID?: string;
 }
 
 interface ImportMeta {
