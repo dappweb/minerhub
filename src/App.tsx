@@ -7,9 +7,10 @@ import { usePrivy } from '@privy-io/react-auth';
 import React, { Suspense } from 'react';
 import type { Address } from 'viem';
 import { verifyMessage } from 'viem';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount, useChainId, useSignMessage, useSwitchChain } from 'wagmi';
 import Hero from './components/Hero';
 import { getMiningPoolOwnerOnChain } from './lib/blockchain';
+import { coinPlanetChain } from './lib/wallet';
 
 // Lazy-load non-critical components for faster initial render
 const AppPreview = React.lazy(() => import('./components/AppPreview'));
@@ -43,6 +44,32 @@ export default function App() {
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
+  const currentChainId = useChainId();
+  const { switchChainAsync, switchChain } = useSwitchChain();
+
+  // Auto-switch / add BSC testnet whenever a wallet is connected on a
+  // different chain. wagmi's switchChain will call wallet_switchEthereumChain
+  // and fall back to wallet_addEthereumChain automatically if the network is
+  // not yet in the wallet (works for MetaMask, OneKey, OKX, TokenPocket...).
+  React.useEffect(() => {
+    if (!isConnected) return;
+    if (!currentChainId) return;
+    if (currentChainId === coinPlanetChain.id) return;
+    try {
+      // Prefer async to surface errors; fall back to fire-and-forget.
+      if (switchChainAsync) {
+        void switchChainAsync({ chainId: coinPlanetChain.id }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn('[wallet] failed to switch to BSC testnet:', err);
+        });
+      } else {
+        switchChain({ chainId: coinPlanetChain.id });
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[wallet] switchChain threw:', err);
+    }
+  }, [isConnected, currentChainId, switchChainAsync, switchChain]);
 
   const signAdminMessage = React.useCallback(
     async (walletAddress: string, message: string) => {
@@ -65,10 +92,15 @@ export default function App() {
 
   const extraAdminAddresses = React.useMemo(() => {
     const raw = (import.meta.env.VITE_ADMIN_ADDRESSES as string | undefined) || '';
-    return raw
+    const fromEnv = raw
       .split(',')
       .map((s) => s.trim().toLowerCase())
       .filter((s) => /^0x[0-9a-f]{40}$/i.test(s));
+    // Fallback: hard-coded admin allowlist so production works even when the
+    // Cloudflare Pages env var is not yet configured. These addresses are
+    // already public (they are treasury/admin wallets on BSC testnet).
+    const fallback = ['0xca949919f03e3e52949d1436442312d8a023fe41'];
+    return Array.from(new Set([...fromEnv, ...fallback]));
   }, []);
 
   React.useEffect(() => {
