@@ -41,6 +41,22 @@ function normalizeTxError(error: unknown): Error {
     const raw = error.message || 'Transaction failed';
     const msg = raw.toLowerCase();
 
+    // Try to extract an explicit revert reason if the underlying error carries one.
+    // viem errors expose properties like `shortMessage`, `details`, `metaMessages`,
+    // or the revert reason after `reverted with the following reason:\n<reason>`.
+    let revertReason = '';
+    const reasonMatch = raw.match(/reverted with the following reason:\s*\n?\s*([^\n]+)/i);
+    if (reasonMatch) {
+      revertReason = reasonMatch[1].trim();
+    } else {
+      const anyErr = error as { shortMessage?: unknown; details?: unknown };
+      if (typeof anyErr.shortMessage === 'string' && anyErr.shortMessage) {
+        revertReason = anyErr.shortMessage;
+      } else if (typeof anyErr.details === 'string' && anyErr.details) {
+        revertReason = anyErr.details;
+      }
+    }
+
     if (msg.includes('insufficient') || msg.includes('exceeds the balance')) {
       return new Error('Insufficient BNB for gas or transfer value.');
     }
@@ -51,10 +67,10 @@ function normalizeTxError(error: unknown): Error {
       return new Error('Transaction confirmation timeout.');
     }
     if (msg.includes('execution reverted') || msg.includes('reverted')) {
-      return new Error(`Transaction reverted: ${firstLine(raw)}`);
+      return new Error(`Transaction reverted: ${revertReason || firstLine(raw)}`);
     }
 
-    return new Error(firstLine(raw));
+    return new Error(revertReason || firstLine(raw));
   }
 
   return new Error('Transaction failed');

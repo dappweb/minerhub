@@ -1,6 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
+import { runScheduledTasks } from "../lib/scheduled";
 import type { Env } from "../types/env";
 
 type CustomerSummary = {
@@ -66,6 +67,14 @@ function isOwnerWallet(env: Env, wallet: string | null): boolean {
   return Boolean(env.OWNER_ADDRESS && wallet && wallet.toLowerCase() === env.OWNER_ADDRESS.toLowerCase());
 }
 
+async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
+  const wallet = request.headers.get("x-wallet");
+  if (!isOwnerWallet(env, wallet)) {
+    return unauthorized("Owner wallet required");
+  }
+  return null;
+}
+
 async function requireOwner(request: Request, env: Env): Promise<Response | null> {
   const auth = await extractAndVerifyAuth(request, env);
   if (!auth.valid) {
@@ -116,7 +125,7 @@ function isNormalizedPayoutWallet(
 async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
   const { results } = await env.DB.prepare(
     `SELECT
-      u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, u.status AS status,
+      u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
       cp.nickname AS nickname, cp.machine_code AS machineCode, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -124,6 +133,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
       cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
+      COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COUNT(DISTINCT d.id) AS deviceCount,
       SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount,
       COUNT(DISTINCT sa.id) AS subAccountCount
@@ -131,9 +141,10 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
     LEFT JOIN sub_accounts sa ON sa.owner_user_id = u.id
-    GROUP BY u.id, u.wallet, u.email, u.role, u.status, cp.nickname, cp.machine_code, cp.contract_start_at,
+    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
-             cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status
+             cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
+             cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`
   ).all<CustomerSummary>();
 
@@ -150,7 +161,7 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
 
   const customer = await env.DB.prepare(
     `SELECT
-      u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, u.status AS status,
+      u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
       cp.nickname AS nickname, cp.machine_code AS machineCode, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -473,12 +484,380 @@ async function handleRewardAdjustment(request: Request, env: Env, userId: string
   return json({ ok: true, rewardId: id, totalRewardUsdt: nextUsdt, totalRewardSuper: nextSuper });
 }
 
+type RechargeRecord = {
+  id: string;
+  userId: string | null;
+  wallet: string;
+  payToken: string;
+  payAmount: string;
+  bnbAmount: string;
+  status: string;
+  relayMode: string;
+  relayTxHash: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WithdrawalRecord = {
+  id: string;
+  source: "claim" | "exchange";
+  userId: string;
+  wallet: string | null;
+  amountUsdt: string;
+  amountSuper: string;
+  status: string;
+  txHash: string | null;
+  payoutWallet: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ExchangeRecord = {
+  id: string;
+  userId: string | null;
+  wallet: string | null;
+  direction: string;
+  amountIn: string;
+  amountOut: string;
+  priceSnapshot: string;
+  status: string;
+  txHash: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function clampLimit(raw: string | null, fallback = 100, max = 500): number {
+  const value = Number(raw ?? fallback);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(Math.floor(value), max);
+}
+
+async function handleRechargeRecords(env: Env, url: URL): Promise<Response> {
+  const limit = clampLimit(url.searchParams.get("limit"));
+  const wallet = url.searchParams.get("wallet")?.trim().toLowerCase();
+  const status = url.searchParams.get("status")?.trim();
+
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+  if (wallet) {
+    clauses.push("LOWER(wallet) = ?");
+    params.push(wallet);
+  }
+  if (status) {
+    clauses.push("status = ?");
+    params.push(status);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, user_id, wallet, pay_token, pay_amount, bnb_amount, status, relay_mode,
+            relay_tx_hash, error_message, created_at, updated_at
+     FROM gas_orders ${where}
+     ORDER BY created_at DESC LIMIT ?`
+  )
+    .bind(...params, limit)
+    .all<{
+      id: string;
+      user_id: string | null;
+      wallet: string;
+      pay_token: string;
+      pay_amount: string;
+      bnb_amount: string;
+      status: string;
+      relay_mode: string;
+      relay_tx_hash: string | null;
+      error_message: string | null;
+      created_at: string;
+      updated_at: string;
+    }>();
+
+  const items: RechargeRecord[] = (results ?? []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    wallet: row.wallet,
+    payToken: row.pay_token,
+    payAmount: row.pay_amount,
+    bnbAmount: row.bnb_amount,
+    status: row.status,
+    relayMode: row.relay_mode,
+    relayTxHash: row.relay_tx_hash,
+    errorMessage: row.error_message,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+
+  return json({ items, limit });
+}
+
+async function handleWithdrawalRecords(env: Env, url: URL): Promise<Response> {
+  const limit = clampLimit(url.searchParams.get("limit"));
+  const userIdFilter = url.searchParams.get("userId")?.trim();
+  const walletFilter = url.searchParams.get("wallet")?.trim().toLowerCase();
+  const statusFilter = url.searchParams.get("status")?.trim();
+  const source = url.searchParams.get("source")?.trim(); // 'claim' | 'exchange' | undefined
+
+  const items: WithdrawalRecord[] = [];
+
+  if (!source || source === "exchange") {
+    const clauses: string[] = [];
+    const params: Array<string | number> = [];
+    if (userIdFilter) {
+      clauses.push("eo.user_id = ?");
+      params.push(userIdFilter);
+    }
+    if (walletFilter) {
+      clauses.push("LOWER(eo.wallet) = ?");
+      params.push(walletFilter);
+    }
+    if (statusFilter) {
+      clauses.push("eo.status = ?");
+      params.push(statusFilter);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    const { results } = await env.DB.prepare(
+      `SELECT eo.id AS id, eo.user_id AS user_id, eo.wallet AS wallet,
+              eo.amount_super AS amount_super, eo.amount_usdt AS amount_usdt,
+              eo.status AS status, eo.tx_hash AS tx_hash, eo.payout_wallet AS payout_wallet,
+              eo.request_note AS request_note, eo.created_at AS created_at, eo.updated_at AS updated_at
+       FROM exchange_orders eo ${where}
+       ORDER BY eo.created_at DESC LIMIT ?`
+    )
+      .bind(...params, limit)
+      .all<{
+        id: string;
+        user_id: string;
+        wallet: string;
+        amount_super: string;
+        amount_usdt: string;
+        status: string;
+        tx_hash: string | null;
+        payout_wallet: string | null;
+        request_note: string | null;
+        created_at: string;
+        updated_at: string;
+      }>();
+
+    for (const row of results ?? []) {
+      items.push({
+        id: row.id,
+        source: "exchange",
+        userId: row.user_id,
+        wallet: row.wallet,
+        amountUsdt: row.amount_usdt,
+        amountSuper: row.amount_super,
+        status: row.status,
+        txHash: row.tx_hash,
+        payoutWallet: row.payout_wallet,
+        note: row.request_note,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      });
+    }
+  }
+
+  if (!source || source === "claim") {
+    const clauses: string[] = [];
+    const params: Array<string | number> = [];
+    if (userIdFilter) {
+      clauses.push("c.user_id = ?");
+      params.push(userIdFilter);
+    }
+    if (walletFilter) {
+      clauses.push("LOWER(u.wallet) = ?");
+      params.push(walletFilter);
+    }
+    if (statusFilter) {
+      clauses.push("c.status = ?");
+      params.push(statusFilter);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    const { results } = await env.DB.prepare(
+      `SELECT c.id AS id, c.user_id AS user_id, u.wallet AS wallet,
+              c.amount AS amount, c.status AS status, c.tx_hash AS tx_hash,
+              c.created_at AS created_at, c.updated_at AS updated_at
+       FROM claims c LEFT JOIN users u ON u.id = c.user_id ${where}
+       ORDER BY c.created_at DESC LIMIT ?`
+    )
+      .bind(...params, limit)
+      .all<{
+        id: string;
+        user_id: string;
+        wallet: string | null;
+        amount: string;
+        status: string;
+        tx_hash: string | null;
+        created_at: string;
+        updated_at: string;
+      }>();
+
+    for (const row of results ?? []) {
+      items.push({
+        id: row.id,
+        source: "claim",
+        userId: row.user_id,
+        wallet: row.wallet,
+        amountUsdt: row.amount,
+        amountSuper: "0",
+        status: row.status,
+        txHash: row.tx_hash,
+        payoutWallet: null,
+        note: null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      });
+    }
+  }
+
+  items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+
+  return json({ items: items.slice(0, limit), limit });
+}
+
+async function handleExchangeRecords(env: Env, url: URL): Promise<Response> {
+  const limit = clampLimit(url.searchParams.get("limit"));
+  const userIdFilter = url.searchParams.get("userId")?.trim();
+  const walletFilter = url.searchParams.get("wallet")?.trim().toLowerCase();
+  const statusFilter = url.searchParams.get("status")?.trim();
+  const direction = url.searchParams.get("direction")?.trim();
+
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+  if (userIdFilter) {
+    clauses.push("user_id = ?");
+    params.push(userIdFilter);
+  }
+  if (walletFilter) {
+    clauses.push("LOWER(wallet) = ?");
+    params.push(walletFilter);
+  }
+  if (statusFilter) {
+    clauses.push("status = ?");
+    params.push(statusFilter);
+  }
+  if (direction) {
+    clauses.push("direction = ?");
+    params.push(direction);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, user_id, wallet, direction, amount_in, amount_out, price_snapshot,
+            status, tx_hash, note, created_at, updated_at
+     FROM swap_trade_logs ${where}
+     ORDER BY created_at DESC LIMIT ?`
+  )
+    .bind(...params, limit)
+    .all<{
+      id: string;
+      user_id: string | null;
+      wallet: string | null;
+      direction: string;
+      amount_in: string;
+      amount_out: string;
+      price_snapshot: string;
+      status: string;
+      tx_hash: string | null;
+      note: string | null;
+      created_at: string;
+      updated_at: string;
+    }>();
+
+  const items: ExchangeRecord[] = (results ?? []).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    wallet: row.wallet,
+    direction: row.direction,
+    amountIn: row.amount_in,
+    amountOut: row.amount_out,
+    priceSnapshot: row.price_snapshot,
+    status: row.status,
+    txHash: row.tx_hash,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+
+  return json({ items, limit });
+}
+
+async function handleBulkRate(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as {
+    userIds?: string[];
+    rewardRateUsdtPerHour?: string | number;
+  } | null;
+  if (!body?.userIds?.length) return badRequest("userIds required");
+  if (body.rewardRateUsdtPerHour === undefined || body.rewardRateUsdtPerHour === null) {
+    return badRequest("rewardRateUsdtPerHour required");
+  }
+  const rate = String(body.rewardRateUsdtPerHour);
+  const parsed = Number(rate);
+  if (!Number.isFinite(parsed) || parsed < 0) return badRequest("Invalid rate");
+
+  let updated = 0;
+  for (const userId of body.userIds) {
+    if (!userId) continue;
+    await ensureProfile(env, userId);
+    await updateProfileField(env, userId, "reward_rate_usdt_per_hour", rate);
+    updated += 1;
+  }
+  return json({ ok: true, updated, rate });
+}
+
+async function handleContractExtend(request: Request, env: Env, userId: string): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as {
+    extendDays?: number;
+  } | null;
+  const days = Math.max(1, Math.floor(Number(body?.extendDays ?? 30)));
+  await ensureProfile(env, userId);
+
+  const existing = await env.DB.prepare(
+    "SELECT contract_end_at FROM customer_profiles WHERE user_id = ?"
+  )
+    .bind(userId)
+    .first<{ contract_end_at: string | null }>();
+
+  const currentEnd = existing?.contract_end_at ? new Date(existing.contract_end_at) : null;
+  const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
+    ? currentEnd.getTime()
+    : Date.now();
+  const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+
+  await updateProfileField(env, userId, "contract_end_at", newEnd);
+  await updateProfileField(env, userId, "contract_active", 1);
+  await updateProfileField(env, userId, "activation_status", "active");
+
+  return json({ ok: true, contractEndAt: newEnd, extendedDays: days });
+}
+
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
-  const ownerCheck = await requireOwner(request, env);
+  const ownerCheck = request.method === "GET"
+    ? await requireOwnerRead(request, env)
+    : await requireOwner(request, env);
   if (ownerCheck) return ownerCheck;
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
     return handleCustomerList(env);
+  }
+
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {
+    return handleBulkRate(request, env);
+  }
+
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "tasks" && pathParts[1] === "run") {
+    const result = await runScheduledTasks(env);
+    return json({ ok: true, ...result });
+  }
+
+  if (request.method === "GET" && pathParts[0] === "records" && pathParts.length === 2) {
+    const url = new URL(request.url);
+    if (pathParts[1] === "recharges") return handleRechargeRecords(env, url);
+    if (pathParts[1] === "withdrawals") return handleWithdrawalRecords(env, url);
+    if (pathParts[1] === "exchanges") return handleExchangeRecords(env, url);
   }
 
   if (pathParts.length >= 2 && pathParts[0] === "customers") {
@@ -494,6 +873,10 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
     if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "activate") {
       return handleCustomerActivate(request, env, userId);
+    }
+
+    if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "extend") {
+      return handleContractExtend(request, env, userId);
     }
 
     if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "rewards") {

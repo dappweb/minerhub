@@ -210,6 +210,21 @@ export type SystemStatusDto = {
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
+  userAgreement?: {
+    required: boolean;
+    version: string;
+    titleZh: string;
+    titleEn: string;
+    contentZh: string;
+    contentEn: string;
+  };
+  supportContacts?: Array<{
+    id: string;
+    type: string;
+    label: string;
+    value: string;
+    note: string;
+  }>;
   timestamp?: string;
 };
 
@@ -233,6 +248,7 @@ export type UserDetailsDto = UserDto & {
   agreementAcceptedAt?: string | null;
   offlineAlertedAt?: string | null;
   notes?: string | null;
+  agreementAcceptedVersion?: string | null;
   devices?: Array<{
     id: string;
     device_id: string;
@@ -405,3 +421,8 @@ export async function reportDeviceHeartbeat(payload: {
     return null;
   }
 }
+
+export async function acceptUserAgreement(userId: string, version: string, wallet: string): Promise<{ ok: boolean; version: string; acceptedAt: string }> {
+  return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/agreement`, 'POST', { version, wallet });
+}
+

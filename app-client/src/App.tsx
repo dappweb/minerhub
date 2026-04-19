@@ -20,8 +20,10 @@ import EarningsTab from './components/mobile/EarningsTab';
 import ExchangeTab from './components/mobile/ExchangeTab';
 import GuideCard from './components/mobile/GuideCard';
 import HomeTab from './components/mobile/HomeTab';
+import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
+    acceptUserAgreement,
     createClaim,
     createGasIntent,
     createUser,
@@ -57,6 +59,8 @@ const LANG_KEY = 'coinplanet.lang';
 const DEVICE_ID_KEY = 'coinplanet.device_id';
 const MINER_READY_KEY = 'coinplanet.miner_ready';
 const USER_ID_KEY = 'coinplanet.user_id';
+const AGREEMENT_ACCEPTED_KEY = 'coinplanet.agreement_accepted_version';
+const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
@@ -167,6 +171,13 @@ const translations = {
     errInsufficientBnb: 'Insufficient BNB for gas. Please top up testnet BNB and try again.',
     errRejected: 'Transaction was cancelled in wallet.',
     errReverted: 'On-chain execution failed. Please check parameters and contract state.',
+    errClaimCooldown: 'Claim cooldown not reached yet (at least 1 day between claims).',
+    errNoReward: 'No reward available yet. The first 7 days after registration is a lockup period.',
+    errAlreadyRegistered: 'Miner already registered on this wallet.',
+    errMinerNotRegistered: 'Miner not registered yet. Please activate first.',
+    errMinerNotActive: 'Miner is not active.',
+    errInvalidHashrate: 'Invalid hashrate value.',
+    errDeviceIdRequired: 'Device ID is required.',
     errNetwork: 'Network is unstable. Please retry in a moment.',
     gasAssistTitle: 'Gas Booster',
     gasAssistHint: 'No BNB needed. Use SUPER/USDT to buy BNB from treasury and retry automatically.',
@@ -185,6 +196,28 @@ const translations = {
     langToggle: '中文',
     notInit: 'Not initialized',
     short: 'Short: ',
+    copyAddress: 'Copy',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    machineCodeTitle: 'Machine Code',
+    machineCodeHint: 'Please tell our support this code when purchasing a monthly card.',
+    agreementTitleFallback: 'User Agreement',
+    agreementIntro: 'Please read and accept the agreement to continue.',
+    agreementAccept: 'I have read and agree',
+    agreementDecline: 'Decline',
+    agreementDeclinedHint: 'You must accept the agreement to use this app.',
+    agreementSubmitting: 'Submitting...',
+    agreementFailed: 'Failed to submit acceptance: ',
+    supportContactsTitle: 'Customer Support',
+    supportContactsEmpty: 'Support contact info is not configured yet.',
+    exportPrivateKeyTitle: 'Export Private Key',
+    exportPrivateKeyButton: 'Export Private Key',
+    exportPrivateKeyWarning: 'WARNING: Anyone with this key controls your wallet. Never share it. Keep it offline.',
+    exportPrivateKeyReveal: 'Reveal Private Key',
+    exportPrivateKeyCopy: 'Copy to Clipboard',
+    exportPrivateKeyCopied: 'Copied',
+    exportPrivateKeyClose: 'Close',
+    exportPrivateKeyMissing: 'No local private key found.',
   },
   zh: {
     appTitle: 'Coin Planet',
@@ -291,6 +324,13 @@ const translations = {
     errInsufficientBnb: 'BNB 余额不足，无法支付 Gas。请先补充测试网 BNB。',
     errRejected: '你已在钱包中取消本次交易。',
     errReverted: '链上执行失败，请检查参数或合约状态。',
+    errClaimCooldown: '领取冷却时间未到，两次领取需间隔 1 天。',
+    errNoReward: '暂无可领取奖励。矿机注册后前 7 天为锁仓期，期间奖励暂不累计。',
+    errAlreadyRegistered: '该钱包已注册矿机。',
+    errMinerNotRegistered: '矿机尚未注册，请先完成矿机激活。',
+    errMinerNotActive: '矿机未激活。',
+    errInvalidHashrate: '算力参数不合法。',
+    errDeviceIdRequired: '缺少设备 ID。',
     errNetwork: '网络不稳定，请稍后重试。',
     gasAssistTitle: 'Gas 补能',
     gasAssistHint: '无需先买 BNB，可用 SUPER/USDT 兑换平台 BNB，并自动重试交易。',
@@ -309,12 +349,45 @@ const translations = {
     langToggle: 'English',
     notInit: '未初始化',
     short: '简短：',
+    copyAddress: '复制',
+    copied: '已复制',
+    copyFailed: '复制失败',
+    machineCodeTitle: '机器码',
+    machineCodeHint: '请将此机器码告知客服以购买月卡。',
+    agreementTitleFallback: '用户协议',
+    agreementIntro: '请阅读并同意以下协议后继续使用。',
+    agreementAccept: '我已阅读并同意',
+    agreementDecline: '暂不同意',
+    agreementDeclinedHint: '需同意用户协议方可继续使用本应用。',
+    agreementSubmitting: '正在提交...',
+    agreementFailed: '提交同意失败：',
+    supportContactsTitle: '客服联系方式',
+    supportContactsEmpty: '尚未配置客服联系方式。',
+    exportPrivateKeyTitle: '导出账户私钥',
+    exportPrivateKeyButton: '导出私钥',
+    exportPrivateKeyWarning: '警告：掌握私钥即拥有账户全部权限。请勿截图、拍照或泄露给任何人，建议抄写后离线妥善保管。',
+    exportPrivateKeyReveal: '显示私钥',
+    exportPrivateKeyCopy: '复制到剪贴板',
+    exportPrivateKeyCopied: '已复制',
+    exportPrivateKeyClose: '关闭',
+    exportPrivateKeyMissing: '本地未找到私钥。',
   },
 } as const;
 
 function createDeviceId() {
   const random = Math.random().toString(36).slice(2, 8);
   return `mobile-${Date.now()}-${random}`;
+}
+
+function deriveMachineCode(seed: string): string {
+  if (!seed) return '--------';
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  const hex = hash.toString(16).toUpperCase().padStart(8, '0');
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
 }
 
 function shortHash(hash: string) {
@@ -369,9 +442,17 @@ export default function App() {
   const [phase2IntentId, setPhase2IntentId] = useState<string>('');
   const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
   const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [localAgreementVersion, setLocalAgreementVersion] = useState<string | null>(null);
+  const [agreementSubmitting, setAgreementSubmitting] = useState(false);
+  const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [agreementDeclined, setAgreementDeclined] = useState(false);
+  const [agreementError, setAgreementError] = useState('');
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryActionNameRef = useRef<ActionType>('');
 
   const t = translations[lang];
@@ -380,6 +461,13 @@ export default function App() {
   const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
   const contractExpired = Boolean(userDetails?.contractEndAt && new Date(userDetails.contractEndAt).getTime() < Date.now());
   const actionsBlocked = maintenanceEnabled || contractExpired;
+
+  const userAgreement = systemStatus?.userAgreement;
+  const agreementRequired = Boolean(userAgreement?.required && userAgreement?.version);
+  const acceptedAgreementVersion = userDetails?.agreementAcceptedVersion ?? localAgreementVersion ?? null;
+  const agreementNeedsAcceptance = agreementRequired
+    && userAgreement
+    && acceptedAgreementVersion !== userAgreement.version;
 
   const isInsufficientBnbError = (message: string) => {
     const msg = message.toLowerCase();
@@ -395,6 +483,22 @@ export default function App() {
     }
     if (msg.includes('user rejected') || msg.includes('rejected') || msg.includes('denied')) {
       return t.errRejected;
+    }
+
+    // Map well-known contract revert reasons to friendly localized text.
+    const revertReasonMatch = raw.match(/(?:Transaction reverted:|reverted with the following reason:?)\s*([^\n]+)/i);
+    const revertReason = (revertReasonMatch ? revertReasonMatch[1] : '').trim();
+    const reasonLower = revertReason.toLowerCase();
+    if (reasonLower) {
+      if (reasonLower.includes('claim cooldown')) return t.errClaimCooldown;
+      if (reasonLower.includes('no reward')) return t.errNoReward;
+      if (reasonLower.includes('miner already registered')) return t.errAlreadyRegistered;
+      if (reasonLower.includes('miner not registered')) return t.errMinerNotRegistered;
+      if (reasonLower.includes('miner not active')) return t.errMinerNotActive;
+      if (reasonLower.includes('invalid hashrate')) return t.errInvalidHashrate;
+      if (reasonLower.includes('device id required')) return t.errDeviceIdRequired;
+      // Fall back to surfacing the actual revert reason verbatim.
+      return `${t.errReverted}（${revertReason}）`;
     }
     if (msg.includes('reverted')) {
       return t.errReverted;
@@ -420,6 +524,15 @@ export default function App() {
     return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
   }, [walletAddress, t.notInit]);
 
+  const handleCopyAddress = async () => {
+    if (!walletAddress) return;
+    const { copyToClipboard } = await import('./utils/clipboard');
+    const ok = await copyToClipboard(walletAddress);
+    setCopyState(ok ? 'copied' : 'failed');
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopyState('idle'), 1800);
+  };
+
   const flowHint = useMemo(() => {
     if (!identityReady) return t.flow1;
     if (!minerReady) return t.flow2;
@@ -430,6 +543,14 @@ export default function App() {
     if (!userId) return '----';
     return userId.replace(/[^0-9]/g, '').slice(0, 4).padEnd(4, '0');
   }, [userId]);
+
+  const machineCode = useMemo(() => {
+    const fromServer = (userDetails as { machineCode?: string | null } | null)?.machineCode;
+    if (fromServer && typeof fromServer === 'string' && fromServer.trim()) {
+      return fromServer.trim();
+    }
+    return deriveMachineCode(deviceId || walletAddress || userId || '');
+  }, [userDetails, deviceId, walletAddress, userId]);
 
   const expireDate = useMemo(() => {
     if (!userDetails?.contractEndAt) {
@@ -633,6 +754,33 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const done = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        if (cancelled) return;
+        setOnboardingChecked(true);
+        if (!done) {
+          setOnboardingVisible(true);
+        }
+      } catch {
+        if (!cancelled) setOnboardingChecked(true);
+      }
+    };
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleOnboardingComplete = async (_years: 1 | 2 | 3) => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
+    } catch {}
+    setOnboardingVisible(false);
+  };
+
+  useEffect(() => {
     const restoreMinerReady = async () => {
       try {
         const stored = await AsyncStorage.getItem(MINER_READY_KEY);
@@ -643,6 +791,18 @@ export default function App() {
     };
 
     void restoreMinerReady();
+  }, []);
+
+  useEffect(() => {
+    const restoreAgreement = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(AGREEMENT_ACCEPTED_KEY);
+        if (stored) setLocalAgreementVersion(stored);
+      } catch {
+        // ignore
+      }
+    };
+    void restoreAgreement();
   }, []);
 
   useEffect(() => {
@@ -664,6 +824,77 @@ export default function App() {
       // ignore
     }
   };
+
+  const handleAcceptAgreement = async () => {
+    if (!userAgreement || !userAgreement.version) return;
+    if (agreementSubmitting) return;
+    setAgreementError('');
+    setAgreementDeclined(false);
+
+    // If identity not ready yet, accept locally; backend sync happens after init.
+    if (!userId || !walletAddress) {
+      setLocalAgreementVersion(userAgreement.version);
+      try {
+        await AsyncStorage.setItem(AGREEMENT_ACCEPTED_KEY, userAgreement.version);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    setAgreementSubmitting(true);
+    try {
+      await acceptUserAgreement(userId, userAgreement.version, walletAddress);
+      setLocalAgreementVersion(userAgreement.version);
+      try {
+        await AsyncStorage.setItem(AGREEMENT_ACCEPTED_KEY, userAgreement.version);
+      } catch {
+        // ignore
+      }
+      const details = await getUserDetails(userId);
+      setUserDetails(details);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      setAgreementError(`${t.agreementFailed}${message}`);
+    } finally {
+      setAgreementSubmitting(false);
+    }
+  };
+
+  const handleDeclineAgreement = () => {
+    setAgreementDeclined(true);
+  };
+
+  // If accepted locally before identity was ready, sync to backend once it becomes ready.
+  useEffect(() => {
+    if (!userAgreement?.required || !userAgreement.version) return;
+    if (!userId || !walletAddress) return;
+    if (localAgreementVersion !== userAgreement.version) return;
+    if (userDetails?.agreementAcceptedVersion === userAgreement.version) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await acceptUserAgreement(userId, userAgreement.version, walletAddress);
+        if (cancelled) return;
+        const details = await getUserDetails(userId);
+        if (cancelled) return;
+        setUserDetails(details);
+      } catch {
+        // silent — user can retry via modal if status re-renders it
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    userId,
+    walletAddress,
+    localAgreementVersion,
+    userAgreement?.required,
+    userAgreement?.version,
+    userDetails?.agreementAcceptedVersion,
+  ]);
 
   const refreshSwapPrice = async () => {
     try {
@@ -851,9 +1082,10 @@ export default function App() {
       const details = await getUserDetails(userId);
       setUserDetails(details);
     } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : '';
       const message = toFriendlyErrorMessage(error);
-      const lower = message.toLowerCase();
-      const alreadyRegistered = lower.includes('already') && lower.includes('register');
+      const combined = `${rawMessage} ${message}`.toLowerCase();
+      const alreadyRegistered = combined.includes('already') && combined.includes('register');
 
       if (!minerReady && alreadyRegistered) {
         try {
@@ -1069,9 +1301,63 @@ export default function App() {
     );
   }
 
+  if (agreementNeedsAcceptance && userAgreement) {
+    const title = (lang === 'zh' ? userAgreement.titleZh : userAgreement.titleEn) || t.agreementTitleFallback;
+    const content = lang === 'zh' ? userAgreement.contentZh : userAgreement.contentEn;
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.agreementWrap}>
+          <View style={styles.agreementHeaderRow}>
+            <Text style={styles.agreementTitle}>{title}</Text>
+            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+              <Text style={styles.langBtnText}>{t.langToggle}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.agreementIntro}>{t.agreementIntro}</Text>
+          <Text style={styles.agreementVersion}>v{userAgreement.version}</Text>
+          <ScrollView style={styles.agreementScroll} contentContainerStyle={styles.agreementScrollContent}>
+            <Text style={styles.agreementBody}>{content}</Text>
+          </ScrollView>
+          {agreementDeclined && (
+            <Text style={styles.agreementDeclined}>{t.agreementDeclinedHint}</Text>
+          )}
+          {!!agreementError && (
+            <Text style={styles.agreementError}>{agreementError}</Text>
+          )}
+          <View style={styles.agreementBtnRow}>
+            <TouchableOpacity
+              style={styles.agreementDeclineBtn}
+              onPress={handleDeclineAgreement}
+              disabled={agreementSubmitting}
+            >
+              <Text style={styles.agreementDeclineBtnText}>{t.agreementDecline}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.agreementAcceptBtn, agreementSubmitting && styles.agreementAcceptBtnDisabled]}
+              onPress={handleAcceptAgreement}
+              disabled={agreementSubmitting}
+            >
+              <Text style={styles.agreementAcceptBtnText}>
+                {agreementSubmitting ? t.agreementSubmitting : t.agreementAccept}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <OnboardingFlow
+        visible={onboardingChecked && onboardingVisible}
+        lang={lang}
+        machineCode={machineCode}
+        onComplete={handleOnboardingComplete}
+      />
       <View style={styles.mainShell}>
         <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>
           <View style={styles.headerRow}>
@@ -1084,14 +1370,16 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <GuideCard
-            title={guideTitle}
-            description={guideDescription}
-            buttonLabel={contractExpired ? t.contractExpiredTitle : guideCtaLabel}
-            disabled={isBusy || contractExpired}
-            steps={guideSteps}
-            onPress={guideAction}
-          />
+          {!(identityReady && minerReady) && (
+            <GuideCard
+              title={guideTitle}
+              description={guideDescription}
+              buttonLabel={contractExpired ? t.contractExpiredTitle : guideCtaLabel}
+              disabled={isBusy || contractExpired}
+              steps={guideSteps}
+              onPress={guideAction}
+            />
+          )}
 
           {activeTab === 'home' && (
             <HomeTab
@@ -1109,6 +1397,9 @@ export default function App() {
               guideCtaLabel={guideCtaLabel}
               guideAction={guideAction}
               setActiveTab={setActiveTab}
+              onCopyAddress={handleCopyAddress}
+              copyState={copyState}
+              machineCode={machineCode}
               t={t}
             />
           )}
@@ -1173,6 +1464,9 @@ export default function App() {
               isBusy={isBusy}
               identityReady={identityReady}
               transferNativeToken={transferNativeToken}
+              onCopyAddress={handleCopyAddress}
+              copyState={copyState}
+              supportContacts={systemStatus?.supportContacts ?? []}
               t={t}
             />
           )}
@@ -1312,6 +1606,91 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  agreementWrap: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    gap: 12,
+  },
+  agreementHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  agreementTitle: {
+    color: '#ecfeff',
+    fontSize: 22,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 12,
+  },
+  agreementIntro: {
+    color: '#9cc6ff',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  agreementVersion: {
+    color: '#64748b',
+    fontSize: 12,
+  },
+  agreementScroll: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    backgroundColor: '#0b1a36',
+  },
+  agreementScrollContent: {
+    padding: 14,
+  },
+  agreementBody: {
+    color: '#cbd5f5',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  agreementDeclined: {
+    color: '#fca5a5',
+    fontSize: 13,
+  },
+  agreementError: {
+    color: '#f87171',
+    fontSize: 12,
+  },
+  agreementBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  agreementDeclineBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+  },
+  agreementDeclineBtnText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  agreementAcceptBtn: {
+    flex: 2,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0ea5e9',
+  },
+  agreementAcceptBtnDisabled: {
+    opacity: 0.6,
+  },
+  agreementAcceptBtnText: {
+    color: '#04121f',
+    fontSize: 14,
+    fontWeight: '800',
   },
   scrollContent: {
     paddingHorizontal: 14,

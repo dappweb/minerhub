@@ -19,5 +19,15 @@
 
   /** Optional treasury signer for automatic BNB distribution */
   GAS_TREASURY_PRIVATE_KEY?: string;
+
+  /** Owner relayer (on-chain SUPER/USDT operations) */
+  OWNER_PRIVATE_KEY?: string;
+  /** USDT token address used for batch payouts */
+  USDT_TOKEN_ADDRESS?: string;
+  /** Per-batch safety cap for SUPER mint/airdrop (in SUPER units, plain string) */
+  OWNER_MINT_DAILY_CAP?: string;
+
+  /** Optional webhook invoked by scheduled task when a customer goes offline */
+  ALERT_WEBHOOK_URL?: string;
 }
 

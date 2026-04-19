@@ -68,7 +68,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     const user = await env.DB.prepare(
       `SELECT
         u.id, u.wallet, u.email, u.role, u.status, u.created_at, u.updated_at,
-        cp.nickname, cp.machine_code, cp.parent_user_id, cp.contract_start_at, cp.contract_end_at,
+        cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
         COALESCE(cp.contract_term_days, 1095) AS contract_term_days,
         COALESCE(cp.monthly_card_days, 30) AS monthly_card_days,
         COALESCE(cp.contract_active, 0) AS contract_active,
@@ -106,12 +106,63 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .bind(userId)
       .all();
 
+    const acceptance = await env.DB.prepare(
+      "SELECT version, accepted_at FROM user_agreement_acceptances WHERE user_id = ? ORDER BY accepted_at DESC LIMIT 1"
+    )
+      .bind(userId)
+      .first<{ version: string; accepted_at: string }>();
+
     return json({
       ...user,
       devices: devices.results ?? [],
       rewards: rewards.results ?? [],
       payoutWallets: wallets.results ?? [],
+      agreementAcceptedVersion: acceptance?.version ?? null,
+      agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreement_accepted_at?: string | null }).agreement_accepted_at ?? null,
     });
+  }
+
+  // POST /api/users/:id/agreement — record user's agreement acceptance
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "agreement") {
+    const userId = pathParts[0];
+    const body = (await request.json().catch(() => null)) as { version?: string; wallet?: string } | null;
+    if (!body?.version || typeof body.version !== "string") {
+      return badRequest("version is required");
+    }
+
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const user = await env.DB.prepare("SELECT id, wallet FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ id: string; wallet: string }>();
+    if (!user) return json({ error: "User not found" }, 404);
+
+    if (authResult.wallet && user.wallet && authResult.wallet.toLowerCase() !== user.wallet.toLowerCase()) {
+      return unauthorized("Wallet does not match user");
+    }
+
+    await ensureCustomerProfile(env, userId);
+
+    const now = nowIso();
+    const version = body.version.trim();
+    await env.DB.prepare(
+      `INSERT INTO user_agreement_acceptances (user_id, version, accepted_at, wallet)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, version) DO UPDATE SET accepted_at = excluded.accepted_at, wallet = excluded.wallet`
+    )
+      .bind(userId, version, now, authResult.wallet ?? user.wallet ?? null)
+      .run();
+
+    await env.DB.prepare(
+      "UPDATE customer_profiles SET agreement_accepted_at = ?, updated_at = ? WHERE user_id = ?"
+    )
+      .bind(now, now, userId)
+      .run();
+
+    return json({ ok: true, version, acceptedAt: now });
   }
 
   // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)

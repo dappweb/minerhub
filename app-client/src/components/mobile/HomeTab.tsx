@@ -20,6 +20,9 @@ export interface HomeTabProps {
   guideCtaLabel: string;
   guideAction: () => void;
   setActiveTab: (tab: BottomTab) => void;
+  onCopyAddress: () => void;
+  copyState: 'idle' | 'copied' | 'failed';
+  machineCode: string;
   t: {
     profileId: string;
     profileVip: string;
@@ -34,6 +37,11 @@ export interface HomeTabProps {
     homePrimaryAction: string;
     tabEarnings: string;
     tabExchange: string;
+    copyAddress: string;
+    copied: string;
+    copyFailed: string;
+    machineCodeTitle: string;
+    machineCodeHint: string;
   };
 }
 
@@ -61,8 +69,13 @@ export default function HomeTab({
   guideCtaLabel,
   guideAction,
   setActiveTab,
+  onCopyAddress,
+  copyState,
+  machineCode,
   t,
 }: HomeTabProps) {
+  const copyLabel =
+    copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
   return (
     <>
       <View style={styles.profileCard}>
@@ -75,7 +88,22 @@ export default function HomeTab({
         </View>
         <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
         <Text style={s.walletText}>{walletAddress || t.notInit}</Text>
-        <Text style={s.walletHint}>{t.short}{shortAddress}</Text>
+        <View style={s.rowBetween}>
+          <Text style={s.walletHint}>{t.short}{shortAddress}</Text>
+          <TouchableOpacity
+            onPress={onCopyAddress}
+            disabled={!walletAddress}
+            style={[styles.copyBtn, !walletAddress && s.disabledBtn, copyState === 'copied' && styles.copyBtnOk]}
+          >
+            <Text style={styles.copyBtnText}>{copyLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.machineCard}>
+        <Text style={styles.machineLabel}>{t.machineCodeTitle}</Text>
+        <Text style={styles.machineValue}>{machineCode}</Text>
+        <Text style={styles.machineHint}>{t.machineCodeHint}</Text>
       </View>
 
       <View style={styles.statusCard}>
@@ -125,6 +153,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b45a1',
     padding: 14,
     gap: 6,
+  },
+  machineCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f97316',
+    backgroundColor: '#1f1207',
+    padding: 14,
+    gap: 6,
+  },
+  machineLabel: {
+    color: '#fdba74',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  machineValue: {
+    color: '#fff7ed',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  machineHint: {
+    color: '#fed7aa',
+    fontSize: 12,
   },
   profileId: {
     color: '#f0fbff',
@@ -180,5 +231,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     paddingVertical: 8,
+  },
+  copyBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#1f4f96',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+  },
+  copyBtnOk: {
+    backgroundColor: '#0f766e',
+    borderColor: '#14b8a6',
+  },
+  copyBtnText: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

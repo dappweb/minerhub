@@ -8,6 +8,23 @@ type SystemSettingRow = {
   value: string;
 };
 
+type UserAgreement = {
+  required: boolean;
+  version: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+};
+
+type SupportContact = {
+  id: string;
+  type: string;
+  label: string;
+  value: string;
+  note: string;
+};
+
 type SystemStatus = {
   maintenanceEnabled: boolean;
   maintenanceMessageZh: string;
@@ -19,6 +36,19 @@ type SystemStatus = {
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
+  userAgreement: UserAgreement;
+  supportContacts: SupportContact[];
+};
+
+const DEFAULT_AGREEMENT: UserAgreement = {
+  required: false,
+  version: "1.0.0",
+  titleZh: "用户协议",
+  titleEn: "User Agreement",
+  contentZh:
+    "欢迎使用本应用。使用本服务即表示您已阅读并同意平台的服务条款、隐私政策以及相关的风险提示。管理员可随时更新本协议内容。",
+  contentEn:
+    "Welcome. By using this service you acknowledge that you have read and agreed to the platform terms of service, privacy policy and related risk disclosures. The administrator may update this agreement at any time.",
 };
 
 const DEFAULT_STATUS: SystemStatus = {
@@ -32,7 +62,49 @@ const DEFAULT_STATUS: SystemStatus = {
   rewardRateUsdtPerHour: 0.084,
   swapPriceSuperPerUsdt: 0,
   payoutWallets: [],
+  userAgreement: DEFAULT_AGREEMENT,
+  supportContacts: [],
 };
+
+const ALLOWED_CONTACT_TYPES = new Set([
+  "weixin",
+  "telegram",
+  "email",
+  "qq",
+  "phone",
+  "whatsapp",
+  "line",
+  "url",
+  "other",
+]);
+
+function normalizeSupportContacts(raw: unknown): SupportContact[] {
+  if (!Array.isArray(raw)) return [];
+  const result: SupportContact[] = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const type = typeof e.type === "string" ? e.type.trim().toLowerCase() : "";
+    const value = typeof e.value === "string" ? e.value.trim() : "";
+    if (!type || !value) continue;
+    if (!ALLOWED_CONTACT_TYPES.has(type)) continue;
+    const label = typeof e.label === "string" ? e.label.trim() : "";
+    const note = typeof e.note === "string" ? e.note.trim() : "";
+    const id = typeof e.id === "string" && e.id.trim() ? e.id.trim() : `contact-${Date.now()}-${i}`;
+    result.push({ id, type, label, value, note });
+  }
+  return result;
+}
+
+function parseSupportContactsRaw(raw: string | null | undefined): SupportContact[] {
+  if (!raw) return [];
+  try {
+    return normalizeSupportContacts(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
 
 function isNormalizedPayoutWallet(
   item: { walletAddress: string; priority: number; isPrimary: boolean } | null
@@ -80,6 +152,16 @@ async function readStatus(env: Env): Promise<SystemStatus> {
 
   const maintenanceEnabled = (settings.get("maintenance_enabled") ?? "0") === "1";
   const exchangeAutoEnabled = (settings.get("exchange_auto_enabled") ?? "1") === "1";
+  const userAgreement: UserAgreement = {
+    required: (settings.get("user_agreement_required") ?? "0") === "1",
+    version: settings.get("user_agreement_version") ?? DEFAULT_AGREEMENT.version,
+    titleZh: settings.get("user_agreement_title_zh") ?? DEFAULT_AGREEMENT.titleZh,
+    titleEn: settings.get("user_agreement_title_en") ?? DEFAULT_AGREEMENT.titleEn,
+    contentZh: settings.get("user_agreement_content_zh") ?? DEFAULT_AGREEMENT.contentZh,
+    contentEn: settings.get("user_agreement_content_en") ?? DEFAULT_AGREEMENT.contentEn,
+  };
+
+  const supportContacts = parseSupportContactsRaw(settings.get("support_contacts_json") ?? "[]");
 
   return {
     maintenanceEnabled,
@@ -92,6 +174,8 @@ async function readStatus(env: Env): Promise<SystemStatus> {
     rewardRateUsdtPerHour: Number(settings.get("reward_rate_usdt_per_hour") ?? DEFAULT_STATUS.rewardRateUsdtPerHour),
     swapPriceSuperPerUsdt: Number(settings.get("swap_price_super_per_usdt") ?? DEFAULT_STATUS.swapPriceSuperPerUsdt),
     payoutWallets,
+    userAgreement,
+    supportContacts,
   };
 }
 
@@ -122,6 +206,7 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
   const booleanFields: Array<[string, string]> = [
     ["maintenanceEnabled", "maintenance_enabled"],
     ["exchangeAutoEnabled", "exchange_auto_enabled"],
+    ["userAgreementRequired", "user_agreement_required"],
   ];
   for (const [sourceKey, targetKey] of booleanFields) {
     if (sourceKey in body) {
@@ -134,6 +219,11 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     ["maintenanceMessageEn", "maintenance_message_en"],
     ["rewardRateUsdtPerHour", "reward_rate_usdt_per_hour"],
     ["swapPriceSuperPerUsdt", "swap_price_super_per_usdt"],
+    ["userAgreementVersion", "user_agreement_version"],
+    ["userAgreementTitleZh", "user_agreement_title_zh"],
+    ["userAgreementTitleEn", "user_agreement_title_en"],
+    ["userAgreementContentZh", "user_agreement_content_zh"],
+    ["userAgreementContentEn", "user_agreement_content_en"],
   ];
   for (const [sourceKey, targetKey] of stringFields) {
     const value = body[sourceKey];
@@ -175,6 +265,11 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
       .filter(isNormalizedPayoutWallet);
 
     updates.push(["payout_wallets_json", JSON.stringify(normalized)]);
+  }
+
+  if (Array.isArray(body.supportContacts)) {
+    const normalizedContacts = normalizeSupportContacts(body.supportContacts);
+    updates.push(["support_contacts_json", JSON.stringify(normalizedContacts)]);
   }
 
   for (const [key, value] of updates) {

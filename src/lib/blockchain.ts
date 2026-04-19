@@ -1,5 +1,5 @@
 ﻿import type { Address, Hex } from 'viem';
-import { createPublicClient, createWalletClient, custom, defineChain, http, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, custom, defineChain, http, parseEther, parseUnits } from 'viem';
 
 export type MiningPoolGlobalStats = {
   totalEmitted: bigint;
@@ -270,6 +270,16 @@ const superAbi = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bool' }],
@@ -742,6 +752,47 @@ export async function collectEcosystemFeeOnChain(recipient: Address) {
   });
 
   await waitForTx(hash as Hex);
+  return hash;
+}
+
+export async function sendGasToAddressOnChain(recipient: Address, amount: string) {
+  const parsed = Number(amount);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('请输入有效的 Gas 数量（大于 0）。');
+  }
+
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+
+  const hash = (await walletClient.sendTransaction({
+    account,
+    to: recipient,
+    value: parseEther(amount),
+  })) as Hex;
+
+  await waitForTx(hash);
+  return hash;
+}
+
+export async function sendSuperToAddressOnChain(recipient: Address, amount: string) {
+  const superToken = requireSuperAddress();
+  const parsed = Number(amount);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('请输入有效的 SUPER 数量（大于 0）。');
+  }
+
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+
+  const hash = (await walletClient.writeContract({
+    account,
+    address: superToken,
+    abi: superAbi,
+    functionName: 'transfer',
+    args: [recipient, parseUnits(amount, 18)],
+  })) as Hex;
+
+  await waitForTx(hash);
   return hash;
 }
 

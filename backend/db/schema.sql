@@ -107,7 +107,23 @@ INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES
   ('contract_term_days_default', '1095', datetime('now')),
   ('reward_rate_usdt_per_hour', '0.084', datetime('now')),
   ('swap_price_super_per_usdt', '0', datetime('now')),
-  ('payout_wallets_json', '[]', datetime('now'));
+  ('payout_wallets_json', '[]', datetime('now')),
+  ('user_agreement_required', '0', datetime('now')),
+  ('user_agreement_version', '1.0.0', datetime('now')),
+  ('user_agreement_title_zh', '用户协议', datetime('now')),
+  ('user_agreement_title_en', 'User Agreement', datetime('now')),
+  ('user_agreement_content_zh', '欢迎使用本应用。使用本服务即表示您已阅读并同意平台的服务条款、隐私政策以及相关的风险提示。管理员可随时更新本协议内容。', datetime('now')),
+  ('user_agreement_content_en', 'Welcome. By using this service you acknowledge that you have read and agreed to the platform terms of service, privacy policy and related risk disclosures. The administrator may update this agreement at any time.', datetime('now')),
+  ('support_contacts_json', '[]', datetime('now'));
+
+CREATE TABLE IF NOT EXISTS user_agreement_acceptances (
+  user_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  accepted_at TEXT NOT NULL,
+  wallet TEXT,
+  PRIMARY KEY (user_id, version),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
 
 CREATE TABLE IF NOT EXISTS customer_profiles (
   user_id TEXT PRIMARY KEY,
@@ -266,3 +282,40 @@ CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status)
 CREATE INDEX IF NOT EXISTS idx_payout_batches_status ON payout_batches(status);
 CREATE INDEX IF NOT EXISTS idx_payout_batch_items_batch_id ON payout_batch_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_swap_trade_logs_user_id ON swap_trade_logs(user_id);
+
+-- === Owner admin system (P0) ===
+CREATE TABLE IF NOT EXISTS owner_sessions (
+  id TEXT PRIMARY KEY,
+  wallet TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked INTEGER NOT NULL DEFAULT 0,
+  ip TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_wallet ON owner_sessions(wallet);
+
+CREATE TABLE IF NOT EXISTS owner_audit_logs (
+  id TEXT PRIMARY KEY,
+  actor_wallet TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_user_id TEXT,
+  target_wallet TEXT,
+  payload_json TEXT,
+  tx_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'ok',
+  error_message TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_owner_audit_actor ON owner_audit_logs(actor_wallet);
+CREATE INDEX IF NOT EXISTS idx_owner_audit_action ON owner_audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_owner_audit_created ON owner_audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_owner_audit_target_wallet ON owner_audit_logs(target_wallet);
+
+CREATE TABLE IF NOT EXISTS owner_mint_counters (
+  day TEXT PRIMARY KEY,
+  total_super TEXT NOT NULL DEFAULT '0',
+  updated_at TEXT NOT NULL
+);
