@@ -26,8 +26,23 @@ createRoot(document.getElementById('root')!).render(
         appearance: {
           theme: 'dark',
           accentColor: '#22d3ee',
+          // Show WalletConnect QR option first so mobile users can scan to
+          // connect their wallet app. `detected_wallets` covers injected
+          // wallets (MetaMask / OKX / TokenPocket browser extensions).
+          walletList: [
+            'wallet_connect',
+            'detected_wallets',
+            'metamask',
+            'rainbow',
+            'coinbase_wallet',
+            'okx_wallet',
+          ],
+          showWalletLoginFirst: true,
         },
         loginMethods: ['wallet', 'email', 'google'],
+        externalWallets: {
+          walletConnect: { enabled: true },
+        },
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',
