@@ -1,5 +1,5 @@
-import React from 'react';
 import QRCode from 'qrcode';
+import React from 'react';
 
 /**
  * 手机钱包扫码登录面板
