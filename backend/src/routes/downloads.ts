@@ -12,6 +12,7 @@
  *   DELETE /api/downloads/android    → remove current APK from R2
  */
 
+import { isOwnerWallet } from "../lib/ownerAuth";
 import { badRequest, internalError, json, notFound, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -32,9 +33,8 @@ function corsHeaders() {
 }
 
 function isOwner(request: Request, env: Env): boolean {
-  if (!env.OWNER_ADDRESS) return false;
-  const wallet = request.headers.get("x-wallet") ?? "";
-  return wallet.toLowerCase() === env.OWNER_ADDRESS.toLowerCase();
+  const wallet = request.headers.get("x-wallet");
+  return isOwnerWallet(env, wallet);
 }
 
 interface AndroidMeta {

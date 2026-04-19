@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { isOwnerWallet } from "../lib/ownerAuth";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
 import { runScheduledTasks } from "../lib/scheduled";
 import type { Env } from "../types/env";
@@ -62,10 +63,6 @@ type CustomerDetail = CustomerSummary & {
     updatedAt: string;
   }>;
 };
-
-function isOwnerWallet(env: Env, wallet: string | null): boolean {
-  return Boolean(env.OWNER_ADDRESS && wallet && wallet.toLowerCase() === env.OWNER_ADDRESS.toLowerCase());
-}
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
   const wallet = request.headers.get("x-wallet");

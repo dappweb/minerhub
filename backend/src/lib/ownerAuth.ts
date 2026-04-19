@@ -13,9 +13,16 @@ function secretKey(env: Env): Uint8Array {
 }
 
 export function isOwnerWallet(env: Env, wallet: string | null | undefined): boolean {
-  return Boolean(
-    env.OWNER_ADDRESS && wallet && wallet.toLowerCase() === env.OWNER_ADDRESS.toLowerCase()
-  );
+  if (!wallet) return false;
+  const w = wallet.toLowerCase();
+  if (env.OWNER_ADDRESS && w === env.OWNER_ADDRESS.toLowerCase()) return true;
+  if (env.ADMIN_ADDRESSES) {
+    for (const entry of env.ADMIN_ADDRESSES.split(",")) {
+      const a = entry.trim().toLowerCase();
+      if (a && a === w) return true;
+    }
+  }
+  return false;
 }
 
 export async function issueOwnerJwt(env: Env, wallet: string): Promise<{ token: string; expiresAt: string }> {
