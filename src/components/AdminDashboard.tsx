@@ -1164,7 +1164,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </div>
             )}
 
-            {poolAddress && (
+            {poolAddress && section !== 'docs' && (
               <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-xs text-slate-400 break-all">
                 合约地址: {poolAddress}
               </div>
@@ -2205,11 +2205,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             </div>
             )}
 
-            {loading && (
+            {loading && section === 'onchain' && (
               <div className="mt-4 text-xs text-slate-500">正在同步链上数据...</div>
             )}
-          </div>
-        </motion.div>
 
         {/* ────────────────────────── 使用手册 / Admin Docs ────────────────────────── */}
         {section === 'docs' && (
@@ -2524,6 +2522,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             </div>
           </motion.div>
         )}
+          </div>
+        </motion.div>
       </div>
     </section>
   );
