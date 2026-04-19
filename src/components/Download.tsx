@@ -1,4 +1,4 @@
-import { Apple, Download, ExternalLink, QrCode, Smartphone } from 'lucide-react';
+import { Apple, Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import React from 'react';
 
@@ -69,83 +69,254 @@ export default function DownloadSection() {
     if (full) window.open(full, '_blank');
   };
 
+  const platformMeta = {
+    android: {
+      name: 'Android',
+      subtitle: 'APK direct install',
+      requirement: 'Android 7.0+ (API 24+)',
+      cta: 'Download APK',
+      icon: Smartphone,
+    },
+    ios: {
+      name: 'iOS',
+      subtitle: 'TestFlight release',
+      requirement: 'iOS 16.1+',
+      cta: 'Open TestFlight',
+      icon: Apple,
+    },
+  } as const;
+
+  const selectedMeta = platformMeta[selectedPlatform];
+  const SelectedIcon = selectedMeta.icon;
+
   return (
-    <section id="download" className="py-24 bg-linear-to-b from-slate-900/50 to-slate-950 border-b border-slate-800/50">
-      <div className="max-w-4xl mx-auto px-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-sm font-medium mb-4">
+    <section id="download" className="relative overflow-hidden border-b border-slate-800/70 bg-[#020b22] py-24">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-12 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute -right-24 bottom-6 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(56,189,248,0.18),transparent_38%),radial-gradient(circle_at_80%_90%,rgba(14,116,255,0.18),transparent_34%)]" />
+      </div>
+
+      <div className="relative mx-auto max-w-5xl px-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-14 text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/35 bg-cyan-400/10 px-3 py-1 text-sm font-medium text-cyan-300">
             <Download size={14} />
             Download App
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">Get Coin Planet</h2>
-          <p className="text-slate-400 text-lg">{loading ? 'Loading...' : 'Choose your platform to start mining'}</p>
+          <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">Get Coin Planet</h2>
+          <p className="mx-auto max-w-2xl text-lg text-slate-300/90">
+            {loading ? 'Loading release channels...' : 'Install the latest app build and start mining in less than one minute.'}
+          </p>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="grid grid-cols-2 gap-4 mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mb-8 grid grid-cols-2 gap-3 rounded-2xl border border-slate-700/70 bg-slate-900/65 p-2 backdrop-blur"
+        >
           {(['android', 'ios'] as const).map((p) => {
             const info = p === 'android' ? state.android : state.ios;
             const active = selectedPlatform === p;
+            const meta = platformMeta[p];
+            const Icon = meta.icon;
+
             return (
-              <button key={p} onClick={() => setSelectedPlatform(p)} className={`py-4 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-3 ${active ? 'bg-cyan-500 text-slate-950 shadow-[0_0_20px_-5px_rgba(6,182,212,0.5)]' : 'bg-slate-800 text-white hover:bg-slate-700'}`}>
-                {p === 'android' ? <Smartphone size={20} /> : <Apple size={20} />}
-                {p === 'android' ? 'Android' : 'iOS'}
-                {info.available && <span className={`text-xs px-1.5 py-0.5 rounded-full ${active ? 'bg-slate-950/30' : 'bg-cyan-500/20 text-cyan-400'}`}>{info.version || 'ready'}</span>}
+              <button
+                key={p}
+                onClick={() => setSelectedPlatform(p)}
+                className={`group rounded-xl px-4 py-3 transition-all ${
+                  active
+                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_28px_-8px_rgba(6,182,212,0.65)]'
+                    : 'bg-slate-800/80 text-slate-100 hover:bg-slate-700/90'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-left">
+                    <Icon size={18} />
+                    <div>
+                      <p className="text-base font-semibold">{meta.name}</p>
+                      <p className={`text-xs ${active ? 'text-slate-900/80' : 'text-slate-300/80'}`}>{meta.subtitle}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                      info.available
+                        ? active
+                          ? 'bg-slate-950/20 text-slate-950'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                        : active
+                          ? 'bg-slate-950/20 text-slate-900'
+                          : 'bg-slate-600/30 text-slate-300'
+                    }`}
+                  >
+                    {info.available ? (info.version ? `v${info.version}` : 'ready') : 'pending'}
+                  </span>
+                </div>
               </button>
             );
           })}
         </motion.div>
 
-        <motion.div key={selectedPlatform} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="grid md:grid-cols-2 gap-8">
-          <div className="flex flex-col justify-center">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 backdrop-blur-sm">
-              <h3 className="text-2xl font-bold mb-4">{selectedPlatform === 'android' ? 'Android' : 'iOS'}</h3>
-              <div className="space-y-4 mb-8">
+        <motion.div
+          key={selectedPlatform}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="grid gap-6 md:grid-cols-[1.35fr_1fr]"
+        >
+          <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-7 shadow-[0_18px_60px_-35px_rgba(14,165,233,0.8)] backdrop-blur-sm">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/15 p-2 text-cyan-300">
+                  <SelectedIcon size={18} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">{selectedMeta.name}</h3>
+                  <p className="text-sm text-slate-300">{selectedMeta.subtitle}</p>
+                </div>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${current.available ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                {current.available ? 'Live channel' : 'Pending release'}
+              </span>
+            </div>
+
+            <div className="mb-7 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                  <ShieldCheck size={14} />
+                  Compatibility
+                </p>
+                <p className="text-sm font-medium text-slate-100">{selectedMeta.requirement}</p>
+              </div>
+              <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                  <HardDrive size={14} />
+                  Package size
+                </p>
+                <p className="text-sm font-medium text-slate-100">{selectedPlatform === 'android' ? formatBytes(state.android.size) : '--'}</p>
+              </div>
+            </div>
+
+            <div className="mb-7 space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
-                  <div><p className="font-semibold">System</p><p className="text-sm text-slate-400">{selectedPlatform === 'android' ? 'Android 7.0+ (API 24+)' : 'iOS 16.1+'}</p></div>
-                </div>
-                {selectedPlatform === 'android' && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
-                    <div><p className="font-semibold">Size</p><p className="text-sm text-slate-400">{state.android.size ? formatBytes(state.android.size) : '--'}</p></div>
+                  <div>
+                    <p className="font-semibold text-slate-100">Release track</p>
+                    <p className="text-sm text-slate-400">{selectedPlatform === 'android' ? 'Public APK package' : 'Apple TestFlight channel'}</p>
                   </div>
-                )}
+                </div>
                 {current.version && (
                   <div className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
-                    <div><p className="font-semibold">Version</p><p className="text-sm text-slate-400">v{current.version}</p></div>
+                    <div>
+                      <p className="font-semibold text-slate-100">Version</p>
+                      <p className="text-sm text-slate-400">v{current.version}</p>
+                    </div>
                   </div>
                 )}
                 {current.uploadedAt && (
                   <div className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
-                    <div><p className="font-semibold">Updated</p><p className="text-sm text-slate-400">{new Date(current.uploadedAt).toLocaleDateString('zh-CN')}</p></div>
+                    <div>
+                      <p className="font-semibold text-slate-100">Updated</p>
+                      <p className="text-sm text-slate-400">{new Date(current.uploadedAt).toLocaleDateString('zh-CN')}</p>
+                    </div>
                   </div>
                 )}
               </div>
-              <button onClick={() => handleDownload(current.downloadUrl)} disabled={!current.available} className="w-full py-4 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shadow-[0_0_20px_-5px_rgba(6,182,212,0.5)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {loading ? (<span className="w-5 h-5 border-2 border-slate-950/50 border-t-slate-950 rounded-full animate-spin" />) : current.available ? (<><Download size={20} />{selectedPlatform === 'android' ? 'Download APK' : 'Open TestFlight'}</>) : (<><ExternalLink size={20} />Not Available</>)}
-              </button>
+
+            <button
+              onClick={() => handleDownload(current.downloadUrl)}
+              disabled={!current.available}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 py-4 font-bold text-slate-950 shadow-[0_0_22px_-8px_rgba(6,182,212,0.8)] transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? (
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/50 border-t-slate-950" />
+              ) : current.available ? (
+                <>
+                  <Download size={20} />
+                  {selectedMeta.cta}
+                </>
+              ) : (
+                <>
+                  <ExternalLink size={20} />
+                  Not Available
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Clock3 size={13} />
+              <span>{current.uploadedAt ? `Last updated ${new Date(current.uploadedAt).toLocaleString('zh-CN')}` : 'Release timestamp will appear after upload.'}</span>
             </div>
           </div>
-          <div className="flex items-center justify-center">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 backdrop-blur-sm text-center">
-              <div className="flex items-center justify-center gap-2 mb-4 text-cyan-400"><QrCode size={20} /><span className="font-semibold">Scan to Download</span></div>
-              {current.available && current.downloadUrl ? (
-                <div className="mb-4"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(resolveUrl(current.downloadUrl))}`} alt={`${selectedPlatform} QR`} className="w-48 h-48 rounded-lg mx-auto" /></div>
-              ) : (
-                <div className="w-48 h-48 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 mb-4 mx-auto"><div className="text-center"><QrCode size={40} className="text-slate-600 mx-auto mb-2" /><p className="text-sm text-slate-400">{loading ? 'Loading...' : 'No download'}</p></div></div>
-              )}
-              <p className="text-sm text-slate-400">Scan with your phone camera</p>
+
+          <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 text-center backdrop-blur-sm">
+            <div className="mb-4 flex items-center justify-center gap-2 text-cyan-300">
+              <QrCode size={20} />
+              <span className="font-semibold">Scan to Download</span>
+            </div>
+
+            {current.available && current.downloadUrl ? (
+              <div className="mx-auto mb-4 w-fit rounded-2xl border border-cyan-400/30 bg-white/95 p-3 shadow-[0_12px_45px_-25px_rgba(255,255,255,0.9)]">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(resolveUrl(current.downloadUrl))}`}
+                  alt={`${selectedPlatform} QR`}
+                  className="h-52 w-52 rounded-lg"
+                />
+              </div>
+            ) : (
+              <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/70">
+                <div className="text-center">
+                  <QrCode size={40} className="mx-auto mb-2 text-slate-500" />
+                  <p className="text-sm text-slate-300">{loading ? 'Loading...' : 'No download'}</p>
+                </div>
+              </div>
+            )}
+
+            <p className="mb-3 text-sm text-slate-300">Scan with your phone camera and install directly.</p>
+
+            <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-3 text-left">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                <Sparkles size={14} />
+                Install tips
+              </p>
+              <p className="text-sm text-slate-300">Enable network access and keep enough storage space before installation.</p>
             </div>
           </div>
         </motion.div>
 
         {!loading && !state.android.available && !state.ios.available && (
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mt-8 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
-            <p className="text-yellow-500 text-sm">App not uploaded yet. Admin can upload APK via API.</p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-7 rounded-xl border border-amber-400/35 bg-amber-400/10 p-4 text-center"
+          >
+            <p className="text-sm text-amber-300">App package has not been uploaded yet. Admin can publish the build from API backend.</p>
           </motion.div>
         )}
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mt-6 grid gap-3 sm:grid-cols-3"
+        >
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
+            <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Security</p>
+            <p>Signed release package</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
+            <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Network</p>
+            <p>Optimized for global nodes</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
+            <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Rewards</p>
+            <p>Real-time mining sync</p>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
