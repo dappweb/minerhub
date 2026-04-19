@@ -2430,7 +2430,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       'Find the target user in "Customers" (search by wallet or ID)',
                       'Click "Activate", enter machine code (optional) and contract term in years',
                       'System sets contract_start_at / contract_end_at and changes activation_status to active',
-                      'After activation the user's app will show normal reward status',
+                      "After activation the user's app will show normal reward status",
                     ],
                   },
                   {
