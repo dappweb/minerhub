@@ -69,3 +69,31 @@ export async function exportWalletPrivateKey(): Promise<Hex | null> {
   if (!stored) return null;
   return normalizePrivateKey(stored);
 }
+
+/**
+ * Import a wallet from a private key.
+ * SECURITY: Only use inside a user-initiated import flow with an explicit warning UI.
+ * This will REPLACE the current wallet - the user should understand this.
+ * @param privateKey - The private key to import (0x-prefixed or not)
+ */
+export async function importWalletPrivateKey(privateKey: string): Promise<Hex> {
+  const normalized = normalizePrivateKey(privateKey);
+  await storageSet(WALLET_PRIVATE_KEY, normalized);
+  // Validate by creating account
+  const account = privateKeyToAccount(normalized);
+  return account.address;
+}
+
+/**
+ * Clear the wallet (delete stored private key).
+ * SECURITY: Only use inside a user-initiated account reset/clear flow.
+ */
+export async function clearWallet(): Promise<void> {
+  if (isSecureStoreAvailable) {
+    await SecureStore.deleteItemAsync(WALLET_PRIVATE_KEY);
+    return;
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) {
+    (globalThis as any).localStorage.removeItem(WALLET_PRIVATE_KEY);
+  }
+}

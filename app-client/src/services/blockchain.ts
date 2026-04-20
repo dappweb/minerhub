@@ -377,3 +377,108 @@ export async function sendNativeTokenOnChain(to: Address, amountEth: string) {
   }
 }
 
+// ===== Balance Queries (余额查询) =====
+
+const erc20Abi = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+  },
+] as const;
+
+/**
+ * Get BNB (native token) balance for the current wallet.
+ * Returns balance as a decimal string (e.g., "1.5").
+ */
+export async function getBNBBalance(): Promise<string> {
+  try {
+    const address = await getWalletAddress();
+    const { publicClient } = await getWalletClients();
+    const balance = await publicClient.getBalance({ address });
+    return formatUnits(balance, 18);
+  } catch (error) {
+    console.error('Failed to get BNB balance:', error);
+    return '0';
+  }
+}
+
+/**
+ * Get SUPER token balance for the current wallet.
+ * Returns balance as a decimal string (e.g., "100.5").
+ */
+export async function getSUPERBalance(): Promise<string> {
+  const superTokenAddress = (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined) ??
+    ('0x24cd69bd4C0137aA836dB9935D37EAe701C81139' as Address);
+
+  try {
+    const address = await getWalletAddress();
+    const { publicClient } = await getWalletClients();
+    const balance = await publicClient.readContract({
+      address: superTokenAddress,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+    return formatUnits(balance as bigint, 18);
+  } catch (error) {
+    console.error('Failed to get SUPER balance:', error);
+    return '0';
+  }
+}
+
+/**
+ * Get USDT token balance for the current wallet.
+ * Returns balance as a decimal string (e.g., "50.25").
+ */
+export async function getUSDTBalance(): Promise<string> {
+  const usdtTokenAddress = (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined) ??
+    ('0x5f6E59185Fe6b60d9E24c11425920E68805E518C' as Address);
+
+  try {
+    const address = await getWalletAddress();
+    const { publicClient } = await getWalletClients();
+    const balance = await publicClient.readContract({
+      address: usdtTokenAddress,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+    return formatUnits(balance as bigint, 6); // USDT has 6 decimals
+  } catch (error) {
+    console.error('Failed to get USDT balance:', error);
+    return '0';
+  }
+}
+
+/**
+ * Get all wallet balances (BNB, SUPER, USDT) in parallel.
+ * Returns an object with balance strings for each token.
+ */
+export async function getWalletBalances(): Promise<{
+  bnb: string;
+  super: string;
+  usdt: string;
+}> {
+  try {
+    const [bnb, super_, usdt] = await Promise.all([
+      getBNBBalance(),
+      getSUPERBalance(),
+      getUSDTBalance(),
+    ]);
+    return { bnb, super: super_, usdt };
+  } catch (error) {
+    console.error('Failed to get wallet balances:', error);
+    return { bnb: '0', super: '0', usdt: '0' };
+  }
+}
+

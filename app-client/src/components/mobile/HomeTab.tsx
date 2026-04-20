@@ -23,6 +23,9 @@ export interface HomeTabProps {
   onCopyAddress: () => void;
   copyState: 'idle' | 'copied' | 'failed';
   machineCode: string;
+    bnbBalance: string;
+    superBalance: string;
+    usdtBalance: string;
   t: {
     profileId: string;
     profileVip: string;
@@ -73,6 +76,9 @@ export default function HomeTab({
   copyState,
   machineCode,
   t,
+  bnbBalance,
+  superBalance,
+  usdtBalance,
 }: HomeTabProps) {
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
@@ -101,6 +107,23 @@ export default function HomeTab({
       </View>
 
       <View style={styles.machineCard}>
+              {/* Wallet Balances */}
+              {walletAddress && (
+                <View style={styles.balanceCard}>
+                  <View style={styles.balanceRow}>
+                    <Text style={styles.balanceLabel}>BNB</Text>
+                    <Text style={styles.balanceValue}>{bnbBalance}</Text>
+                  </View>
+                  <View style={styles.balanceRow}>
+                    <Text style={styles.balanceLabel}>SUPER</Text>
+                    <Text style={styles.balanceValue}>{superBalance}</Text>
+                  </View>
+                  <View style={styles.balanceRow}>
+                    <Text style={styles.balanceLabel}>USDT</Text>
+                    <Text style={styles.balanceValue}>{usdtBalance}</Text>
+                  </View>
+                </View>
+              )}
         <Text style={styles.machineLabel}>{t.machineCodeTitle}</Text>
         <Text style={styles.machineValue}>{machineCode}</Text>
         <Text style={styles.machineHint}>{t.machineCodeHint}</Text>
@@ -247,6 +270,29 @@ const styles = StyleSheet.create({
   copyBtnText: {
     color: '#e8fbff',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  balanceCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    padding: 14,
+    gap: 10,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    color: '#93a9d1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  balanceValue: {
+    color: '#7dd3fc',
+    fontSize: 13,
     fontWeight: '700',
   },
 });

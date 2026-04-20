@@ -47,12 +47,18 @@ import {
     claimRewardOnChain,
     getSwapPriceOnChain,
     getWalletAddress,
+    getWalletBalances,
     registerMinerOnChain,
     sendNativeTokenOnChain,
     swapUsdtToSuperOnChain,
     updateHashrateOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdate, useAutoUpdate } from './services/updates';
+import {
+    exportWalletPrivateKey,
+    importWalletPrivateKey
+} from './services/wallet';
+import { copyToClipboard } from './utils/clipboard';
 
 const APP_VERSION = '1.0.0';
 
@@ -508,6 +514,16 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
   const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  
+  // Wallet balances
+  const [bnbBalance, setBnbBalance] = useState<string>('0');
+  const [superBalance, setSuperBalance] = useState<string>('0');
+  const [usdtBalance, setUsdtBalance] = useState<string>('0');
+  
+  // Import/Export wallet
+  const [importWalletVisible, setImportWalletVisible] = useState(false);
+  const [importPrivateKey, setImportPrivateKey] = useState<string>('');
+  const [importError, setImportError] = useState<string>('');
 
   // OTA 在线更新：启动时静默检查 EAS Updates，发现新版本自动下载并弹窗请求重启
   useAutoUpdate(lang);
@@ -1170,6 +1186,11 @@ export default function App() {
           const details = await getUserDetails(existing.id);
           setUserDetails(details);
           await refreshSwapPrice();
+          // Fetch wallet balances
+          const balances = await getWalletBalances();
+          setBnbBalance(balances.bnb);
+          setSuperBalance(balances.super);
+          setUsdtBalance(balances.usdt);
           setStatus(t.initDone);
           return;
         }
@@ -1183,6 +1204,11 @@ export default function App() {
         const details = await getUserDetails(existingByWallet.id);
         setUserDetails(details);
         await refreshSwapPrice();
+        // Fetch wallet balances
+        const balances = await getWalletBalances();
+        setBnbBalance(balances.bnb);
+        setSuperBalance(balances.super);
+        setUsdtBalance(balances.usdt);
         setStatus(t.initDone);
         return;
       }
@@ -1194,6 +1220,11 @@ export default function App() {
       const details = await getUserDetails(user.id);
       setUserDetails(details);
       await refreshSwapPrice();
+      // Fetch wallet balances
+      const balances = await getWalletBalances();
+      setBnbBalance(balances.bnb);
+      setSuperBalance(balances.super);
+      setUsdtBalance(balances.usdt);
       setStatus(t.initDone);
     } catch (error) {
       const message = error instanceof Error ? error.message : t.initFail;
@@ -1458,6 +1489,57 @@ export default function App() {
     }
   };
 
+  /**
+   * Import wallet from private key.
+   * SECURITY: This replaces the current wallet.
+   */
+  const handleImportWallet = async () => {
+    if (!importPrivateKey.trim()) {
+      setImportError(lang === 'zh' ? '请输入私钥' : 'Please enter private key');
+      return;
+    }
+
+    try {
+      setImportError('');
+      const address = await importWalletPrivateKey(importPrivateKey.trim());
+      setImportWalletVisible(false);
+      setImportPrivateKey('');
+      setWalletAddress(address);
+      setStatus(lang === 'zh' ? '钱包已导入，请重新初始化账户' : 'Wallet imported, please reinitialize account');
+      // Reset user and device to force re-initialization
+      setUserId('');
+      setDeviceId('');
+      // Trigger initialization
+      setTimeout(() => {
+        const newDeviceId = createDeviceId();
+        setDeviceId(newDeviceId);
+        void AsyncStorage.setItem(DEVICE_ID_KEY, newDeviceId).catch(() => null);
+      }, 500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : lang === 'zh' ? '导入失败' : 'Import failed';
+      setImportError(message);
+    }
+  };
+
+  /**
+   * Export wallet private key.
+   * SECURITY: This should only be called with explicit user consent.
+   */
+  const handleExportWallet = async () => {
+    try {
+      const pk = await exportWalletPrivateKey();
+      if (pk) {
+        await copyToClipboard(pk);
+        setCopyState('copied');
+        setStatus(lang === 'zh' ? '私钥已复制到剪贴板' : 'Private key copied');
+        setTimeout(() => setCopyState('idle'), 2000);
+      }
+    } catch (error) {
+      setCopyState('failed');
+      setStatus(lang === 'zh' ? '导出失败' : 'Export failed');
+    }
+  };
+
   const guideTitle = identityReady && minerReady ? t.guideReadyTitle : t.guideTitle;
   const guideDescription = !identityReady
     ? t.guideDescInit
@@ -1661,6 +1743,9 @@ export default function App() {
               onCopyAddress={handleCopyAddress}
               copyState={copyState}
               machineCode={machineCode}
+              bnbBalance={bnbBalance}
+              superBalance={superBalance}
+              usdtBalance={usdtBalance}
               t={t}
             />
           )}
@@ -1736,6 +1821,11 @@ export default function App() {
               onCopyAddress={handleCopyAddress}
               copyState={copyState}
               supportContacts={systemStatus?.supportContacts ?? []}
+              bnbBalance={bnbBalance}
+              superBalance={superBalance}
+              usdtBalance={usdtBalance}
+              onExportWallet={handleExportWallet}
+              onImportWalletClick={() => setImportWalletVisible(true)}
               t={t}
               appVersion={APP_VERSION}
               onCheckUpdate={() => {
@@ -1882,6 +1972,44 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalPrimaryBtn} onPress={swapUsdt}>
                 <Text style={styles.modalPrimaryBtnText}>{t.confirm}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={importWalletVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImportWalletVisible(false)}
+      >
+        <Pressable style={styles.modalMask} onPress={() => setImportWalletVisible(false)}>
+          <Pressable style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{lang === 'zh' ? '导入钱包' : 'Import Wallet'}</Text>
+            <Text style={styles.modalHint}>{lang === 'zh' ? '⚠️ 这将替换现有钱包，请确保你有备份' : '⚠️ This will replace your current wallet. Make sure you have a backup'}</Text>
+            
+            <Text style={styles.label}>{lang === 'zh' ? '私钥' : 'Private Key'}</Text>
+            <TextInput
+              style={styles.input}
+              value={importPrivateKey}
+              onChangeText={setImportPrivateKey}
+              placeholder="0x..."
+              placeholderTextColor="#93a9d1"
+              editable={!isBusy}
+              multiline
+              numberOfLines={3}
+              secureTextEntry={false}
+            />
+            
+            {importError && <Text style={styles.errorText}>{importError}</Text>}
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setImportWalletVisible(false)}>
+                <Text style={styles.modalGhostBtnText}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={handleImportWallet} disabled={isBusy}>
+                <Text style={styles.modalPrimaryBtnText}>{lang === 'zh' ? '导入' : 'Import'}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -2750,6 +2878,11 @@ const styles = StyleSheet.create({
   },
   bottomNavLabelActive: {
     color: '#ecfeff',
+  },
+  errorText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    marginTop: 6,
   },
 }
 );

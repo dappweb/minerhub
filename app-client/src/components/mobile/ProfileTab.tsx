@@ -26,6 +26,11 @@ export interface ProfileTabProps {
   onCopyAddress: () => void;
   copyState: 'idle' | 'copied' | 'failed';
   supportContacts?: SupportContactItem[];
+  bnbBalance: string;
+  superBalance: string;
+  usdtBalance: string;
+  onExportWallet: () => void;
+  onImportWalletClick: () => void;
   t: {
     profileSummary: string;
     walletCardTitle: string;
@@ -113,6 +118,11 @@ export default function ProfileTab({
   onCopyAddress,
   copyState,
   supportContacts,
+  bnbBalance,
+  superBalance,
+  usdtBalance,
+  onExportWallet,
+  onImportWalletClick,
   t,
   appVersion,
   onCheckUpdate,
@@ -178,6 +188,37 @@ export default function ProfileTab({
           <Text style={styles.copyBtnText}>{copyLabel}</Text>
         </TouchableOpacity>
         <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+        
+        {/* Wallet Balances */}
+        {walletAddress && (
+          <View style={styles.balanceSection}>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>BNB</Text>
+              <Text style={styles.balanceValue}>{bnbBalance}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>SUPER</Text>
+              <Text style={styles.balanceValue}>{superBalance}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>USDT</Text>
+              <Text style={styles.balanceValue}>{usdtBalance}</Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Import/Export Buttons */}
+        {walletAddress && (
+          <View style={styles.walletActionsRow}>
+            <TouchableOpacity style={styles.walletActionBtn} onPress={onExportWallet}>
+              <Text style={styles.walletActionBtnText}>导出</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.walletActionBtn} onPress={onImportWalletClick}>
+              <Text style={styles.walletActionBtnText}>导入</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
         {contractExpired && (
           <View style={styles.expiredBanner}>
             <Text style={styles.expiredBannerTitle}>{t.contractExpiredTitle}</Text>
@@ -510,5 +551,50 @@ const styles = StyleSheet.create({
   modalError: {
     color: '#fca5a5',
     fontSize: 12,
+  },
+  balanceSection: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    gap: 8,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    color: '#93a9d1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  balanceValue: {
+    color: '#7dd3fc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  walletActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  walletActionBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#1f4f96',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    alignItems: 'center',
+  },
+  walletActionBtnText: {
+    color: '#e8fbff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
