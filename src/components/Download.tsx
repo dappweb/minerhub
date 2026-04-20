@@ -15,6 +15,37 @@ interface DownloadState {
   ios: DownloadInfo;
 }
 
+function buildFallbackState(): DownloadState {
+  const androidEnvUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL;
+  const iosEnvUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL;
+
+  // Keep a deterministic local fallback so static Pages deployments can serve
+  // APK directly without requiring backend upload metadata first.
+  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '/downloads/app-release.apk';
+  const iosUrl = iosEnvUrl && iosEnvUrl !== '#' ? iosEnvUrl : '';
+
+  return {
+    android: androidUrl ? { available: true, downloadUrl: androidUrl } : { available: false },
+    ios: iosUrl ? { available: true, downloadUrl: iosUrl } : { available: false },
+  };
+}
+
+function mergeWithFallback(remote: DownloadState | null): DownloadState {
+  const fallbackState = buildFallbackState();
+  if (!remote) return fallbackState;
+
+  return {
+    android:
+      remote.android?.available || remote.android?.downloadUrl
+        ? remote.android
+        : fallbackState.android,
+    ios:
+      remote.ios?.available || remote.ios?.downloadUrl
+        ? remote.ios
+        : fallbackState.ios,
+  };
+}
+
 function formatBytes(bytes?: number): string {
   if (!bytes) return '--';
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -35,18 +66,20 @@ export default function DownloadSection() {
     const fetchDownloads = async () => {
       try {
         const res = await fetch(`${apiBase}/api/downloads`);
-        if (res.ok && !canceled) {
+        if (res.ok) {
           const data = (await res.json()) as DownloadState;
-          setState(data);
+          if (!canceled) {
+            setState(mergeWithFallback(data));
+          }
+          return;
+        }
+
+        if (!canceled) {
+          setState(mergeWithFallback(null));
         }
       } catch {
-        const androidUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL;
-        const iosUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL;
         if (!canceled) {
-          setState({
-            android: androidUrl && androidUrl !== '#' ? { available: true, downloadUrl: androidUrl } : { available: false },
-            ios: iosUrl && iosUrl !== '#' ? { available: true, downloadUrl: iosUrl } : { available: false },
-          });
+          setState(mergeWithFallback(null));
         }
       } finally {
         if (!canceled) setLoading(false);
