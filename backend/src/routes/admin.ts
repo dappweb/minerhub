@@ -19,6 +19,7 @@ type CustomerSummary = {
   contractActive: number;
   activationStatus: string;
   exchangeAutoEnabled: number;
+  monthlyCardDays: number;
   totalRewardUsdt: string;
   totalRewardSuper: string;
   lastSeenAt: string | null;
@@ -72,6 +73,50 @@ type CustomerDetail = CustomerSummary & {
     note: string | null;
     createdAt: string;
     updatedAt: string;
+  }>;
+};
+
+type AdminDeviceItem = {
+  id: string;
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  machineCode: string | null;
+  monthlyCardDays: number;
+  notes: string | null;
+  deviceId: string;
+  hashrate: number;
+  deviceStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+  onlineStatus: string;
+  contractActive: number;
+  contractEndAt: string | null;
+  rewardRateUsdtPerHour: string;
+  totalRewardUsdt: string;
+  totalRewardSuper: string;
+  bnbBalance: string | null;
+  usdtBalance: string | null;
+  superBalance: string | null;
+};
+
+type AdminDeviceDetail = AdminDeviceItem & {
+  deviceStatusHistory: Array<{
+    id: string;
+    status: string;
+    hashrate: number;
+    observedAt: string;
+    note: string | null;
+  }>;
+  rewardLedger: Array<{
+    id: string;
+    rewardUsdt: string;
+    rewardSuper: string;
+    rateUsdtPerHour: string;
+    source: string;
+    note: string | null;
+    createdAt: string;
   }>;
 };
 
@@ -138,6 +183,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
+      COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
       cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
@@ -151,7 +197,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     LEFT JOIN sub_accounts sa ON sa.owner_user_id = u.id
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
-             cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
+             cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`
   ).all<CustomerSummary>();
@@ -356,6 +402,350 @@ async function handleCustomerList(request: Request, env: Env): Promise<Response>
     readAdminSummary(env, adminWallet),
   ]);
   return json({ items, admin });
+}
+
+async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDeviceItem[]; total: number }> {
+  const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+  const status = (url.searchParams.get("status") ?? "all").trim().toLowerCase();
+  const limit = clampLimit(url.searchParams.get("limit"), 100, 200);
+
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+
+  if (search) {
+    clauses.push("(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  if (status === "online") {
+    clauses.push("COALESCE(cp.online_status, 'offline') = 'online'");
+  } else if (status === "offline") {
+    clauses.push("COALESCE(cp.online_status, 'offline') <> 'online'");
+  } else if (status === "active") {
+    clauses.push("d.status = 'active'");
+  } else if (status === "inactive") {
+    clauses.push("d.status <> 'active'");
+  } else if (status === "contract_active") {
+    clauses.push("COALESCE(cp.contract_active, 0) = 1");
+  } else if (status === "contract_expired") {
+    clauses.push("cp.contract_end_at IS NOT NULL AND cp.contract_end_at <= ?");
+    params.push(nowIso());
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const { results } = await env.DB.prepare(
+    `SELECT
+      d.id AS id,
+      d.user_id AS userId,
+      u.wallet AS wallet,
+      cp.nickname AS nickname,
+      cp.machine_code AS machineCode,
+      COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
+      cp.notes AS notes,
+      d.device_id AS deviceId,
+      d.hashrate AS hashrate,
+      d.status AS deviceStatus,
+      d.created_at AS createdAt,
+      d.updated_at AS updatedAt,
+      cp.last_seen_at AS lastSeenAt,
+      COALESCE(cp.online_status, 'offline') AS onlineStatus,
+      COALESCE(cp.contract_active, 0) AS contractActive,
+      cp.contract_end_at AS contractEndAt,
+      COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
+      COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+      COALESCE(cp.total_reward_super, '0') AS totalRewardSuper
+    FROM devices d
+    INNER JOIN users u ON u.id = d.user_id
+    LEFT JOIN customer_profiles cp ON cp.user_id = d.user_id
+    ${where}
+    ORDER BY d.updated_at DESC
+    LIMIT ?`
+  )
+    .bind(...params, limit)
+    .all<AdminDeviceItem>();
+
+  const baseRows = (results ?? []).map((row) => ({
+    ...row,
+    hashrate: Number((row as { hashrate?: number }).hashrate ?? 0),
+    contractActive: Number((row as { contractActive?: number }).contractActive ?? 0),
+    monthlyCardDays: Number((row as { monthlyCardDays?: number }).monthlyCardDays ?? 30),
+    bnbBalance: null,
+    usdtBalance: null,
+    superBalance: null,
+  }));
+
+  const relayer = tryCreateRelayer(env);
+  if (!relayer) {
+    return { items: baseRows, total: baseRows.length };
+  }
+
+  const walletBalances = new Map<string, { bnb: string | null; usdt: string | null; super: string | null }>();
+  const uniqueWallets = Array.from(new Set(baseRows.map((item) => item.wallet.toLowerCase())));
+
+  await Promise.all(
+    uniqueWallets.map(async (wallet) => {
+      const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+      walletBalances.set(wallet, balances);
+    })
+  );
+
+  const items = baseRows.map((row) => {
+    const balances = walletBalances.get(row.wallet.toLowerCase()) ?? { bnb: null, usdt: null, super: null };
+    return {
+      ...row,
+      bnbBalance: balances.bnb,
+      usdtBalance: balances.usdt,
+      superBalance: balances.super,
+    };
+  });
+
+  return { items, total: items.length };
+}
+
+async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<AdminDeviceDetail | null> {
+  const item = await env.DB.prepare(
+    `SELECT
+      d.id AS id,
+      d.user_id AS userId,
+      u.wallet AS wallet,
+      cp.nickname AS nickname,
+      cp.machine_code AS machineCode,
+      COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
+      cp.notes AS notes,
+      d.device_id AS deviceId,
+      d.hashrate AS hashrate,
+      d.status AS deviceStatus,
+      d.created_at AS createdAt,
+      d.updated_at AS updatedAt,
+      cp.last_seen_at AS lastSeenAt,
+      COALESCE(cp.online_status, 'offline') AS onlineStatus,
+      COALESCE(cp.contract_active, 0) AS contractActive,
+      cp.contract_end_at AS contractEndAt,
+      COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
+      COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+      COALESCE(cp.total_reward_super, '0') AS totalRewardSuper
+    FROM devices d
+    INNER JOIN users u ON u.id = d.user_id
+    LEFT JOIN customer_profiles cp ON cp.user_id = d.user_id
+    WHERE d.id = ?`
+  )
+    .bind(deviceRecordId)
+    .first<AdminDeviceItem>();
+
+  if (!item) return null;
+
+  const [historyRows, rewardRows] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, status, hashrate, observed_at, note
+       FROM device_status_history
+       WHERE user_id = ? AND device_id = ?
+       ORDER BY observed_at DESC LIMIT 100`
+    )
+      .bind(item.userId, item.deviceId)
+      .all<{ id: string; status: string; hashrate: number; observed_at: string; note: string | null }>(),
+    env.DB.prepare(
+      `SELECT id, reward_usdt, reward_super, rate_usdt_per_hour, source, note, created_at
+       FROM reward_ledger
+       WHERE user_id = ? AND (device_id = ? OR device_id IS NULL)
+       ORDER BY created_at DESC LIMIT 100`
+    )
+      .bind(item.userId, item.deviceId)
+      .all<{
+        id: string;
+        reward_usdt: string;
+        reward_super: string;
+        rate_usdt_per_hour: string;
+        source: string;
+        note: string | null;
+        created_at: string;
+      }>(),
+  ]);
+
+  const relayer = tryCreateRelayer(env);
+  const balances = relayer
+    ? await relayer.getWalletBalances(item.wallet).catch(() => ({ bnb: null, usdt: null, super: null }))
+    : { bnb: null, usdt: null, super: null };
+
+  return {
+    ...item,
+    hashrate: Number((item as { hashrate?: number }).hashrate ?? 0),
+    contractActive: Number((item as { contractActive?: number }).contractActive ?? 0),
+    monthlyCardDays: Number((item as { monthlyCardDays?: number }).monthlyCardDays ?? 30),
+    bnbBalance: balances.bnb,
+    usdtBalance: balances.usdt,
+    superBalance: balances.super,
+    deviceStatusHistory: (historyRows.results ?? []).map((row) => ({
+      id: row.id,
+      status: row.status,
+      hashrate: Number(row.hashrate ?? 0),
+      observedAt: row.observed_at,
+      note: row.note,
+    })),
+    rewardLedger: (rewardRows.results ?? []).map((row) => ({
+      id: row.id,
+      rewardUsdt: row.reward_usdt,
+      rewardSuper: row.reward_super,
+      rateUsdtPerHour: row.rate_usdt_per_hour,
+      source: row.source,
+      note: row.note,
+      createdAt: row.created_at,
+    })),
+  };
+}
+
+async function handleAdminDeviceList(request: Request, env: Env): Promise<Response> {
+  const data = await readAdminDevices(env, new URL(request.url));
+  return json(data);
+}
+
+async function handleAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<Response> {
+  const detail = await getAdminDeviceDetail(env, deviceRecordId);
+  if (!detail) return json({ error: "Device not found" }, 404);
+  return json(detail);
+}
+
+async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordId: string): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as {
+    hashrate?: number;
+    deviceStatus?: string;
+    nickname?: string;
+    machineCode?: string;
+    notes?: string;
+    rewardRateUsdtPerHour?: string | number;
+    monthlyCardDays?: number;
+    contractActive?: boolean;
+    contractEndAt?: string | null;
+  } | null;
+  if (!body) return badRequest("Invalid JSON body");
+
+  const current = await env.DB.prepare("SELECT id, user_id FROM devices WHERE id = ?")
+    .bind(deviceRecordId)
+    .first<{ id: string; user_id: string }>();
+  if (!current) return json({ error: "Device not found" }, 404);
+
+  const now = nowIso();
+
+  if (typeof body.hashrate === "number" && Number.isFinite(body.hashrate)) {
+    await env.DB.prepare("UPDATE devices SET hashrate = ?, updated_at = ? WHERE id = ?")
+      .bind(Math.max(0, Math.floor(body.hashrate)), now, deviceRecordId)
+      .run();
+  }
+
+  if (typeof body.deviceStatus === "string" && body.deviceStatus.trim()) {
+    await env.DB.prepare("UPDATE devices SET status = ?, updated_at = ? WHERE id = ?")
+      .bind(body.deviceStatus.trim(), now, deviceRecordId)
+      .run();
+  }
+
+  await ensureProfile(env, current.user_id);
+
+  if (typeof body.nickname === "string") {
+    await updateProfileField(env, current.user_id, "nickname", body.nickname.trim() || null);
+  }
+  if (typeof body.machineCode === "string") {
+    await updateProfileField(env, current.user_id, "machine_code", body.machineCode.trim() || null);
+  }
+  if (typeof body.notes === "string") {
+    await updateProfileField(env, current.user_id, "notes", body.notes.trim() || null);
+  }
+  if (typeof body.rewardRateUsdtPerHour === "string" || typeof body.rewardRateUsdtPerHour === "number") {
+    await updateProfileField(env, current.user_id, "reward_rate_usdt_per_hour", String(body.rewardRateUsdtPerHour));
+  }
+  if (typeof body.monthlyCardDays === "number" && Number.isFinite(body.monthlyCardDays)) {
+    await updateProfileField(env, current.user_id, "monthly_card_days", Math.max(1, Math.floor(body.monthlyCardDays)));
+  }
+  if (typeof body.contractActive === "boolean") {
+    await updateProfileField(env, current.user_id, "contract_active", body.contractActive ? 1 : 0);
+    await updateProfileField(env, current.user_id, "activation_status", body.contractActive ? "active" : "paused");
+  }
+  if (typeof body.contractEndAt === "string" || body.contractEndAt === null) {
+    const normalized = body.contractEndAt ? new Date(body.contractEndAt) : null;
+    if (body.contractEndAt && (!normalized || Number.isNaN(normalized.getTime()))) {
+      return badRequest("contractEndAt must be a valid datetime");
+    }
+    await updateProfileField(env, current.user_id, "contract_end_at", normalized ? normalized.toISOString() : null);
+  }
+
+  return handleAdminDeviceDetail(env, deviceRecordId);
+}
+
+async function handleAdminDeviceBulkUpdate(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as {
+    deviceIds?: string[];
+    rewardRateUsdtPerHour?: string | number;
+    extendDays?: number;
+    mode?: "monthly" | "custom";
+    deviceStatus?: string;
+  } | null;
+  if (!body?.deviceIds?.length) {
+    return badRequest("deviceIds required");
+  }
+
+  const hasRate = body.rewardRateUsdtPerHour !== undefined && body.rewardRateUsdtPerHour !== null;
+  const hasExtend = body.extendDays !== undefined || body.mode === "monthly";
+  const hasStatus = typeof body.deviceStatus === "string" && body.deviceStatus.trim().length > 0;
+  if (!hasRate && !hasExtend && !hasStatus) {
+    return badRequest("No valid bulk action provided");
+  }
+
+  const rate = hasRate ? String(body.rewardRateUsdtPerHour) : null;
+  if (rate !== null) {
+    const parsedRate = Number(rate);
+    if (!Number.isFinite(parsedRate) || parsedRate < 0) {
+      return badRequest("Invalid rewardRateUsdtPerHour");
+    }
+  }
+
+  let updated = 0;
+  const now = nowIso();
+  const ids = Array.from(new Set(body.deviceIds.filter(Boolean)));
+
+  for (const deviceRecordId of ids) {
+    const current = await env.DB.prepare(
+      `SELECT d.id AS id, d.user_id AS user_id,
+              cp.contract_end_at AS contract_end_at,
+              COALESCE(cp.monthly_card_days, 30) AS monthly_card_days
+       FROM devices d
+       LEFT JOIN customer_profiles cp ON cp.user_id = d.user_id
+       WHERE d.id = ?`
+    )
+      .bind(deviceRecordId)
+      .first<{ id: string; user_id: string; contract_end_at: string | null; monthly_card_days: number }>();
+
+    if (!current) continue;
+
+    await ensureProfile(env, current.user_id);
+
+    if (hasStatus) {
+      await env.DB.prepare("UPDATE devices SET status = ?, updated_at = ? WHERE id = ?")
+        .bind(String(body.deviceStatus).trim(), now, deviceRecordId)
+        .run();
+    }
+
+    if (rate !== null) {
+      await updateProfileField(env, current.user_id, "reward_rate_usdt_per_hour", rate);
+    }
+
+    if (hasExtend) {
+      const monthlyDays = Math.max(1, Math.floor(Number(current.monthly_card_days ?? 30)));
+      const days = body.mode === "monthly"
+        ? monthlyDays
+        : Math.max(1, Math.floor(Number(body.extendDays ?? 30)));
+      const currentEnd = current.contract_end_at ? new Date(current.contract_end_at) : null;
+      const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
+        ? currentEnd.getTime()
+        : Date.now();
+      const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+      await updateProfileField(env, current.user_id, "contract_end_at", newEnd);
+      await updateProfileField(env, current.user_id, "contract_active", 1);
+      await updateProfileField(env, current.user_id, "activation_status", "active");
+    }
+
+    updated += 1;
+  }
+
+  return json({ ok: true, updated });
 }
 
 async function handleCustomerDetail(env: Env, userId: string): Promise<Response> {
@@ -860,15 +1250,21 @@ async function handleBulkRate(request: Request, env: Env): Promise<Response> {
 async function handleContractExtend(request: Request, env: Env, userId: string): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     extendDays?: number;
+    mode?: "monthly" | "custom";
   } | null;
-  const days = Math.max(1, Math.floor(Number(body?.extendDays ?? 30)));
+
   await ensureProfile(env, userId);
 
   const existing = await env.DB.prepare(
-    "SELECT contract_end_at FROM customer_profiles WHERE user_id = ?"
+    "SELECT contract_end_at, monthly_card_days FROM customer_profiles WHERE user_id = ?"
   )
     .bind(userId)
-    .first<{ contract_end_at: string | null }>();
+    .first<{ contract_end_at: string | null; monthly_card_days: number | null }>();
+
+  const monthlyDays = Math.max(1, Math.floor(Number(existing?.monthly_card_days ?? 30)));
+  const days = body?.mode === "monthly"
+    ? monthlyDays
+    : Math.max(1, Math.floor(Number(body?.extendDays ?? 30)));
 
   const currentEnd = existing?.contract_end_at ? new Date(existing.contract_end_at) : null;
   const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
@@ -880,7 +1276,7 @@ async function handleContractExtend(request: Request, env: Env, userId: string):
   await updateProfileField(env, userId, "contract_active", 1);
   await updateProfileField(env, userId, "activation_status", "active");
 
-  return json({ ok: true, contractEndAt: newEnd, extendedDays: days });
+  return json({ ok: true, contractEndAt: newEnd, extendedDays: days, mode: body?.mode ?? "custom" });
 }
 
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
@@ -891,6 +1287,24 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
     return handleCustomerList(request, env);
+  }
+
+  if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
+    return handleAdminDeviceList(request, env);
+  }
+
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "devices" && pathParts[1] === "bulk-update") {
+    return handleAdminDeviceBulkUpdate(request, env);
+  }
+
+  if (pathParts.length === 2 && pathParts[0] === "devices") {
+    const deviceRecordId = pathParts[1];
+    if (request.method === "GET") {
+      return handleAdminDeviceDetail(env, deviceRecordId);
+    }
+    if (request.method === "PATCH") {
+      return handleAdminDeviceUpdate(request, env, deviceRecordId);
+    }
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {

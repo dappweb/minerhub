@@ -38,17 +38,38 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       return badRequest("Wallet mismatch: body wallet must match signed wallet");
     }
 
+    const normalizedWallet = body.wallet.toLowerCase();
+    const existing = await env.DB.prepare("SELECT id, wallet, email FROM users WHERE wallet = ?")
+      .bind(normalizedWallet)
+      .first<{ id: string; wallet: string; email: string | null }>();
+    if (existing) {
+      await ensureCustomerProfile(env, existing.id);
+      return json({ id: existing.id, wallet: existing.wallet, email: existing.email ?? null });
+    }
+
     const id = createId("usr");
     const now = nowIso();
-    await env.DB.prepare(
-      "INSERT INTO users (id, wallet, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-    )
-      .bind(id, body.wallet.toLowerCase(), body.email ?? null, now, now)
-      .run();
+    try {
+      await env.DB.prepare(
+        "INSERT INTO users (id, wallet, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+      )
+        .bind(id, normalizedWallet, body.email ?? null, now, now)
+        .run();
+    } catch {
+      // Idempotency fallback: if another request just created the same wallet, return that user.
+      const raced = await env.DB.prepare("SELECT id, wallet, email FROM users WHERE wallet = ?")
+        .bind(normalizedWallet)
+        .first<{ id: string; wallet: string; email: string | null }>();
+      if (!raced) {
+        throw new Error("Failed to create user");
+      }
+      await ensureCustomerProfile(env, raced.id);
+      return json({ id: raced.id, wallet: raced.wallet, email: raced.email ?? null });
+    }
 
     await ensureCustomerProfile(env, id);
 
-    return json({ id, wallet: body.wallet.toLowerCase(), email: body.email ?? null, createdAt: now }, 201);
+    return json({ id, wallet: normalizedWallet, email: body.email ?? null, createdAt: now }, 201);
   }
 
   if (request.method === "GET" && pathParts.length === 1) {
@@ -125,14 +146,15 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
   // POST /api/users/:id/agreement — record user's agreement acceptance
   if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "agreement") {
     const userId = pathParts[0];
-    const body = (await request.json().catch(() => null)) as { version?: string; wallet?: string } | null;
-    if (!body?.version || typeof body.version !== "string") {
-      return badRequest("version is required");
-    }
 
     const authResult = await extractAndVerifyAuth(request, env);
     if (!authResult.valid) {
       return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { version?: string; wallet?: string } | null;
+    if (!body?.version || typeof body.version !== "string") {
+      return badRequest("version is required");
     }
 
     const user = await env.DB.prepare("SELECT id, wallet FROM users WHERE id = ?")

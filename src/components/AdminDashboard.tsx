@@ -184,6 +184,7 @@ type CustomerItem = {
   contractActive: number;
   activationStatus: string;
   exchangeAutoEnabled: number;
+  monthlyCardDays?: number;
   totalRewardUsdt: string;
   totalRewardSuper: string;
   lastSeenAt: string | null;
@@ -247,6 +248,62 @@ type ExchangeRecord = {
   note: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+type AdminDeviceItem = {
+  id: string;
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  machineCode: string | null;
+  monthlyCardDays: number;
+  notes: string | null;
+  deviceId: string;
+  hashrate: number;
+  deviceStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+  onlineStatus: string;
+  contractActive: number;
+  contractEndAt: string | null;
+  rewardRateUsdtPerHour: string;
+  totalRewardUsdt: string;
+  totalRewardSuper: string;
+  bnbBalance: string | null;
+  usdtBalance: string | null;
+  superBalance: string | null;
+};
+
+type AdminDeviceDetail = AdminDeviceItem & {
+  deviceStatusHistory: Array<{
+    id: string;
+    status: string;
+    hashrate: number;
+    observedAt: string;
+    note: string | null;
+  }>;
+  rewardLedger: Array<{
+    id: string;
+    rewardUsdt: string;
+    rewardSuper: string;
+    rateUsdtPerHour: string;
+    source: string;
+    note: string | null;
+    createdAt: string;
+  }>;
+};
+
+type DeviceDetailFormState = {
+  hashrate: string;
+  deviceStatus: string;
+  nickname: string;
+  machineCode: string;
+  notes: string;
+  monthlyCardDays: string;
+  rewardRateUsdtPerHour: string;
+  contractActive: boolean;
+  contractEndAt: string;
 };
 
 type AdminSection = 'overview' | 'owner' | 'onchain' | 'tokens' | 'funding' | 'customers' | 'records' | 'system' | 'docs';
@@ -316,6 +373,17 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(() => createEmptyAnnouncementForm());
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string>('');
   const [announcementFilter, setAnnouncementFilter] = useState<'all' | 'active' | 'published' | 'draft' | 'expired'>('all');
+  const [devices, setDevices] = useState<AdminDeviceItem[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState<boolean>(false);
+  const [deviceSearch, setDeviceSearch] = useState<string>('');
+  const [deviceStatusFilter, setDeviceStatusFilter] = useState<'all' | 'online' | 'offline' | 'active' | 'inactive' | 'contract_active' | 'contract_expired'>('all');
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeviceRate, setBulkDeviceRate] = useState<string>('0.084');
+  const [bulkDeviceExtendDays, setBulkDeviceExtendDays] = useState<string>('30');
+  const [bulkDeviceStatus, setBulkDeviceStatus] = useState<string>('active');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [deviceDetail, setDeviceDetail] = useState<AdminDeviceDetail | null>(null);
+  const [deviceDetailForm, setDeviceDetailForm] = useState<DeviceDetailFormState | null>(null);
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
 
   const poolAddress = getMiningPoolAddress();
@@ -418,6 +486,165 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   }, [adminWallet, ownerReadRequest]);
 
+  const loadDevices = useCallback(async () => {
+    if (!adminWallet) return;
+    try {
+      setDevicesLoading(true);
+      const query = new URLSearchParams();
+      if (deviceSearch.trim()) query.set('search', deviceSearch.trim());
+      if (deviceStatusFilter !== 'all') query.set('status', deviceStatusFilter);
+      query.set('limit', '200');
+      const path = `/api/admin/devices${query.toString() ? `?${query.toString()}` : ''}`;
+      const response = await ownerReadRequest<{ items: AdminDeviceItem[]; total: number }>(path);
+      setDevices(response.items ?? []);
+      setSelectedDeviceIds((prev) => {
+        const existing = new Set((response.items ?? []).map((item) => item.id));
+        const next = new Set<string>();
+        prev.forEach((id) => {
+          if (existing.has(id)) next.add(id);
+        });
+        return next;
+      });
+    } catch (loadError) {
+      setBackendError(loadError instanceof Error ? loadError.message : '读取设备列表失败');
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, [adminWallet, deviceSearch, deviceStatusFilter, ownerReadRequest]);
+
+  const toggleDeviceSelection = useCallback((deviceId: string) => {
+    setSelectedDeviceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(deviceId)) {
+        next.delete(deviceId);
+      } else {
+        next.add(deviceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const loadDeviceDetail = useCallback(async (deviceRecordId: string) => {
+    if (!deviceRecordId) return;
+    try {
+      const detail = await ownerReadRequest<AdminDeviceDetail>(`/api/admin/devices/${deviceRecordId}`);
+      setDeviceDetail(detail);
+      setDeviceDetailForm({
+        hashrate: String(detail.hashrate ?? 0),
+        deviceStatus: detail.deviceStatus ?? 'active',
+        nickname: detail.nickname ?? '',
+        machineCode: detail.machineCode ?? '',
+        notes: detail.notes ?? '',
+        monthlyCardDays: String(detail.monthlyCardDays ?? 30),
+        rewardRateUsdtPerHour: detail.rewardRateUsdtPerHour ?? '0.084',
+        contractActive: detail.contractActive === 1,
+        contractEndAt: formatDateTimeLocalInput(detail.contractEndAt),
+      });
+    } catch (loadError) {
+      setBackendError(loadError instanceof Error ? loadError.message : '读取设备详情失败');
+    }
+  }, [ownerReadRequest]);
+
+  const handleSaveDeviceDetail = async () => {
+    if (!deviceDetail || !deviceDetailForm) return;
+    const hashrateNum = Number(deviceDetailForm.hashrate);
+    const monthlyDaysNum = Number(deviceDetailForm.monthlyCardDays);
+    const rateNum = Number(deviceDetailForm.rewardRateUsdtPerHour);
+    if (!Number.isFinite(hashrateNum) || hashrateNum < 0) {
+      setBackendError('设备算力必须是大于等于 0 的数字');
+      return;
+    }
+    if (!Number.isFinite(rateNum) || rateNum < 0) {
+      setBackendError('收益率必须是非负数');
+      return;
+    }
+    if (!Number.isFinite(monthlyDaysNum) || monthlyDaysNum < 1) {
+      setBackendError('月卡天数必须大于等于 1');
+      return;
+    }
+    try {
+      setAdminActionLoading(`device-save-${deviceDetail.id}`);
+      setBackendError('');
+      const payload = {
+        hashrate: Math.floor(hashrateNum),
+        deviceStatus: deviceDetailForm.deviceStatus,
+        nickname: deviceDetailForm.nickname,
+        machineCode: deviceDetailForm.machineCode,
+        notes: deviceDetailForm.notes,
+        monthlyCardDays: Math.floor(monthlyDaysNum),
+        rewardRateUsdtPerHour: String(rateNum),
+        contractActive: deviceDetailForm.contractActive,
+        contractEndAt: parseDateTimeLocalInput(deviceDetailForm.contractEndAt),
+      };
+      const updated = await signedRequest<AdminDeviceDetail>(`/api/admin/devices/${deviceDetail.id}`, 'PATCH', payload);
+      setDeviceDetail(updated);
+      await loadDevices();
+      await loadBackendData();
+    } catch (saveError) {
+      setBackendError(saveError instanceof Error ? saveError.message : '保存设备信息失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleBulkDeviceUpdate = useCallback(async (mode: 'rate' | 'extend' | 'monthlyRenew' | 'status') => {
+    const deviceIds = Array.from(selectedDeviceIds);
+    if (deviceIds.length === 0) {
+      setBackendError('请先勾选至少一个设备');
+      return;
+    }
+
+    const payload: Record<string, unknown> = { deviceIds };
+    if (mode === 'rate') {
+      const rateNum = Number(bulkDeviceRate);
+      if (!Number.isFinite(rateNum) || rateNum < 0) {
+        setBackendError('批量收益率必须是非负数');
+        return;
+      }
+      payload.rewardRateUsdtPerHour = String(rateNum);
+    }
+    if (mode === 'extend') {
+      const days = Number(bulkDeviceExtendDays);
+      if (!Number.isFinite(days) || days < 1) {
+        setBackendError('续期天数必须大于等于 1');
+        return;
+      }
+      payload.mode = 'custom';
+      payload.extendDays = Math.floor(days);
+    }
+    if (mode === 'monthlyRenew') {
+      payload.mode = 'monthly';
+    }
+    if (mode === 'status') {
+      payload.deviceStatus = bulkDeviceStatus;
+    }
+
+    try {
+      setBackendError('');
+      setAdminActionLoading(`bulk-device-${mode}`);
+      await signedRequest<{ ok: boolean; updated: number }>('/api/admin/devices/bulk-update', 'POST', payload);
+      await loadDevices();
+      if (selectedDeviceId) {
+        await loadDeviceDetail(selectedDeviceId);
+      }
+      await loadBackendData();
+    } catch (actionError) {
+      setBackendError(actionError instanceof Error ? actionError.message : '批量设备操作失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  }, [
+    selectedDeviceIds,
+    bulkDeviceRate,
+    bulkDeviceExtendDays,
+    bulkDeviceStatus,
+    signedRequest,
+    loadDevices,
+    selectedDeviceId,
+    loadDeviceDetail,
+    loadBackendData,
+  ]);
+
   const refreshOnChainData = useCallback(async () => {
     if (!poolAddress || !adminWallet) {
       setError('未配置矿池合约地址，无法读取链上数据。');
@@ -509,6 +736,20 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     if (section !== 'records') return;
     void loadRecords();
   }, [section, loadRecords]);
+
+  useEffect(() => {
+    if (section !== 'customers') return;
+    void loadDevices();
+  }, [section, loadDevices]);
+
+  useEffect(() => {
+    if (!selectedDeviceId) {
+      setDeviceDetail(null);
+      setDeviceDetailForm(null);
+      return;
+    }
+    void loadDeviceDetail(selectedDeviceId);
+  }, [selectedDeviceId, loadDeviceDetail]);
 
   const stats = useMemo(() => {
     return [
@@ -982,6 +1223,22 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('');
     } catch (err) {
       setBackendError(err instanceof Error ? err.message : '续期失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleMonthlyRenew = async (userId: string, userMonthlyDays?: number) => {
+    const fallbackDays = Math.max(1, Math.floor(Number(monthlyCardDays) || 30));
+    const targetDays = Math.max(1, Math.floor(Number(userMonthlyDays) || fallbackDays));
+    if (!window.confirm(`确认为该客户按月续期 ${targetDays} 天？`)) return;
+    try {
+      setAdminActionLoading(`extend-monthly-${userId}`);
+      await signedRequest(`/api/admin/customers/${userId}/extend`, 'POST', { mode: 'monthly' });
+      await loadBackendData();
+      setBackendError('');
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '按月续期失败');
     } finally {
       setAdminActionLoading('');
     }
@@ -1723,20 +1980,331 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             <td className="px-3 py-2 text-slate-300">{customer.rewardRateUsdtPerHour ?? '-'}</td>
                             <td className="px-3 py-2 text-slate-300">{Number(customer.totalRewardUsdt || '0').toFixed(3)}</td>
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => handleExtendContract(customer.id)}
-                                disabled={adminActionLoading === `extend-${customer.id}`}
-                                className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                              >
-                                {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleMonthlyRenew(customer.id, customer.monthlyCardDays)}
+                                  disabled={adminActionLoading === `extend-monthly-${customer.id}`}
+                                  className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
+                                >
+                                  {adminActionLoading === `extend-monthly-${customer.id}` ? '…' : '按月续期'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExtendContract(customer.id)}
+                                  disabled={adminActionLoading === `extend-${customer.id}`}
+                                  className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                                >
+                                  {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div className="text-sm font-semibold text-sky-200">设备列表（按设备维度）</div>
+                    <button
+                      type="button"
+                      onClick={() => void loadDevices()}
+                      disabled={devicesLoading}
+                      className="px-3 py-1.5 rounded border border-sky-500/40 bg-sky-500/20 text-xs text-sky-100 hover:bg-sky-500/30 disabled:opacity-50"
+                    >
+                      {devicesLoading ? '刷新中…' : '刷新设备'}
+                    </button>
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <input
+                      value={deviceSearch}
+                      onChange={(e) => setDeviceSearch(e.target.value)}
+                      placeholder="搜索设备ID / 钱包 / 昵称"
+                      className="h-9 rounded border border-slate-700 bg-slate-900 px-3 text-slate-100 outline-none focus:border-sky-400"
+                    />
+                    <select
+                      value={deviceStatusFilter}
+                      onChange={(e) => setDeviceStatusFilter(e.target.value as 'all' | 'online' | 'offline' | 'active' | 'inactive' | 'contract_active' | 'contract_expired')}
+                      className="h-9 rounded border border-slate-700 bg-slate-900 px-3 text-slate-100 outline-none focus:border-sky-400"
+                    >
+                      <option value="all">全部状态</option>
+                      <option value="online">在线</option>
+                      <option value="offline">离线</option>
+                      <option value="active">设备激活</option>
+                      <option value="inactive">设备停用</option>
+                      <option value="contract_active">合同有效</option>
+                      <option value="contract_expired">合同过期</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void loadDevices()}
+                      disabled={devicesLoading}
+                      className="h-9 rounded bg-sky-500 text-slate-950 font-semibold hover:bg-sky-400 disabled:opacity-60"
+                    >
+                      应用筛选
+                    </button>
+                  </div>
+
+                  <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-xs">
+                    <div className="mb-2 text-slate-300">已选设备：{selectedDeviceIds.size}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={bulkDeviceRate}
+                        onChange={(e) => setBulkDeviceRate(e.target.value)}
+                        placeholder="收益率"
+                        className="h-8 w-24 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleBulkDeviceUpdate('rate')}
+                        disabled={adminActionLoading === 'bulk-device-rate'}
+                        className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === 'bulk-device-rate' ? '处理中…' : '批量改收益率'}
+                      </button>
+
+                      <input
+                        value={bulkDeviceExtendDays}
+                        onChange={(e) => setBulkDeviceExtendDays(e.target.value)}
+                        placeholder="续期天数"
+                        className="h-8 w-24 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleBulkDeviceUpdate('extend')}
+                        disabled={adminActionLoading === 'bulk-device-extend'}
+                        className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === 'bulk-device-extend' ? '处理中…' : '批量续期'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBulkDeviceUpdate('monthlyRenew')}
+                        disabled={adminActionLoading === 'bulk-device-monthlyRenew'}
+                        className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === 'bulk-device-monthlyRenew' ? '处理中…' : '按月批量续期'}
+                      </button>
+
+                      <select
+                        value={bulkDeviceStatus}
+                        onChange={(e) => setBulkDeviceStatus(e.target.value)}
+                        className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
+                      >
+                        <option value="active">active</option>
+                        <option value="inactive">inactive</option>
+                        <option value="paused">paused</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleBulkDeviceUpdate('status')}
+                        disabled={adminActionLoading === 'bulk-device-status'}
+                        className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === 'bulk-device-status' ? '处理中…' : '批量改状态'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDeviceIds(new Set())}
+                        className="px-2 py-1 rounded border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      >
+                        清空勾选
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 max-h-120">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-slate-900 text-slate-400 border-b border-slate-800">
+                        <tr>
+                          <th className="px-2 py-2 font-medium w-8"></th>
+                          <th className="px-3 py-2 font-medium">设备ID</th>
+                          <th className="px-3 py-2 font-medium">钱包</th>
+                          <th className="px-3 py-2 font-medium">在线</th>
+                          <th className="px-3 py-2 font-medium">算力</th>
+                          <th className="px-3 py-2 font-medium">设备状态</th>
+                          <th className="px-3 py-2 font-medium">最后心跳</th>
+                          <th className="px-3 py-2 font-medium">收益率</th>
+                          <th className="px-3 py-2 font-medium">累计USDT</th>
+                          <th className="px-3 py-2 font-medium">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {devices.length === 0 ? (
+                          <tr>
+                            <td colSpan={10} className="px-3 py-4 text-slate-500">暂无设备数据</td>
+                          </tr>
+                        ) : devices.map((device) => (
+                          <tr key={device.id} className="hover:bg-slate-800/40">
+                            <td className="px-2 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedDeviceIds.has(device.id)}
+                                onChange={() => toggleDeviceSelection(device.id)}
+                                className="accent-sky-500"
+                              />
+                            </td>
+                            <td className="px-3 py-2 font-mono text-slate-200">{device.deviceId}</td>
+                            <td className="px-3 py-2 font-mono text-slate-300">{device.wallet.slice(0, 10)}...{device.wallet.slice(-6)}</td>
+                            <td className={`px-3 py-2 ${device.onlineStatus === 'online' ? 'text-emerald-300' : 'text-slate-400'}`}>{device.onlineStatus}</td>
+                            <td className="px-3 py-2 text-slate-300">{device.hashrate}</td>
+                            <td className="px-3 py-2 text-slate-300">{device.deviceStatus}</td>
+                            <td className="px-3 py-2 text-slate-400">{device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('zh-CN') : '--'}</td>
+                            <td className="px-3 py-2 text-slate-300">{device.rewardRateUsdtPerHour}</td>
+                            <td className="px-3 py-2 text-slate-300">{Number(device.totalRewardUsdt || '0').toFixed(3)}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDeviceId(device.id)}
+                                className="px-2 py-1 rounded border border-sky-500/40 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30"
+                              >
+                                详情/编辑
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {deviceDetail && deviceDetailForm && (
+                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm font-semibold text-slate-200">设备详情：{deviceDetail.deviceId}</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDeviceId('');
+                            setDeviceDetail(null);
+                            setDeviceDetailForm(null);
+                          }}
+                          className="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:bg-slate-700"
+                        >
+                          关闭
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mb-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">算力</span>
+                          <input
+                            value={deviceDetailForm.hashrate}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, hashrate: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">设备状态</span>
+                          <input
+                            value={deviceDetailForm.deviceStatus}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, deviceStatus: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">收益率 (USDT/h)</span>
+                          <input
+                            value={deviceDetailForm.rewardRateUsdtPerHour}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, rewardRateUsdtPerHour: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">昵称</span>
+                          <input
+                            value={deviceDetailForm.nickname}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, nickname: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">机器码</span>
+                          <input
+                            value={deviceDetailForm.machineCode}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, machineCode: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">月卡天数</span>
+                          <input
+                            value={deviceDetailForm.monthlyCardDays}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, monthlyCardDays: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-slate-400">合同有效</span>
+                          <select
+                            value={deviceDetailForm.contractActive ? '1' : '0'}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, contractActive: e.target.value === '1' } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          >
+                            <option value="1">有效</option>
+                            <option value="0">停用</option>
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 md:col-span-2">
+                          <span className="text-slate-400">合同到期</span>
+                          <input
+                            type="datetime-local"
+                            value={deviceDetailForm.contractEndAt}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, contractEndAt: e.target.value } : prev)}
+                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 md:col-span-3">
+                          <span className="text-slate-400">备注</span>
+                          <textarea
+                            value={deviceDetailForm.notes}
+                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, notes: e.target.value } : prev)}
+                            rows={3}
+                            className="rounded border border-slate-700 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-sky-400"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-3">
+                        <button
+                          type="button"
+                          onClick={handleSaveDeviceDetail}
+                          disabled={adminActionLoading === `device-save-${deviceDetail.id}`}
+                          className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold disabled:opacity-60"
+                        >
+                          {adminActionLoading === `device-save-${deviceDetail.id}` ? '保存中…' : '保存设备信息'}
+                        </button>
+                        <span className="text-xs text-slate-500">钱包：{deviceDetail.wallet}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                          <div className="text-slate-300 mb-2">最近状态历史</div>
+                          <div className="space-y-1 max-h-40 overflow-auto">
+                            {deviceDetail.deviceStatusHistory.slice(0, 15).map((row) => (
+                              <div key={row.id} className="text-slate-400">
+                                {new Date(row.observedAt).toLocaleString('zh-CN')} · {row.status} · {row.hashrate}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                          <div className="text-slate-300 mb-2">最近收益流水</div>
+                          <div className="space-y-1 max-h-40 overflow-auto">
+                            {deviceDetail.rewardLedger.slice(0, 15).map((row) => (
+                              <div key={row.id} className="text-slate-400">
+                                {new Date(row.createdAt).toLocaleString('zh-CN')} · +{row.rewardUsdt} USDT ({row.source})
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

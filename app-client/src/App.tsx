@@ -1213,8 +1213,17 @@ export default function App() {
         return;
       }
 
-      // 3. 全新用户，注册并持久化
-      const user = await createUser(address);
+      // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
+      let user = await createUser(address).catch(async (err) => {
+        const message = err instanceof Error ? err.message.toLowerCase() : '';
+        if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
+          return await getUserByWallet(address);
+        }
+        throw err;
+      });
+      if (!user) {
+        throw new Error(lang === 'zh' ? '身份同步失败：未找到账户' : 'Identity sync failed: user not found');
+      }
       setUserId(user.id);
       await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
       const details = await getUserDetails(user.id);
