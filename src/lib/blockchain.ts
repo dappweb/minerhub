@@ -1,5 +1,5 @@
 ﻿import type { Address, Hex } from 'viem';
-import { createPublicClient, createWalletClient, custom, defineChain, http, parseEther, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, custom, defineChain, fallback, http, parseEther, parseUnits } from 'viem';
 
 export type MiningPoolGlobalStats = {
   totalEmitted: bigint;
@@ -301,6 +301,16 @@ const erc20Abi = [
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 97);
 const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
+const rpcHttpUrls = Array.from(
+  new Set(
+    [
+      rpcUrl,
+      'https://data-seed-prebsc-2-s1.binance.org:8545/',
+      'https://bsc-testnet.publicnode.com',
+      'https://bsc-testnet-rpc.publicnode.com',
+    ].filter((u): u is string => Boolean(u && u.trim()))
+  )
+);
 
 const chain = defineChain({
   id: chainId,
@@ -311,8 +321,8 @@ const chain = defineChain({
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: [rpcUrl] },
-    public: { http: [rpcUrl] },
+    default: { http: rpcHttpUrls },
+    public: { http: rpcHttpUrls },
   },
 });
 
@@ -341,7 +351,14 @@ function getWalletClient() {
 function getPublicClient() {
   return createPublicClient({
     chain,
-    transport: http(rpcUrl),
+    transport: fallback(
+      rpcHttpUrls.map((url) =>
+        http(url, {
+          timeout: 10_000,
+          retryCount: 1,
+        })
+      )
+    ),
   }) as any;
 }
 
