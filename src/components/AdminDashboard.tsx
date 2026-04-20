@@ -58,6 +58,17 @@ function formatUsdtAmount(amount: bigint): string {
   return parsed.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
 }
 
+function formatDecimalString(value?: string | null, digits = 4): string {
+  if (value == null || value === '') {
+    return '--';
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return value;
+  }
+  return parsed.toLocaleString('zh-CN', { maximumFractionDigits: digits });
+}
+
 type SupportContact = {
   id: string;
   type: string;
@@ -181,6 +192,16 @@ type CustomerItem = {
   activeDeviceCount: number;
   subAccountCount: number;
   rewardRateUsdtPerHour?: string | null;
+  bnbBalance?: string | null;
+  usdtBalance?: string | null;
+  superBalance?: string | null;
+};
+
+type AdminWalletSummary = {
+  wallet: string;
+  bnbBalance: string | null;
+  usdtBalance: string | null;
+  superBalance: string | null;
 };
 
 type RechargeRecord = {
@@ -251,6 +272,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [swapStats, setSwapStats] = useState<SwapPoolStats | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
+  const [adminSummary, setAdminSummary] = useState<AdminWalletSummary | null>(null);
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [withdrawalRecords, setWithdrawalRecords] = useState<WithdrawalRecord[]>([]);
   const [exchangeRecords, setExchangeRecords] = useState<ExchangeRecord[]>([]);
@@ -361,12 +383,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           if (!response.ok) return null;
           return (await response.json()) as SystemStatus;
         }).catch(() => null),
-        ownerReadRequest<{ items: CustomerItem[] }>('/api/admin/customers'),
+        ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>('/api/admin/customers'),
         announcementsPromise,
       ]);
 
       setSystemStatus(statusResponse);
       setCustomers(customersResponse.items ?? []);
+      setAdminSummary(customersResponse.admin ?? null);
       setAnnouncements(announcementsResponse.items ?? []);
     } catch (loadError) {
       setBackendError(loadError instanceof Error ? loadError.message : '读取后台数据失败');
@@ -1579,6 +1602,25 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-4">
+                  <div className="text-sm font-semibold text-amber-200 mb-2">系统管理员</div>
+                  <div className="text-xs text-slate-300 break-all font-mono mb-3">{adminSummary?.wallet ?? adminWallet}</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">BNB</div>
+                      <div className="text-slate-100 mt-1">{formatDecimalString(adminSummary?.bnbBalance, 6)}</div>
+                    </div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">USDT</div>
+                      <div className="text-slate-100 mt-1">{formatDecimalString(adminSummary?.usdtBalance, 4)}</div>
+                    </div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">SUPER</div>
+                      <div className="text-slate-100 mt-1">{formatDecimalString(adminSummary?.superBalance, 4)}</div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Bulk actions toolbar */}
                 <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
                   <span className="text-slate-300">已选 {selectedCustomerIds.size} 位</span>
@@ -1637,6 +1679,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <th className="px-3 py-2 font-medium">状态</th>
                         <th className="px-3 py-2 font-medium">在线</th>
                         <th className="px-3 py-2 font-medium">设备</th>
+                        <th className="px-3 py-2 font-medium">BNB</th>
+                        <th className="px-3 py-2 font-medium">USDT</th>
+                        <th className="px-3 py-2 font-medium">SUPER</th>
                         <th className="px-3 py-2 font-medium">收益率</th>
                         <th className="px-3 py-2 font-medium">累计 USDT</th>
                         <th className="px-3 py-2 font-medium">操作</th>
@@ -1672,6 +1717,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             <td className="px-3 py-2 text-slate-300">{customer.contractActive ? '有效' : '停用'}</td>
                             <td className="px-3 py-2 text-slate-300">{customer.onlineStatus}</td>
                             <td className="px-3 py-2 text-slate-300">{customer.activeDeviceCount}/{customer.deviceCount}</td>
+                            <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.bnbBalance, 6)}</td>
+                            <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.usdtBalance, 4)}</td>
+                            <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.superBalance, 4)}</td>
                             <td className="px-3 py-2 text-slate-300">{customer.rewardRateUsdtPerHour ?? '-'}</td>
                             <td className="px-3 py-2 text-slate-300">{Number(customer.totalRewardUsdt || '0').toFixed(3)}</td>
                             <td className="px-3 py-2">

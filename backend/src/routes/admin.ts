@@ -1,6 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { isOwnerWallet } from "../lib/ownerAuth";
+import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
 import { runScheduledTasks } from "../lib/scheduled";
 import type { Env } from "../types/env";
@@ -25,6 +26,16 @@ type CustomerSummary = {
   deviceCount: number;
   activeDeviceCount: number;
   subAccountCount: number;
+  bnbBalance: string | null;
+  usdtBalance: string | null;
+  superBalance: string | null;
+};
+
+type AdminSummary = {
+  wallet: string;
+  bnbBalance: string | null;
+  usdtBalance: string | null;
+  superBalance: string | null;
 };
 
 type CustomerDetail = CustomerSummary & {
@@ -145,12 +156,48 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     ORDER BY u.created_at DESC`
   ).all<CustomerSummary>();
 
-  return (results ?? []).map((row) => ({
+  const baseRows = (results ?? []).map((row) => ({
     ...row,
     deviceCount: Number((row as { deviceCount?: number }).deviceCount ?? 0),
     activeDeviceCount: Number((row as { activeDeviceCount?: number }).activeDeviceCount ?? 0),
     subAccountCount: Number((row as { subAccountCount?: number }).subAccountCount ?? 0),
+    bnbBalance: null,
+    usdtBalance: null,
+    superBalance: null,
   }));
+
+  const relayer = tryCreateRelayer(env);
+  if (!relayer) {
+    return baseRows;
+  }
+
+  return await Promise.all(
+    baseRows.map(async (row) => {
+      const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+      return {
+        ...row,
+        bnbBalance: balances.bnb,
+        usdtBalance: balances.usdt,
+        superBalance: balances.super,
+      };
+    })
+  );
+}
+
+async function readAdminSummary(env: Env, wallet: string | null): Promise<AdminSummary | null> {
+  if (!wallet) return null;
+  const relayer = tryCreateRelayer(env);
+  if (!relayer) {
+    return { wallet, bnbBalance: null, usdtBalance: null, superBalance: null };
+  }
+
+  const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+  return {
+    wallet,
+    bnbBalance: balances.bnb,
+    usdtBalance: balances.usdt,
+    superBalance: balances.super,
+  };
 }
 
 async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDetail | null> {
@@ -302,8 +349,13 @@ function calculateContractEnd(startAt: string, termDays: number): string {
   return new Date(new Date(startAt).getTime() + termDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
-async function handleCustomerList(env: Env): Promise<Response> {
-  return json({ items: await readCustomerSummaries(env) });
+async function handleCustomerList(request: Request, env: Env): Promise<Response> {
+  const adminWallet = request.headers.get("x-wallet");
+  const [items, admin] = await Promise.all([
+    readCustomerSummaries(env),
+    readAdminSummary(env, adminWallet),
+  ]);
+  return json({ items, admin });
 }
 
 async function handleCustomerDetail(env: Env, userId: string): Promise<Response> {
@@ -838,7 +890,7 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
   if (ownerCheck) return ownerCheck;
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
-    return handleCustomerList(env);
+    return handleCustomerList(request, env);
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {
