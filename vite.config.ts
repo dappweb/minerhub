@@ -1,5 +1,6 @@
 ﻿import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { spawn } from 'child_process';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
@@ -7,8 +8,27 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   const isAI = process.env.DISABLE_HMR === 'true';
 
+  const uploadOrRemoveAPKPlugin = {
+    name: 'upload-or-remove-apk',
+    async closeBundle() {
+      if (mode === 'production') {
+        await new Promise((resolve, reject) => {
+          const child = spawn('node', ['scripts/build-and-upload-apk.mjs'], {
+            cwd: process.cwd(),
+            stdio: 'inherit',
+          });
+          child.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`Upload script failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      }
+    },
+  };
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), uploadOrRemoveAPKPlugin],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
@@ -17,8 +37,6 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
-
-    // Pre-bundle heavy dependencies so dev server starts faster
     optimizeDeps: {
       include: [
         'react',
@@ -30,19 +48,15 @@ export default defineConfig(({mode}) => {
       ],
       exclude: ['wrangler'],
     },
-
-    // Modern target for faster transforms
     esbuild: {
       target: 'es2022',
       ...(mode === 'production' && {
         drop: ['console', 'debugger'],
       }),
     },
-
     build: {
       target: 'es2022',
       minify: 'esbuild',
-      // Split large vendor chunks for better caching
       rollupOptions: {
         output: {
           manualChunks: {
@@ -56,14 +70,10 @@ export default defineConfig(({mode}) => {
       sourcemap: false,
       chunkSizeWarningLimit: 600,
     },
-
     server: {
-      // HMR disabled in AI Studio via DISABLE_HMR env var
       hmr: !isAI,
-      // Optimized file watching: ignore irrelevant directories
       watch: isAI
         ? {
-            // Polling mode with slower interval reduces CPU during AI agent edits
             usePolling: true,
             interval: 1000,
             ignored: ['**/node_modules/**', '**/dist/**', '**/backend/**', '**/contracts/**', '**/app-client/**', '**/.git/**'],
@@ -71,7 +81,6 @@ export default defineConfig(({mode}) => {
         : {
             ignored: ['**/node_modules/**', '**/dist/**', '**/backend/**', '**/contracts/**', '**/app-client/**', '**/.git/**'],
           },
-      // Pre-transform frequently used modules for faster page loads
       warmup: {
         clientFiles: [
           './src/App.tsx',
