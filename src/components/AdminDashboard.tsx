@@ -1158,21 +1158,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             </>
             )}
 
-            {error && (
-              <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
-                {error}
-              </div>
-            )}
-
             {poolAddress && section !== 'docs' && (
               <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-xs text-slate-400 break-all">
                 合约地址: {poolAddress}
               </div>
             )}
 
-            {(backendError || backendLoading) && (
-              <div className={`mb-6 rounded-xl px-4 py-3 text-sm ${backendError ? 'border border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border border-slate-800 bg-slate-900/50 text-slate-400'}`}>
-                {backendError || (backendLoading ? '正在同步后台系统数据...' : '后台系统数据已更新')}
+            {backendLoading && (
+              <div className="mb-6 rounded-xl px-4 py-3 text-sm border border-slate-800 bg-slate-900/50 text-slate-400">
+                {'正在同步后台系统数据...'}
               </div>
             )}
 
@@ -1942,9 +1936,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   {recordsLoading ? '刷新中…' : '刷新'}
                 </button>
               </div>
-              {recordsError && (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">{recordsError}</div>
-              )}
+
 
               {/* Recharge */}
               <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
