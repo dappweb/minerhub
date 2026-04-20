@@ -10,9 +10,9 @@ type AnnouncementTarget = "all" | "active_contract";
 type AnnouncementRow = {
   id: string;
   title_zh: string;
-  title_en: string;
+  title_en: string | null;
   content_zh: string;
-  content_en: string;
+  content_en: string | null;
   level: string;
   target: string;
   is_published: number;
@@ -20,8 +20,8 @@ type AnnouncementRow = {
   publish_at: string | null;
   expire_at: string | null;
   created_by: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type AnnouncementDto = {
@@ -40,6 +40,100 @@ type AnnouncementDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+let announcementSchemaInit: Promise<void> | null = null;
+
+async function ensureAnnouncementsSchema(env: Env): Promise<void> {
+  if (announcementSchemaInit) return announcementSchemaInit;
+
+  announcementSchemaInit = (async () => {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS announcements (
+        id TEXT PRIMARY KEY,
+        title_zh TEXT NOT NULL,
+        title_en TEXT NOT NULL,
+        content_zh TEXT NOT NULL,
+        content_en TEXT NOT NULL,
+        level TEXT NOT NULL DEFAULT 'info',
+        target TEXT NOT NULL DEFAULT 'all',
+        is_published INTEGER NOT NULL DEFAULT 0,
+        is_pinned INTEGER NOT NULL DEFAULT 0,
+        publish_at TEXT,
+        expire_at TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`
+    ).run();
+
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS announcement_reads (
+        announcement_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        wallet TEXT,
+        read_at TEXT NOT NULL,
+        PRIMARY KEY (announcement_id, user_id),
+        FOREIGN KEY (announcement_id) REFERENCES announcements(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )`
+    ).run();
+
+    const columnInfo = await env.DB.prepare("PRAGMA table_info(announcements)").all<{ name: string }>();
+    const columns = new Set((columnInfo.results ?? []).map((item) => item.name));
+
+    const alterStatements: string[] = [];
+    if (!columns.has("title_en")) alterStatements.push("ALTER TABLE announcements ADD COLUMN title_en TEXT");
+    if (!columns.has("content_en")) alterStatements.push("ALTER TABLE announcements ADD COLUMN content_en TEXT");
+    if (!columns.has("level")) alterStatements.push("ALTER TABLE announcements ADD COLUMN level TEXT NOT NULL DEFAULT 'info'");
+    if (!columns.has("target")) alterStatements.push("ALTER TABLE announcements ADD COLUMN target TEXT NOT NULL DEFAULT 'all'");
+    if (!columns.has("is_pinned")) alterStatements.push("ALTER TABLE announcements ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0");
+    if (!columns.has("publish_at")) alterStatements.push("ALTER TABLE announcements ADD COLUMN publish_at TEXT");
+    if (!columns.has("expire_at")) alterStatements.push("ALTER TABLE announcements ADD COLUMN expire_at TEXT");
+    if (!columns.has("created_by")) alterStatements.push("ALTER TABLE announcements ADD COLUMN created_by TEXT");
+    if (!columns.has("created_at")) alterStatements.push("ALTER TABLE announcements ADD COLUMN created_at TEXT");
+    if (!columns.has("updated_at")) alterStatements.push("ALTER TABLE announcements ADD COLUMN updated_at TEXT");
+
+    for (const statement of alterStatements) {
+      await env.DB.prepare(statement).run();
+    }
+
+    const now = nowIso();
+    await env.DB.prepare(
+      `UPDATE announcements
+       SET title_en = COALESCE(NULLIF(title_en, ''), title_zh),
+           content_en = COALESCE(NULLIF(content_en, ''), content_zh),
+           level = COALESCE(NULLIF(level, ''), 'info'),
+           target = COALESCE(NULLIF(target, ''), 'all'),
+           is_pinned = COALESCE(is_pinned, 0),
+           created_at = COALESCE(NULLIF(created_at, ''), publish_at, updated_at, ?),
+           updated_at = COALESCE(NULLIF(updated_at, ''), created_at, publish_at, ?)`
+    )
+      .bind(now, now)
+      .run();
+
+    const readsInfo = await env.DB.prepare("PRAGMA table_info(announcement_reads)").all<{ name: string }>();
+    const readColumns = new Set((readsInfo.results ?? []).map((item) => item.name));
+    if (!readColumns.has("wallet")) {
+      await env.DB.prepare("ALTER TABLE announcement_reads ADD COLUMN wallet TEXT").run();
+    }
+    if (!readColumns.has("read_at")) {
+      await env.DB.prepare("ALTER TABLE announcement_reads ADD COLUMN read_at TEXT").run();
+    }
+
+    await env.DB.prepare("UPDATE announcement_reads SET read_at = COALESCE(NULLIF(read_at, ''), ?) WHERE read_at IS NULL OR read_at = ''")
+      .bind(now)
+      .run();
+
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_announcements_publish_at ON announcements(publish_at)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published, is_pinned)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_announcement_reads_user_id ON announcement_reads(user_id)").run();
+  })().catch((error) => {
+    announcementSchemaInit = null;
+    throw error;
+  });
+
+  return announcementSchemaInit;
+}
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
   const wallet = request.headers.get("x-wallet");
@@ -78,12 +172,13 @@ function normalizeDateTime(value: unknown): string | null {
 }
 
 function toAnnouncementDto(row: AnnouncementRow): AnnouncementDto {
+  const fallbackTime = row.publish_at ?? row.expire_at ?? nowIso();
   return {
     id: row.id,
     titleZh: row.title_zh,
-    titleEn: row.title_en,
+    titleEn: row.title_en && row.title_en.trim() ? row.title_en : row.title_zh,
     contentZh: row.content_zh,
-    contentEn: row.content_en,
+    contentEn: row.content_en && row.content_en.trim() ? row.content_en : row.content_zh,
     level: normalizeLevel(row.level),
     target: normalizeTarget(row.target),
     isPublished: Boolean(row.is_published),
@@ -91,8 +186,8 @@ function toAnnouncementDto(row: AnnouncementRow): AnnouncementDto {
     publishAt: row.publish_at,
     expireAt: row.expire_at,
     createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.created_at ?? fallbackTime,
+    updatedAt: row.updated_at ?? row.created_at ?? fallbackTime,
   };
 }
 
@@ -156,8 +251,8 @@ async function createAnnouncement(request: Request, env: Env): Promise<Response>
   const titleEn = typeof body.titleEn === "string" ? body.titleEn.trim() : "";
   const contentZh = typeof body.contentZh === "string" ? body.contentZh.trim() : "";
   const contentEn = typeof body.contentEn === "string" ? body.contentEn.trim() : "";
-  if (!titleZh || !titleEn || !contentZh || !contentEn) {
-    return badRequest("title/content in zh and en are required");
+  if (!titleZh || !contentZh) {
+    return badRequest("titleZh and contentZh are required");
   }
 
   const now = nowIso();
@@ -179,9 +274,9 @@ async function createAnnouncement(request: Request, env: Env): Promise<Response>
     .bind(
       id,
       titleZh,
-      titleEn,
+      titleEn || titleZh,
       contentZh,
-      contentEn,
+      contentEn || contentZh,
       normalizeLevel(body.level),
       normalizeTarget(body.target),
       isPublished ? 1 : 0,
@@ -336,6 +431,8 @@ async function markAnnouncementRead(request: Request, env: Env, userId: string, 
 }
 
 export async function handleAnnouncements(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  await ensureAnnouncementsSchema(env);
+
   if (request.method === "GET" && pathParts.length === 0) {
     return json({ items: await listPublicAnnouncements(env) });
   }
