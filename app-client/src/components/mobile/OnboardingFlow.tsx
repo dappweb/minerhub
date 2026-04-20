@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -7,7 +7,7 @@ type OnboardingFlowProps = {
   visible: boolean;
   lang: OnboardingLang;
   machineCode: string;
-  onComplete: (contractYears: 1 | 2 | 3) => void;
+  onComplete: (contractYears: 1 | 2 | 3, referralWallet?: string) => void;
 };
 
 const COPY = {
@@ -29,6 +29,9 @@ const COPY = {
     s2Hint: 'You can also find this code in the Home tab.',
     s3Title: 'Choose a Contract Term',
     s3Body: 'The duration your monthly card will remain active. You can extend it later anytime.',
+    referralTitle: 'Invite Code (Optional)',
+    referralHint: 'Use inviter wallet address as referral code.',
+    referralPlaceholder: '0x... inviter wallet',
     years1: '1 Year',
     years2: '2 Years',
     years3: '3 Years',
@@ -51,6 +54,9 @@ const COPY = {
     s2Hint: '您也可以在"首页"随时查看此机器码。',
     s3Title: '选择合同周期',
     s3Body: '即您月卡的有效时长。后续可随时延长。',
+    referralTitle: '推荐码（可选）',
+    referralHint: '推荐码使用推荐人的钱包地址。',
+    referralPlaceholder: '输入推荐人钱包地址 0x...',
     years1: '1 年',
     years2: '2 年',
     years3: '3 年',
@@ -62,11 +68,12 @@ const COPY = {
 export default function OnboardingFlow({ visible, lang, machineCode, onComplete }: OnboardingFlowProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [years, setYears] = useState<1 | 2 | 3>(3);
+  const [referralWallet, setReferralWallet] = useState('');
   const t = COPY[lang];
 
   const next = () => {
     if (step < 3) setStep((step + 1) as 1 | 2 | 3);
-    else onComplete(years);
+    else onComplete(years, referralWallet.trim() || undefined);
   };
 
   const back = () => {
@@ -111,6 +118,17 @@ export default function OnboardingFlow({ visible, lang, machineCode, onComplete 
               <>
                 <Text style={styles.title}>{t.s3Title}</Text>
                 <Text style={styles.body}>{t.s3Body}</Text>
+                <Text style={styles.referralTitle}>{t.referralTitle}</Text>
+                <TextInput
+                  style={styles.referralInput}
+                  value={referralWallet}
+                  onChangeText={setReferralWallet}
+                  placeholder={t.referralPlaceholder}
+                  placeholderTextColor="#64748b"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Text style={styles.hint}>{t.referralHint}</Text>
                 <View style={styles.yearsRow}>
                   {[1, 2, 3].map((y) => {
                     const active = years === y;
@@ -181,6 +199,17 @@ const styles = StyleSheet.create({
   title: { color: '#f1f5f9', fontSize: 22, fontWeight: '700', marginBottom: 10 },
   body: { color: '#cbd5e1', fontSize: 14, lineHeight: 20, marginBottom: 10 },
   hint: { color: '#64748b', fontSize: 12, marginTop: 8 },
+  referralTitle: { color: '#cbd5e1', fontSize: 13, marginTop: 6, marginBottom: 8, fontWeight: '600' },
+  referralInput: {
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0b1224',
+    color: '#e2e8f0',
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
   bullets: { marginTop: 8 },
   bullet: { color: '#e2e8f0', fontSize: 14, lineHeight: 24 },
   codeBox: {

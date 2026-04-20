@@ -1,13 +1,14 @@
 import { internalError, json, notFound } from "./lib/response";
-import { handleAnnouncements } from "./routes/announcements";
 import { runScheduledTasks } from "./lib/scheduled";
 import { handleAdmin } from "./routes/admin";
+import { handleAnnouncements } from "./routes/announcements";
 import { handleClaims } from "./routes/claims";
 import { handleDevices } from "./routes/devices";
 import { handleDownloads } from "./routes/downloads";
 import { handleGas } from "./routes/gas";
 import { handleOperations } from "./routes/operations";
 import { handleOwner } from "./routes/owner";
+import { handleReferrals } from "./routes/referrals";
 import { handleSystem } from "./routes/system";
 import { handleUsers } from "./routes/users";
 import type { Env } from "./types/env";
@@ -44,6 +45,7 @@ export default {
       if (scope === "owner") return await handleOwner(request, env, pathParts);
 
       if (scope === "users") return await handleUsers(request, env, pathParts);
+      if (scope === "referrals") return await handleReferrals(request, env, pathParts);
       if (scope === "devices") return await handleDevices(request, env, pathParts);
       if (scope === "claims") return await handleClaims(request, env, pathParts);
       if (scope === "downloads") return await handleDownloads(request, env, pathParts);

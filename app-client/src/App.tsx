@@ -24,12 +24,14 @@ import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
     acceptUserAgreement,
+    bindReferral,
     createClaim,
     createGasIntent,
     createUser,
     getAnnouncements,
     getGasOrder,
     getGasWalletBalance,
+    getReferralSummary,
     getSystemStatus,
     getUser,
     getUserByWallet,
@@ -41,7 +43,8 @@ import {
     relayGasIntent,
     reportDeviceHeartbeat,
     type AnnouncementDto,
-    type GasPayToken
+    type GasPayToken,
+    type ReferralSummaryDto
 } from './services/api';
 import {
     claimRewardOnChain,
@@ -74,6 +77,7 @@ const USER_ID_KEY = 'coinplanet.user_id';
 const AGREEMENT_ACCEPTED_KEY = 'coinplanet.agreement_accepted_version';
 const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
 const ANNOUNCEMENT_READ_KEY = 'coinplanet.announcements.read_ids';
+const REFERRAL_WALLET_KEY = 'coinplanet.referral_wallet';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
@@ -254,6 +258,11 @@ const translations = {
     checkUpdateButton: 'Check for Updates',
     checkUpdateHint: 'Fetches the latest features and fixes without reinstalling.',
     appVersionLabel: 'Current Version',
+    referralTitle: 'Referral Summary',
+    referralDirectCount: 'Direct Accounts',
+    referralDirectAmount: 'Direct Amount (USDT)',
+    referralTeamCount: 'Team Accounts',
+    referralTeamAmount: 'Team Amount (USDT)',
   },
   zh: {
     appTitle: 'Coin Planet',
@@ -430,6 +439,11 @@ const translations = {
     checkUpdateButton: '检查更新',
     checkUpdateHint: '无需重新安装，在线获取最新功能与修复。',
     appVersionLabel: '当前版本',
+    referralTitle: '推荐统计',
+    referralDirectCount: '直推账号数',
+    referralDirectAmount: '直推金额(USDT)',
+    referralTeamCount: '团队账号数',
+    referralTeamAmount: '团队金额(USDT)',
   },
 } as const;
 
@@ -531,6 +545,8 @@ export default function App() {
   const [agreementSubmitting, setAgreementSubmitting] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
+  const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
   const [agreementDeclined, setAgreementDeclined] = useState(false);
   const [agreementError, setAgreementError] = useState('');
   const [announcements, setAnnouncements] = useState<AnnouncementDto[]>([]);
@@ -922,7 +938,11 @@ export default function App() {
     const check = async () => {
       try {
         const done = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        const savedReferralWallet = await AsyncStorage.getItem(REFERRAL_WALLET_KEY);
         if (cancelled) return;
+        if (savedReferralWallet) {
+          setPendingReferralWallet(savedReferralWallet);
+        }
         setOnboardingChecked(true);
         if (!done) {
           setOnboardingVisible(true);
@@ -937,9 +957,14 @@ export default function App() {
     };
   }, []);
 
-  const handleOnboardingComplete = async (_years: 1 | 2 | 3) => {
+  const handleOnboardingComplete = async (_years: 1 | 2 | 3, referralWallet?: string) => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
+      if (referralWallet && referralWallet.trim()) {
+        const normalized = referralWallet.trim().toLowerCase();
+        await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
+        setPendingReferralWallet(normalized);
+      }
     } catch {}
     setOnboardingVisible(false);
   };
@@ -1149,6 +1174,26 @@ export default function App() {
     }
   };
 
+  const refreshReferralSummary = async (nextUserId: string) => {
+    if (!nextUserId) return;
+    const summary = await getReferralSummary(nextUserId);
+    setReferralSummary(summary);
+  };
+
+  const tryBindReferralIfNeeded = async (wallet: string) => {
+    if (!pendingReferralWallet) return;
+    if (pendingReferralWallet.toLowerCase() === wallet.toLowerCase()) {
+      return;
+    }
+    try {
+      await bindReferral(wallet, pendingReferralWallet);
+      setPendingReferralWallet('');
+      await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
+    } catch {
+      // keep local referral wallet for future retry
+    }
+  };
+
   const clearSwapConfirmTimer = () => {
     if (swapConfirmTimerRef.current) {
       clearTimeout(swapConfirmTimerRef.current);
@@ -1182,9 +1227,11 @@ export default function App() {
       if (cachedUserId) {
         const existing = await getUser(cachedUserId);
         if (existing) {
+          await tryBindReferralIfNeeded(existing.wallet);
           setUserId(existing.id);
           const details = await getUserDetails(existing.id);
           setUserDetails(details);
+          await refreshReferralSummary(existing.id);
           await refreshSwapPrice();
           // Fetch wallet balances
           const balances = await getWalletBalances();
@@ -1199,10 +1246,12 @@ export default function App() {
       // 2. 本地无缓存或服务端已不存在，尝试按钱包地址查找
       const existingByWallet = await getUserByWallet(address);
       if (existingByWallet) {
+        await tryBindReferralIfNeeded(existingByWallet.wallet);
         setUserId(existingByWallet.id);
         await AsyncStorage.setItem(USER_ID_KEY, existingByWallet.id).catch(() => null);
         const details = await getUserDetails(existingByWallet.id);
         setUserDetails(details);
+        await refreshReferralSummary(existingByWallet.id);
         await refreshSwapPrice();
         // Fetch wallet balances
         const balances = await getWalletBalances();
@@ -1214,7 +1263,7 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      let user = await createUser(address).catch(async (err) => {
+      let user = await createUser(address, pendingReferralWallet || undefined).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1226,8 +1275,11 @@ export default function App() {
       }
       setUserId(user.id);
       await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
+      setPendingReferralWallet('');
+      await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
       const details = await getUserDetails(user.id);
       setUserDetails(details);
+      await refreshReferralSummary(user.id);
       await refreshSwapPrice();
       // Fetch wallet balances
       const balances = await getWalletBalances();
@@ -1301,6 +1353,14 @@ export default function App() {
       clearInterval(timer);
     };
   }, [walletAddress, userId, deviceId, hashrateInput]);
+
+  useEffect(() => {
+    if (!userId) {
+      setReferralSummary(null);
+      return;
+    }
+    void refreshReferralSummary(userId);
+  }, [userId]);
 
   const startMining = async () => {
     if (!identityReady) {
@@ -1837,6 +1897,7 @@ export default function App() {
               onImportWalletClick={() => setImportWalletVisible(true)}
               t={t}
               appVersion={APP_VERSION}
+              referralSummary={referralSummary}
               onCheckUpdate={() => {
                 void manualCheckForUpdate(lang);
               }}

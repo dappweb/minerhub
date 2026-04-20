@@ -60,9 +60,20 @@ export interface ProfileTabProps {
     checkUpdateButton?: string;
     checkUpdateHint?: string;
     appVersionLabel?: string;
+    referralTitle?: string;
+    referralDirectCount?: string;
+    referralDirectAmount?: string;
+    referralTeamCount?: string;
+    referralTeamAmount?: string;
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
+  referralSummary?: {
+    directCount: number;
+    directAmountUsdt: string;
+    teamCount: number;
+    teamAmountUsdt: string;
+  } | null;
 }
 
 const CONTACT_TYPE_LABELS: Record<string, string> = {
@@ -126,6 +137,7 @@ export default function ProfileTab({
   t,
   appVersion,
   onCheckUpdate,
+  referralSummary,
 }: ProfileTabProps) {
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
@@ -227,6 +239,29 @@ export default function ProfileTab({
         )}
       </View>
 
+      {referralSummary && (
+        <View style={s.actionCard}>
+          <Text style={s.sectionTitle}>{t.referralTitle ?? 'Referral Summary'}</Text>
+          <View style={styles.referralGrid}>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralDirectCount ?? 'Direct Accounts'}</Text>
+              <Text style={styles.referralValue}>{referralSummary.directCount}</Text>
+            </View>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralDirectAmount ?? 'Direct Amount (USDT)'}</Text>
+              <Text style={styles.referralValue}>{referralSummary.directAmountUsdt}</Text>
+            </View>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralTeamCount ?? 'Team Accounts'}</Text>
+              <Text style={styles.referralValue}>{referralSummary.teamCount}</Text>
+            </View>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralTeamAmount ?? 'Team Amount (USDT)'}</Text>
+              <Text style={styles.referralValue}>{referralSummary.teamAmountUsdt}</Text>
+            </View>
+          </View>
+        </View>
+      )}
       <View style={s.actionCard}>
         <Text style={s.sectionTitle}>{t.supportContactsTitle}</Text>
         {contacts.length === 0 ? (
@@ -448,6 +483,31 @@ const styles = StyleSheet.create({
   contactNote: {
     color: '#93a9d1',
     fontSize: 11,
+  },
+  referralGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
+  referralItem: {
+    width: '48%',
+    backgroundColor: '#0f213f',
+    borderColor: '#1f3b69',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  referralLabel: {
+    color: '#93a9d1',
+    fontSize: 12,
+  },
+  referralValue: {
+    color: '#e2e8f0',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 6,
   },
   exportDivider: {
     height: 1,

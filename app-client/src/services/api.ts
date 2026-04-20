@@ -288,8 +288,42 @@ export type UserDetailsDto = UserDto & {
   payoutWallets?: Array<{ wallet_address: string; priority: number; is_primary: number }>;
 };
 
-export async function createUser(wallet: string): Promise<UserDto> {
-  return signedRequest<UserDto>("/api/users", "POST", { wallet });
+export type ReferralSummaryDto = {
+  userId: string;
+  wallet: string;
+  directCount: number;
+  directAmountUsdt: string;
+  teamCount: number;
+  teamAmountUsdt: string;
+};
+
+export type BindReferralResultDto = {
+  ok: boolean;
+  inviterUserId: string;
+  inviteeUserId: string;
+  inviterSummary: ReferralSummaryDto;
+};
+
+export async function createUser(wallet: string, referralWallet?: string): Promise<UserDto> {
+  return signedRequest<UserDto>("/api/users", "POST", {
+    wallet,
+    ...(referralWallet ? { referralWallet } : {}),
+  });
+}
+
+export async function bindReferral(wallet: string, referralWallet: string): Promise<BindReferralResultDto> {
+  return signedRequest<BindReferralResultDto>('/api/referrals/bind', 'POST', {
+    wallet,
+    referralWallet,
+  });
+}
+
+export async function getReferralSummary(userId: string): Promise<ReferralSummaryDto | null> {
+  try {
+    return await request<ReferralSummaryDto>(`/api/referrals/${userId}/summary`);
+  } catch {
+    return null;
+  }
 }
 
 export async function getSystemStatus(): Promise<SystemStatusDto | null> {

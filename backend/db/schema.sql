@@ -349,3 +349,33 @@ CREATE TABLE IF NOT EXISTS owner_mint_counters (
   total_super TEXT NOT NULL DEFAULT '0',
   updated_at TEXT NOT NULL
 );
+
+-- === Referral system ===
+CREATE TABLE IF NOT EXISTS referral_edges (
+  id TEXT PRIMARY KEY,
+  inviter_user_id TEXT NOT NULL,
+  invitee_user_id TEXT NOT NULL UNIQUE,
+  inviter_wallet TEXT NOT NULL,
+  invitee_wallet TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  bound_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (inviter_user_id) REFERENCES users(id),
+  FOREIGN KEY (invitee_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS referral_closure (
+  ancestor_user_id TEXT NOT NULL,
+  descendant_user_id TEXT NOT NULL,
+  depth INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (ancestor_user_id, descendant_user_id),
+  FOREIGN KEY (ancestor_user_id) REFERENCES users(id),
+  FOREIGN KEY (descendant_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_edges_inviter ON referral_edges(inviter_user_id);
+CREATE INDEX IF NOT EXISTS idx_referral_edges_invitee ON referral_edges(invitee_user_id);
+CREATE INDEX IF NOT EXISTS idx_referral_closure_ancestor ON referral_closure(ancestor_user_id, depth);
+CREATE INDEX IF NOT EXISTS idx_referral_closure_descendant ON referral_closure(descendant_user_id);
