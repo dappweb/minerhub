@@ -11,9 +11,7 @@
       "android",
       "web"
     ],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/a0f26ed6-a709-4c2e-aaca-a88554167a00",
       "enabled": true,
