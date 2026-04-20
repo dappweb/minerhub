@@ -1,4 +1,4 @@
-﻿# Coin Planet 瀹屾暣瀹炵幇璁″垝锛圫epolia + Cloudflare锛?
+# Coin Planet 瀹屾暣瀹炵幇璁″垝锛圫epolia + Cloudflare锛?
 
 > 鍩轰簬 Ethereum BSC Testnet 娴嬭瘯缃?+ Cloudflare鍩虹璁炬柦鐨勭鍒扮瀹炵幇鏂规  
 > 鐢熸垚鏃堕棿锛?026-04-04 | 鐩爣瀹屾垚锛?026-05-26锛圫epolia娴嬬綉楠岃瘉锛?
@@ -59,7 +59,7 @@
 鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?
 鈹?                                                                    鈹?
 鈹? 閮ㄧ讲锛歋epolia 娴嬭瘯缃?(chainId: 97)                         鈹?
-鈹? RPC: https://data-seed-prebsc-1-s1.binance.org:8545/                         鈹?
+鈹? RPC: https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq                         鈹?
 鈹?                                                                    鈹?
 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
@@ -619,7 +619,7 @@ export async function submitClaim(userId, amount) {
 
 ```env
 # ========== 鍖哄潡閾?==========
-BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 DEPLOYER_PRIVATE_KEY=0x{your_private_key}  # 4涓?鍚庤窡40浣?6杩涘埗
 
 # 鍚堢害鍦板潃 (閮ㄧ讲鍚庤幏寰?
@@ -629,7 +629,7 @@ VITE_SWAP_ROUTER_ADDRESS=0x...
 VITE_ADMIN_CONTROLLER_ADDRESS=0x...
 
 VITE_CHAIN_ID=97
-VITE_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+VITE_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 
 # ========== Cloudflare ==========
 CLOUDFLARE_ACCOUNT_ID=your_account_id
@@ -716,7 +716,7 @@ routes = [
 
 [env.production.vars]
 CHAIN_ID = "97"
-RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
+RPC_URL = "https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq"
 ```
 
 ---
@@ -728,7 +728,7 @@ RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
 ```bash
 # 1. 閰嶇疆绉侀挜
 export DEPLOYER_PRIVATE_KEY=0x...
-export BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+export BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 
 # 2. 缂栬瘧鍚堢害
 cd contracts

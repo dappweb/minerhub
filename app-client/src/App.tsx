@@ -52,6 +52,9 @@ import {
     swapUsdtToSuperOnChain,
     updateHashrateOnChain,
 } from './services/blockchain';
+import { manualCheckForUpdate, useAutoUpdate } from './services/updates';
+
+const APP_VERSION = '1.0.0';
 
 type Lang = 'en' | 'zh';
 
@@ -241,6 +244,10 @@ const translations = {
     exportPrivateKeyCopied: 'Copied',
     exportPrivateKeyClose: 'Close',
     exportPrivateKeyMissing: 'No local private key found.',
+    checkUpdateTitle: 'App Update',
+    checkUpdateButton: 'Check for Updates',
+    checkUpdateHint: 'Fetches the latest features and fixes without reinstalling.',
+    appVersionLabel: 'Current Version',
   },
   zh: {
     appTitle: 'Coin Planet',
@@ -413,6 +420,10 @@ const translations = {
     exportPrivateKeyCopied: '已复制',
     exportPrivateKeyClose: '关闭',
     exportPrivateKeyMissing: '本地未找到私钥。',
+    checkUpdateTitle: '应用更新',
+    checkUpdateButton: '检查更新',
+    checkUpdateHint: '无需重新安装，在线获取最新功能与修复。',
+    appVersionLabel: '当前版本',
   },
 } as const;
 
@@ -497,6 +508,9 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
   const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  // OTA 在线更新：启动时静默检查 EAS Updates，发现新版本自动下载并弹窗请求重启
+  useAutoUpdate(lang);
   const [localAgreementVersion, setLocalAgreementVersion] = useState<string | null>(null);
   const [agreementSubmitting, setAgreementSubmitting] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
@@ -1723,6 +1737,10 @@ export default function App() {
               copyState={copyState}
               supportContacts={systemStatus?.supportContacts ?? []}
               t={t}
+              appVersion={APP_VERSION}
+              onCheckUpdate={() => {
+                void manualCheckForUpdate(lang);
+              }}
             />
           )}
 

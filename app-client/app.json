@@ -11,6 +11,15 @@
       "android",
       "web"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a0f26ed6-a709-4c2e-aaca-a88554167a00",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
     "ios": {
       "bundleIdentifier": "com.coinplanet.mobile",
       "supportsTablet": true
@@ -19,7 +28,7 @@
       "package": "com.coinplanet.mobile"
     },
     "extra": {
-      "rpcUrl": "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      "rpcUrl": "https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq",
       "chainId": 97,
       "minerContractAddress": "0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1",
       "swapContractAddress": "0x1C094012b17461C26938752549E367011443592f",
@@ -29,7 +38,8 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-updates"
     ],
     "owner": "dappweb"
   }

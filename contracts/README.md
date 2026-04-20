@@ -1,4 +1,4 @@
-﻿# Coin Planet 鏅鸿兘鍚堢害
+# Coin Planet 鏅鸿兘鍚堢害
 
 瀹屾暣鐨?Coin Planet 鎸栫熆鐢熸€佹櫤鑳藉悎绾﹀浠躲€?
 
@@ -29,7 +29,7 @@ npm install
 鍒涘缓 `.env` 鏂囦欢锛?
 
 ```env
-BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 DEPLOYER_PRIVATE_KEY=0x...
 ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY (鍙€?
 ```

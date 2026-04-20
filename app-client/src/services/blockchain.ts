@@ -1,9 +1,9 @@
-﻿import type { Address, Hex } from 'viem';
+import type { Address, Hex } from 'viem';
 import { createPublicClient, createWalletClient, defineChain, formatUnits, http, parseUnits } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
 const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '97');
-const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
+const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq';
 
 const chain = defineChain({
   id: chainId,

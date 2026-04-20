@@ -20,7 +20,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 const DEPLOYMENT_PATH = path.join(ROOT, 'contracts', 'deployment.json');
 
-const RPC_URL = 'https://data-seed-prebsc-1-s1.binance.org:8545/';
+const RPC_URL = 'https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq';
 const CHAIN_ID = '97';
 
 const isDryRun = process.argv.includes('--dry-run');

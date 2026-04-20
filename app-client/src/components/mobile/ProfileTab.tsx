@@ -51,7 +51,13 @@ export interface ProfileTabProps {
     exportPrivateKeyClose: string;
     exportPrivateKeyCopied: string;
     exportPrivateKeyMissing: string;
+    checkUpdateTitle?: string;
+    checkUpdateButton?: string;
+    checkUpdateHint?: string;
+    appVersionLabel?: string;
   };
+  appVersion?: string;
+  onCheckUpdate?: () => void;
 }
 
 const CONTACT_TYPE_LABELS: Record<string, string> = {
@@ -108,6 +114,8 @@ export default function ProfileTab({
   copyState,
   supportContacts,
   t,
+  appVersion,
+  onCheckUpdate,
 }: ProfileTabProps) {
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
@@ -248,6 +256,22 @@ export default function ProfileTab({
         >
           <Text style={styles.exportBtnText}>{t.exportPrivateKeyButton}</Text>
         </TouchableOpacity>
+
+        {onCheckUpdate && (
+          <>
+            <View style={styles.exportDivider} />
+            <Text style={s.label}>{t.checkUpdateTitle ?? '应用更新'}</Text>
+            {t.checkUpdateHint && <Text style={styles.exportWarn}>{t.checkUpdateHint}</Text>}
+            <TouchableOpacity style={styles.exportBtn} onPress={onCheckUpdate}>
+              <Text style={styles.exportBtnText}>{t.checkUpdateButton ?? '检查更新'}</Text>
+            </TouchableOpacity>
+            {appVersion && (
+              <Text style={styles.versionText}>
+                {(t.appVersionLabel ?? '当前版本')}: {appVersion}
+              </Text>
+            )}
+          </>
+        )}
       </View>
 
       <Modal
@@ -408,6 +432,12 @@ const styles = StyleSheet.create({
     color: '#fecaca',
     fontSize: 13,
     fontWeight: '800',
+  },
+  versionText: {
+    color: '#7a93c0',
+    fontSize: 11,
+    marginTop: 8,
+    textAlign: 'center',
   },
   modalMask: {
     flex: 1,

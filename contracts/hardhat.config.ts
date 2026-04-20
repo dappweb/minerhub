@@ -20,7 +20,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     bscTestnet: {
-      url: process.env.BSC_TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      url: process.env.BSC_TESTNET_RPC_URL || "https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq",
       accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
         : [],

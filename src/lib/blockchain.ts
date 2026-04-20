@@ -1,4 +1,4 @@
-﻿import type { Address, Hex } from 'viem';
+import type { Address, Hex } from 'viem';
 import { createPublicClient, createWalletClient, custom, defineChain, fallback, http, parseEther, parseUnits } from 'viem';
 
 export type MiningPoolGlobalStats = {
@@ -300,7 +300,7 @@ const erc20Abi = [
 ] as const;
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 97);
-const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://data-seed-prebsc-1-s1.binance.org:8545/';
+const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq';
 const rpcHttpUrls = Array.from(
   new Set(
     [

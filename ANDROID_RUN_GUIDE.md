@@ -1,4 +1,4 @@
-﻿# Coin Planet App - Android 模拟器运行指南
+# Coin Planet App - Android 模拟器运行指南
 
 ## 📱 当前状态
 
@@ -130,7 +130,7 @@ EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链
 EXPO_PUBLIC_CHAIN_ID=97
-EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+EXPO_PUBLIC_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 
 # 合约地址（部署后更新）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...

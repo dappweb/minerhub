@@ -1,4 +1,4 @@
-﻿# Coin Planet 完整系统部署指南（3周版本）
+# Coin Planet 完整系统部署指南（3周版本）
 
 > 完整的挖矿系统：APP客户端 + 后台API + 智能合约 + 管理平台  
 > 生成于 2026-04-11 | 版本：0.1.0（MVP）
@@ -61,7 +61,7 @@ npm install
 EXPO_PUBLIC_WALLET_PRIVATE_KEY=0x...      # 测试钱包私钥
 EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8788
 EXPO_PUBLIC_CHAIN_ID=97              # BSC Testnet
-EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+EXPO_PUBLIC_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 
 # 运行开发服务器
 npm start
@@ -110,7 +110,7 @@ npm start
 # 数据库仅在 Cloudflare 部署后可用
 
 # 链 RPC
-BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 DEPLOYER_PRIVATE_KEY=0x...
 
 # Viem 配置
@@ -182,7 +182,7 @@ POST /api/claims
 创建 `contracts/.env`：
 
 ```env
-BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 DEPLOYER_PRIVATE_KEY=0x...yourawesomedeployerkey...
 ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY  # 可选，用于验证
 ```

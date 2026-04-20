@@ -1,4 +1,4 @@
-﻿# ✅ Coin Planet APP 已成功运行在 Android 模拟器
+# ✅ Coin Planet APP 已成功运行在 Android 模拟器
 
 **部署完成时间**: 2026-04-11  
 **APP运行位置**: Android 模拟器 (emulator-5554)  
@@ -29,7 +29,7 @@ EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链网络
 EXPO_PUBLIC_CHAIN_ID=97
-EXPO_PUBLIC_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+EXPO_PUBLIC_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 
 # 智能合约（部署后配置）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...
