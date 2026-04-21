@@ -1,6 +1,6 @@
 @echo off
-REM Coin Planet App - iOS/Android Emulator Installation Script
-REM This script builds and installs the app to the Android emulator
+REM Coin Planet App - Android Emulator Installation Script
+REM Build a standalone APK for emulator install. Debug builds require Metro.
 
 cd /d "C:\Users\Administrator\Documents\GitHub\minerhub\app-client"
 
@@ -15,16 +15,16 @@ echo Checking for connected Android devices...
 "C:\Users\Administrator\AppData\Local\Android\Sdk\platform-tools\adb" devices
 
 echo.
-echo Starting Android application build...
+echo Starting Android release build...
 echo This may take 10-15 minutes on first run.
-echo (Gradle will download dependencies)
+echo (Gradle will download dependencies and bundle JS assets)
 echo.
 
 REM Build with Gradle
 cd /d "C:\Users\Administrator\Documents\GitHub\minerhub\app-client\android"
 
-echo Executing: gradlew.bat assembleDebug
-call gradlew.bat assembleDebug
+echo Executing: gradlew.bat assembleRelease
+call gradlew.bat assembleRelease
 
 if %ERRORLEVEL% GEQ 1 (
     echo Build failed! Check errors above.
@@ -38,7 +38,7 @@ echo.
 REM Find and install the APK
 echo.
 echo Looking for generated APK...
-set APK_PATH=C:\Users\Administrator\Documents\GitHub\minerhub\app-client\android\app\build\outputs\apk\debug\app-debug.apk
+set APK_PATH=C:\Users\Administrator\Documents\GitHub\minerhub\app-client\android\app\build\outputs\apk\release\app-release.apk
 
 if not exist "%APK_PATH%" (
     echo ERROR: APK not found at %APK_PATH%

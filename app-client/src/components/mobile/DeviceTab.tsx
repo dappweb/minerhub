@@ -1,12 +1,11 @@
 import React from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import s from './sharedStyles';
 
 export interface DeviceTabProps {
   onlineState: string;
   deviceId: string;
-  hashrateInput: string;
-  setHashrateInput: (v: string) => void;
+  hashrateDisplay: string;
   isBusy: boolean;
   identityReady: boolean;
   startMining: () => void;
@@ -16,7 +15,7 @@ export interface DeviceTabProps {
     phoneStatus: string;
     notInit: string;
     hashrate: string;
-    hashratePlaceholder: string;
+    hashrateLockedHint: string;
     setupMiner: string;
     syncIdentity: string;
   };
@@ -25,8 +24,7 @@ export interface DeviceTabProps {
 export default function DeviceTab({
   onlineState,
   deviceId,
-  hashrateInput,
-  setHashrateInput,
+  hashrateDisplay,
   isBusy,
   identityReady,
   startMining,
@@ -43,15 +41,10 @@ export default function DeviceTab({
           <Text style={s.walletHint}>{deviceId || t.notInit}</Text>
         </View>
         <Text style={s.label}>{t.hashrate}</Text>
-        <TextInput
-          style={s.input}
-          value={hashrateInput}
-          onChangeText={setHashrateInput}
-          keyboardType="number-pad"
-          placeholder={t.hashratePlaceholder}
-          placeholderTextColor="#93a9d1"
-          editable={!isBusy}
-        />
+        <View style={styles.readonlyHashrateBox}>
+          <Text style={styles.readonlyHashrateValue}>{hashrateDisplay}</Text>
+          <Text style={styles.readonlyHashrateHint}>{t.hashrateLockedHint}</Text>
+        </View>
         <View style={s.quickRow}>
           <TouchableOpacity style={s.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
             <Text style={s.quickBtnText}>{t.setupMiner}</Text>
@@ -73,5 +66,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b2d60',
     padding: 12,
     gap: 6,
+  },
+  readonlyHashrateBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0a244f',
+    padding: 12,
+    gap: 4,
+  },
+  readonlyHashrateValue: {
+    color: '#f0fdff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  readonlyHashrateHint: {
+    color: '#8ec4ff',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

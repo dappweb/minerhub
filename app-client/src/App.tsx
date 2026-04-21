@@ -26,24 +26,20 @@ import {
     acceptUserAgreement,
     bindReferral,
     createClaim,
-    createGasIntent,
     createUser,
     getAnnouncements,
-    getGasOrder,
     getGasWalletBalance,
+    getReferralMembers,
     getReferralSummary,
     getSystemStatus,
     getUser,
     getUserByWallet,
     getUserDetails,
     markAnnouncementRead as markAnnouncementReadApi,
-    purchaseGasPackage,
-    quoteGasPackage,
     registerDevice,
-    relayGasIntent,
     reportDeviceHeartbeat,
     type AnnouncementDto,
-    type GasPayToken,
+    type ReferralMemberDto,
     type ReferralSummaryDto
 } from './services/api';
 import {
@@ -54,7 +50,6 @@ import {
     registerMinerOnChain,
     sendNativeTokenOnChain,
     swapUsdtToSuperOnChain,
-    updateHashrateOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdate, useAutoUpdate } from './services/updates';
 import {
@@ -67,7 +62,7 @@ const APP_VERSION = '1.0.0';
 
 type Lang = 'en' | 'zh';
 
-type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | 'gas' | '';
+type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | '';
 type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
 const LANG_KEY = 'coinplanet.lang';
@@ -81,6 +76,9 @@ const REFERRAL_WALLET_KEY = 'coinplanet.referral_wallet';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
+const DEFAULT_DEVICE_HASHRATE = 1000;
+const REWARD_LOCK_CYCLE_DAYS = 7;
+const REFERRAL_PAGE_SIZE = 20;
 
 const translations = {
   en: {
@@ -152,9 +150,10 @@ const translations = {
     totalRewardLabel: 'Total Reward',
     todayRewardLabel: 'Today Reward',
     claimableRewardLabel: 'Estimated Claimable',
-    yieldRateTitle: 'Yield Rate',
-    rewardRatePerHourLabel: 'Base Rate',
-    rewardRateDailyChangeLabel: '24h Change',
+    yieldRateTitle: 'Lock Period',
+    lockCycleLabel: 'Lock Cycle',
+    lockRemainingLabel: 'Remaining',
+    lockStatusLabel: 'Status',
     earningsCurveTitle: 'Earnings Curve',
     range7dLabel: '7D',
     deviceSummary: 'Device Console',
@@ -163,7 +162,7 @@ const translations = {
     contractExpiredTitle: 'Contract Expired',
     contractExpiredBody: 'Renew or update your contract before rewards can continue.',
     hashrate: 'Hashrate',
-    hashratePlaceholder: 'e.g. 2600',
+    hashrateLockedHint: 'Hashrate is managed by admin and cannot be modified on the app side.',
     transferTitle: 'Native Transfer',
     transferTo: 'Destination address 0x...',
     transferAmount: 'Amount (ETH)',
@@ -176,12 +175,12 @@ const translations = {
     initFail: 'Initialization failed: ',
     identityNotReady: 'Identity not ready. Please sync identity first.',
     invalidHashrate: 'Please enter a valid hashrate (>0)',
-    updateHashrate: 'Updating hashrate on-chain...',
-    hashrateUpdated: 'Hashrate updated: ',
+    updateHashrate: 'Hashrate is locked. Contact admin to adjust.',
+    hashrateUpdated: 'Hashrate: ',
     registerMiner: 'Registering miner on-chain...',
     minerRegistered: 'Miner registered: ',
     deviceRecord: ', device record ',
-    minerRecovered: 'Miner already exists. Hashrate updated: ',
+    minerRecovered: 'Miner already exists and has been synced.',
     minerRecoverFail: 'Miner state recovery failed: ',
     minerFail: 'Miner setup failed: ',
     minerNotReady: 'Please setup miner before claiming reward',
@@ -197,7 +196,7 @@ const translations = {
     transferDoing: 'Submitting transfer...',
     transferSuccess: 'Transfer success: ',
     transferFail: 'Transfer failed: ',
-    errInsufficientBnb: 'Insufficient BNB for gas. Please top up testnet BNB and try again.',
+    errInsufficientBnb: 'Insufficient BNB for gas. Please contact admin for gas top-up.',
     errRejected: 'Transaction was cancelled in wallet.',
     errReverted: 'On-chain execution failed. Please check parameters and contract state.',
     errClaimCooldown: 'Claim cooldown not reached yet (at least 1 day between claims).',
@@ -208,13 +207,16 @@ const translations = {
     errInvalidHashrate: 'Invalid hashrate value.',
     errDeviceIdRequired: 'Device ID is required.',
     errNetwork: 'Network is unstable. Please retry in a moment.',
-    gasAssistTitle: 'Gas Booster',
-    gasAssistHint: 'No BNB needed. Use SUPER/USDT to buy BNB from treasury and retry automatically.',
+    gasAssistTitle: 'Gas Top-up',
+    gasAssistHint: 'Gas cannot be purchased with tokens. Please request admin recharge.',
     gasTokenLabel: 'Pay token',
     gasAmountLabel: 'Pay amount',
     gasQuoteLabel: 'Estimated BNB',
     gasBalanceLabel: 'Funded BNB (history)',
-    gasBuyAndRetry: 'Buy Gas and Retry',
+    gasBuyAndRetry: 'Request Admin Recharge',
+    gasAdminHint: 'Gas can only be recharged by admin. Token swap for gas is disabled.',
+    gasRequestTopup: 'Contact Admin Recharge',
+    gasAdminTopupNeeded: 'Gas can only be provided by admin recharge. Please contact support/admin.',
     gasBuying: 'Purchasing gas package...',
     gasReady: 'Gas package completed. Retrying transaction...',
     gasFailed: 'Gas purchase failed: ',
@@ -263,6 +265,21 @@ const translations = {
     referralDirectAmount: 'Direct Amount (USDT)',
     referralTeamCount: 'Team Accounts',
     referralTeamAmount: 'Team Amount (USDT)',
+    referralMembersTitle: 'Team Members',
+    referralMembersDirectTab: 'Direct',
+    referralMembersTeamTab: 'Team',
+    referralMembersLevel: 'Level',
+    referralMembersReward: 'Reward',
+    referralMembersJoined: 'Joined',
+    referralMembersContract: 'Contract',
+    referralMembersContractActive: 'Active',
+    referralMembersContractInactive: 'Inactive',
+    referralMembersEmpty: 'No members yet',
+    referralMembersLoading: 'Loading team members...',
+    referralMembersError: 'Failed to load team members',
+    referralMembersPage: 'Page',
+    referralMembersPrev: 'Prev',
+    referralMembersNext: 'Next',
   },
   zh: {
     appTitle: 'Coin Planet',
@@ -333,9 +350,10 @@ const translations = {
     totalRewardLabel: '累计收益',
     todayRewardLabel: '今日收益',
     claimableRewardLabel: '预计可领取',
-    yieldRateTitle: '收益率',
-    rewardRatePerHourLabel: '基础时收益',
-    rewardRateDailyChangeLabel: '24小时变化',
+    yieldRateTitle: '锁定周期',
+    lockCycleLabel: '锁定周期',
+    lockRemainingLabel: '剩余天数',
+    lockStatusLabel: '锁定状态',
     earningsCurveTitle: '收益曲线',
     range7dLabel: '近7天',
     deviceSummary: '设备控制台',
@@ -344,7 +362,7 @@ const translations = {
     contractExpiredTitle: '合约已过期',
     contractExpiredBody: '请先续期或更新合约，之后才能继续累计收益。',
     hashrate: '算力值',
-    hashratePlaceholder: '例如 2600',
+    hashrateLockedHint: '算力由管理员统一配置，APP 端不可修改。',
     transferTitle: '原生代币转账',
     transferTo: '目标地址 0x...',
     transferAmount: '数量（ETH）',
@@ -357,12 +375,12 @@ const translations = {
     initFail: '初始化失败：',
     identityNotReady: '身份未就绪，请先同步身份。',
     invalidHashrate: '请输入有效算力值（>0）',
-    updateHashrate: '正在提交链上算力更新...',
-    hashrateUpdated: '算力已更新：',
+    updateHashrate: '算力已锁定，请联系管理员调整。',
+    hashrateUpdated: '当前算力：',
     registerMiner: '正在提交链上矿机注册...',
     minerRegistered: '矿机已注册：',
     deviceRecord: '，设备记录 ',
-    minerRecovered: '矿机已存在，算力已更新：',
+    minerRecovered: '矿机已存在，已完成状态同步。',
     minerRecoverFail: '矿机状态恢复失败：',
     minerFail: '矿机设置失败：',
     minerNotReady: '请先完成矿机设置，再领取收益',
@@ -378,7 +396,7 @@ const translations = {
     transferDoing: '正在提交转账...',
     transferSuccess: '转账成功：',
     transferFail: '转账失败：',
-    errInsufficientBnb: 'BNB 余额不足，无法支付 Gas。请先补充测试网 BNB。',
+    errInsufficientBnb: 'BNB 余额不足，无法支付 Gas。请联系管理员充值。',
     errRejected: '你已在钱包中取消本次交易。',
     errReverted: '链上执行失败，请检查参数或合约状态。',
     errClaimCooldown: '领取冷却时间未到，两次领取需间隔 1 天。',
@@ -389,13 +407,16 @@ const translations = {
     errInvalidHashrate: '算力参数不合法。',
     errDeviceIdRequired: '缺少设备 ID。',
     errNetwork: '网络不稳定，请稍后重试。',
-    gasAssistTitle: 'Gas 补能',
-    gasAssistHint: '无需先买 BNB，可用 SUPER/USDT 兑换平台 BNB，并自动重试交易。',
+    gasAssistTitle: 'Gas 充值',
+    gasAssistHint: 'Gas 不支持用代币兑换，需由管理员充值。',
     gasTokenLabel: '支付代币',
     gasAmountLabel: '支付数量',
     gasQuoteLabel: '预计到账 BNB',
     gasBalanceLabel: '累计补能 BNB',
-    gasBuyAndRetry: '兑换并重试',
+    gasBuyAndRetry: '申请管理员充值',
+    gasAdminHint: 'Gas 只能由管理员充值，代币兑换入口已关闭。',
+    gasRequestTopup: '联系管理员充值',
+    gasAdminTopupNeeded: 'Gas 只能通过管理员充值获取，请联系管理员或客服。',
     gasBuying: '正在购买 Gas 包...',
     gasReady: 'Gas 包购买完成，正在重试交易...',
     gasFailed: 'Gas 兑换失败：',
@@ -444,6 +465,21 @@ const translations = {
     referralDirectAmount: '直推金额(USDT)',
     referralTeamCount: '团队账号数',
     referralTeamAmount: '团队金额(USDT)',
+    referralMembersTitle: '团队成员',
+    referralMembersDirectTab: '直推',
+    referralMembersTeamTab: '团队',
+    referralMembersLevel: '层级',
+    referralMembersReward: '累计收益',
+    referralMembersJoined: '加入时间',
+    referralMembersContract: '合约',
+    referralMembersContractActive: '有效',
+    referralMembersContractInactive: '停用',
+    referralMembersEmpty: '暂无成员数据',
+    referralMembersLoading: '正在加载团队成员...',
+    referralMembersError: '加载团队成员失败',
+    referralMembersPage: '页码',
+    referralMembersPrev: '上一页',
+    referralMembersNext: '下一页',
   },
 } as const;
 
@@ -508,7 +544,6 @@ export default function App() {
   const [swapAmount, setSwapAmount] = useState<string>('10');
   const [transferTo, setTransferTo] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('0.001');
-  const [hashrateInput, setHashrateInput] = useState<string>('1000');
   const [deviceId, setDeviceId] = useState<string>('');
   const [minerReady, setMinerReady] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('');
@@ -519,12 +554,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BottomTab>('home');
   const [swapConfirmVisible, setSwapConfirmVisible] = useState(false);
   const [swapTxStage, setSwapTxStage] = useState<SwapTxStage>('idle');
-  const [gasAssistVisible, setGasAssistVisible] = useState(false);
-  const [gasPayToken, setGasPayToken] = useState<GasPayToken>('SUPER');
-  const [gasPayAmount, setGasPayAmount] = useState<string>('10');
-  const [gasQuoteBnb, setGasQuoteBnb] = useState<string>('0');
   const [gasFundedBnbTotal, setGasFundedBnbTotal] = useState<string>('0');
-  const [phase2IntentId, setPhase2IntentId] = useState<string>('');
   const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
   const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -547,6 +577,12 @@ export default function App() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
   const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
+  const [referralMode, setReferralMode] = useState<'direct' | 'team'>('direct');
+  const [referralMembers, setReferralMembers] = useState<ReferralMemberDto[]>([]);
+  const [referralMembersTotal, setReferralMembersTotal] = useState(0);
+  const [referralMembersPage, setReferralMembersPage] = useState(1);
+  const [referralMembersLoading, setReferralMembersLoading] = useState(false);
+  const [referralMembersError, setReferralMembersError] = useState('');
   const [agreementDeclined, setAgreementDeclined] = useState(false);
   const [agreementError, setAgreementError] = useState('');
   const [announcements, setAnnouncements] = useState<AnnouncementDto[]>([]);
@@ -555,9 +591,7 @@ export default function App() {
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryActionRef = useRef<(() => Promise<void>) | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryActionNameRef = useRef<ActionType>('');
   const announcementAutoShownRef = useRef(false);
 
   const t = translations[lang] as typeof translations.en;
@@ -686,13 +720,21 @@ export default function App() {
     return formatDate(end);
   }, [userDetails?.contractEndAt]);
 
+  const deviceHashrate = useMemo(() => {
+    const raw = userDetails?.devices?.[0]?.hashrate;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return DEFAULT_DEVICE_HASHRATE;
+    }
+    return Math.max(1, Math.floor(parsed));
+  }, [userDetails?.devices]);
+
   const monthProgressMinutes = useMemo(() => {
-    const hashrateNum = Number(hashrateInput);
-    if (!Number.isFinite(hashrateNum) || hashrateNum <= 0) {
+    if (!Number.isFinite(deviceHashrate) || deviceHashrate <= 0) {
       return 443;
     }
-    return Math.min(24 * 60 * 30, Math.floor(hashrateNum * 0.42));
-  }, [hashrateInput]);
+    return Math.min(24 * 60 * 30, Math.floor(deviceHashrate * 0.42));
+  }, [deviceHashrate]);
 
   const totalOnlineMinutes = useMemo(() => monthProgressMinutes + 11053, [monthProgressMinutes]);
   const onlineState = identityReady ? t.online : t.offline;
@@ -783,7 +825,31 @@ export default function App() {
   const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
   const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
   const claimableRewardUsdt = Math.max(0, Math.min(totalRewardUsdt, todayRewardUsdt));
-  const rewardRatePerHour = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
+
+  const lockCycleDays = REWARD_LOCK_CYCLE_DAYS;
+  const lockRemainingDays = useMemo(() => {
+    if (!userDetails?.contractStartAt) return null;
+    const startMs = new Date(userDetails.contractStartAt).getTime();
+    if (Number.isNaN(startMs)) return null;
+    const lockEnd = startMs + REWARD_LOCK_CYCLE_DAYS * 86400_000;
+    const diff = lockEnd - Date.now();
+    if (diff <= 0) return 0;
+    return Math.ceil(diff / 86400_000);
+  }, [userDetails?.contractStartAt]);
+
+  const lockStatusText = useMemo(() => {
+    if (!userDetails?.contractStartAt) {
+      return lang === 'zh' ? '未激活' : 'Not Activated';
+    }
+    if (lockRemainingDays === null) {
+      return lang === 'zh' ? '锁定期未知' : 'Unknown';
+    }
+    if (lockRemainingDays > 0) {
+      return lang === 'zh' ? `锁定中（剩余 ${lockRemainingDays} 天）` : `Locked (${lockRemainingDays} days left)`;
+    }
+    return lang === 'zh' ? '已解锁，可正常领取' : 'Unlocked, claim is available';
+  }, [lang, lockRemainingDays, userDetails?.contractStartAt]);
+
   const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
   const rewardRateDailyChange = yesterdayRewardUsdt > 0
     ? ((todayRewardUsdt - yesterdayRewardUsdt) / yesterdayRewardUsdt) * 100
@@ -815,87 +881,11 @@ export default function App() {
     setGasFundedBnbTotal(balance.total_bnb_funded ?? '0');
   };
 
-  const openGasAssist = (actionName: ActionType, retryAction: () => Promise<void>, message?: string) => {
-    retryActionRef.current = retryAction;
-    retryActionNameRef.current = actionName;
-    if (message) {
-      setStatus(message);
-    }
-    setGasAssistVisible(true);
-  };
-
-  const refreshGasQuote = async (wallet: string, token: GasPayToken, amount: string) => {
-    const quote = await quoteGasPackage({
-      wallet,
-      payToken: token,
-      payAmount: amount,
-    });
-    setGasQuoteBnb(quote.estimatedBnb);
-    return quote;
-  };
-
-  const buyGasAndRetry = async () => {
-    if (!walletAddress) return;
-
-    const payAmountNum = Number(gasPayAmount);
-    if (!Number.isFinite(payAmountNum) || payAmountNum <= 0) {
-      setStatus(`${t.gasFailed}${lang === 'zh' ? '请输入有效的兑换数量。' : 'Please enter a valid gas purchase amount.'}`);
-      return;
-    }
-
-    setActiveAction('gas');
-    setStatus(t.gasBuying);
-
-    try {
-      const quote = await refreshGasQuote(walletAddress, gasPayToken, gasPayAmount);
-      const order = await purchaseGasPackage({
-        quoteId: quote.quoteId,
-        wallet: walletAddress,
-        userId,
-      });
-
-      const orderId = order.orderId ?? order.id;
-      if (!orderId) {
-        throw new Error('Gas order ID missing');
-      }
-
-      const finalOrder = await getGasOrder(orderId);
-      const finalStatus = finalOrder?.status ?? order.status;
-      if (finalStatus !== 'done') {
-        throw new Error(finalOrder?.errorMessage ?? finalOrder?.error_message ?? 'Gas order failed');
-      }
-
-      // Phase-2 relay intent (MVP placeholder): record user intent for gasless workflow telemetry.
-      const intent = await createGasIntent({
-        wallet: walletAddress,
-        userId,
-        payToken: gasPayToken,
-        maxTokenSpend: gasPayAmount,
-        action: retryActionNameRef.current || 'unknown',
-        actionPayload: { source: 'app-gas-assist' },
-      });
-
-      const intentId = intent.intentId ?? intent.id;
-      if (intentId) {
-        setPhase2IntentId(intentId);
-        await relayGasIntent({ intentId, wallet: walletAddress });
-      }
-
-      await refreshGasFundedBalance(walletAddress);
-      setStatus(`${t.gasReady}${intentId ? ` ${t.gasIntentPhase2}` : ''}`);
-      setGasAssistVisible(false);
-
-      const retryAction = retryActionRef.current;
-      if (retryAction) {
-        retryActionRef.current = null;
-        await retryAction();
-      }
-    } catch (error) {
-      const message = toFriendlyErrorMessage(error);
-      setStatus(`${t.gasFailed}${message}`);
-    } finally {
-      setActiveAction('');
-    }
+  const requestAdminGasTopup = (action?: ActionType) => {
+    const actionText = action
+      ? (lang === 'zh' ? `当前操作：${action}。` : `Current action: ${action}.`)
+      : '';
+    setStatus(`${actionText}${t.gasAdminTopupNeeded}`);
   };
 
   const toggleLang = async () => {
@@ -1180,6 +1170,27 @@ export default function App() {
     setReferralSummary(summary);
   };
 
+  const refreshReferralMembers = async (
+    nextUserId: string,
+    mode: 'direct' | 'team',
+    page: number,
+  ) => {
+    if (!nextUserId) return;
+    setReferralMembersLoading(true);
+    setReferralMembersError('');
+    const result = await getReferralMembers(nextUserId, mode, page, REFERRAL_PAGE_SIZE);
+    if (!result) {
+      setReferralMembers([]);
+      setReferralMembersTotal(0);
+      setReferralMembersError(t.referralMembersError);
+      setReferralMembersLoading(false);
+      return;
+    }
+    setReferralMembers(result.items ?? []);
+    setReferralMembersTotal(Number(result.total ?? 0));
+    setReferralMembersLoading(false);
+  };
+
   const tryBindReferralIfNeeded = async (wallet: string) => {
     if (!pendingReferralWallet) return;
     if (pendingReferralWallet.toLowerCase() === wallet.toLowerCase()) {
@@ -1320,25 +1331,18 @@ export default function App() {
   useEffect(() => {
     if (!walletAddress) return;
     void refreshGasFundedBalance(walletAddress);
-    void refreshGasQuote(walletAddress, gasPayToken, gasPayAmount).catch(() => null);
   }, [walletAddress]);
-
-  useEffect(() => {
-    if (!walletAddress) return;
-    void refreshGasQuote(walletAddress, gasPayToken, gasPayAmount).catch(() => null);
-  }, [walletAddress, gasPayToken, gasPayAmount]);
 
   useEffect(() => {
     if (!walletAddress || !userId || !deviceId) return;
 
     const sendHeartbeat = async () => {
-      const hashrateNum = Number(hashrateInput);
       await reportDeviceHeartbeat({
         deviceId,
         userId,
         wallet: walletAddress,
         status: 'active',
-        hashrate: Number.isFinite(hashrateNum) ? Math.max(0, Math.floor(hashrateNum)) : 0,
+        hashrate: deviceHashrate,
       });
       const details = await getUserDetails(userId);
       setUserDetails(details);
@@ -1352,15 +1356,24 @@ export default function App() {
     return () => {
       clearInterval(timer);
     };
-  }, [walletAddress, userId, deviceId, hashrateInput]);
+  }, [walletAddress, userId, deviceId, deviceHashrate]);
 
   useEffect(() => {
     if (!userId) {
       setReferralSummary(null);
+      setReferralMembers([]);
+      setReferralMembersTotal(0);
+      setReferralMembersPage(1);
+      setReferralMembersError('');
       return;
     }
     void refreshReferralSummary(userId);
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void refreshReferralMembers(userId, referralMode, referralMembersPage);
+  }, [userId, referralMode, referralMembersPage, t.referralMembersError]);
 
   const startMining = async () => {
     if (!identityReady) {
@@ -1373,22 +1386,13 @@ export default function App() {
       return;
     }
 
-    const parsedHashrate = Number(hashrateInput);
-    if (!Number.isFinite(parsedHashrate) || parsedHashrate <= 0) {
-      setStatus(t.invalidHashrate);
-      return;
-    }
-
     setActiveAction('mine');
     setLastTxHash('');
-    const finalHashrate = Math.floor(parsedHashrate);
+    const finalHashrate = deviceHashrate;
 
     try {
       if (minerReady) {
-        setStatus(t.updateHashrate);
-        const txHash = await updateHashrateOnChain(finalHashrate);
-        setLastTxHash(txHash);
-        setStatus(`${t.hashrateUpdated}${shortHash(txHash)}`);
+        setStatus(`${t.updateHashrate} ${t.gasAdminTopupNeeded}`);
         return;
       }
 
@@ -1415,17 +1419,15 @@ export default function App() {
 
       if (!minerReady && alreadyRegistered) {
         try {
-          const txHash = await updateHashrateOnChain(finalHashrate);
           await markMinerReady();
-          setLastTxHash(txHash);
-          setStatus(`${t.minerRecovered}${shortHash(txHash)}`);
+          setStatus(t.minerRecovered);
         } catch (fallbackError) {
           const fallbackMsg = toFriendlyErrorMessage(fallbackError);
           setStatus(`${t.minerRecoverFail}${fallbackMsg}`);
         }
       } else {
         if (isInsufficientBnbError(message)) {
-          openGasAssist('mine', () => startMining(), `${t.minerFail}${message}`);
+          setStatus(`${t.minerFail}${message} ${t.gasAdminTopupNeeded}`);
           return;
         }
         setStatus(`${t.minerFail}${message}`);
@@ -1464,7 +1466,7 @@ export default function App() {
     } catch (error) {
       const message = toFriendlyErrorMessage(error);
       if (isInsufficientBnbError(message)) {
-        openGasAssist('claim', () => claimReward(), `${t.claimFail}${message}`);
+        setStatus(`${t.claimFail}${message} ${t.gasAdminTopupNeeded}`);
         return;
       }
       setStatus(`${t.claimFail}${message}`);
@@ -1511,7 +1513,7 @@ export default function App() {
       clearSwapConfirmTimer();
       const message = toFriendlyErrorMessage(error);
       if (isInsufficientBnbError(message)) {
-        openGasAssist('swap', () => swapUsdt(), `${t.swapFail}${message}`);
+        setStatus(`${t.swapFail}${message} ${t.gasAdminTopupNeeded}`);
         return;
       }
       setSwapTxStage('failed');
@@ -1549,7 +1551,7 @@ export default function App() {
     } catch (error) {
       const message = toFriendlyErrorMessage(error);
       if (isInsufficientBnbError(message)) {
-        openGasAssist('transfer', () => transferNativeToken(), `${t.transferFail}${message}`);
+        setStatus(`${t.transferFail}${message} ${t.gasAdminTopupNeeded}`);
         return;
       }
       setStatus(`${t.transferFail}${message}`);
@@ -1829,8 +1831,9 @@ export default function App() {
               todayRewardUsdt={todayRewardUsdt}
               claimableRewardUsdt={claimableRewardUsdt}
               rewardTokenSymbol="SUPER"
-              rewardRatePerHour={rewardRatePerHour}
-              rewardRateDailyChange={rewardRateDailyChange}
+              lockCycleDays={lockCycleDays}
+              lockRemainingDays={lockRemainingDays}
+              lockStatusText={lockStatusText}
               isBusy={isBusy}
               identityReady={identityReady}
               chartValues={chartValues}
@@ -1852,10 +1855,9 @@ export default function App() {
               identityReady={identityReady}
               swapTxStage={swapTxStage}
               gasFundedBnbTotal={gasFundedBnbTotal}
-              phase2IntentId={phase2IntentId}
               refreshSwapPrice={refreshSwapPrice}
               openSwapConfirm={openSwapConfirm}
-              openGasAssist={openGasAssist}
+              requestAdminGasTopup={() => requestAdminGasTopup('swap')}
               txStageLabels={txStageLabels}
               t={t}
             />
@@ -1865,8 +1867,7 @@ export default function App() {
             <DeviceTab
               onlineState={onlineState}
               deviceId={deviceId}
-              hashrateInput={hashrateInput}
-              setHashrateInput={setHashrateInput}
+              hashrateDisplay={`${deviceHashrate} H/s`}
               isBusy={isBusy}
               identityReady={identityReady}
               startMining={startMining}
@@ -1898,6 +1899,18 @@ export default function App() {
               t={t}
               appVersion={APP_VERSION}
               referralSummary={referralSummary}
+              referralMembers={referralMembers}
+              referralMembersMode={referralMode}
+              referralMembersTotal={referralMembersTotal}
+              referralMembersPage={referralMembersPage}
+              referralMembersPageSize={REFERRAL_PAGE_SIZE}
+              referralMembersLoading={referralMembersLoading}
+              referralMembersError={referralMembersError}
+              onReferralModeChange={(mode) => {
+                setReferralMode(mode);
+                setReferralMembersPage(1);
+              }}
+              onReferralPageChange={(nextPage) => setReferralMembersPage(nextPage)}
               onCheckUpdate={() => {
                 void manualCheckForUpdate(lang);
               }}
@@ -1947,61 +1960,6 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => void handleDismissAnnouncement()}>
                 <Text style={styles.modalPrimaryBtnText}>{t.announcementGotIt}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={gasAssistVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setGasAssistVisible(false)}
-      >
-        <Pressable style={styles.modalMask} onPress={() => setGasAssistVisible(false)}>
-          <Pressable style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t.gasAssistTitle}</Text>
-            <Text style={styles.modalHint}>{t.gasAssistHint}</Text>
-
-            <Text style={styles.label}>{t.gasTokenLabel}</Text>
-            <View style={styles.gasTokenRow}>
-              <TouchableOpacity
-                style={[styles.gasTokenBtn, gasPayToken === 'SUPER' && styles.gasTokenBtnActive]}
-                onPress={() => setGasPayToken('SUPER')}
-              >
-                <Text style={styles.gasTokenBtnText}>SUPER</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.gasTokenBtn, gasPayToken === 'USDT' && styles.gasTokenBtnActive]}
-                onPress={() => setGasPayToken('USDT')}
-              >
-                <Text style={styles.gasTokenBtnText}>USDT</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>{t.gasAmountLabel}</Text>
-            <TextInput
-              style={styles.input}
-              value={gasPayAmount}
-              onChangeText={setGasPayAmount}
-              keyboardType="decimal-pad"
-              placeholder="10"
-              placeholderTextColor="#93a9d1"
-              editable={!isBusy}
-            />
-
-            <View style={styles.modalRow}>
-              <Text style={styles.modalLabel}>{t.gasQuoteLabel}</Text>
-              <Text style={styles.modalValue}>{gasQuoteBnb} BNB</Text>
-            </View>
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setGasAssistVisible(false)}>
-                <Text style={styles.modalGhostBtnText}>{t.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={buyGasAndRetry}>
-                <Text style={styles.modalPrimaryBtnText}>{t.gasBuyAndRetry}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>

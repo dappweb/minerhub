@@ -65,6 +65,21 @@ export interface ProfileTabProps {
     referralDirectAmount?: string;
     referralTeamCount?: string;
     referralTeamAmount?: string;
+    referralMembersTitle?: string;
+    referralMembersDirectTab?: string;
+    referralMembersTeamTab?: string;
+    referralMembersLevel?: string;
+    referralMembersReward?: string;
+    referralMembersJoined?: string;
+    referralMembersContract?: string;
+    referralMembersContractActive?: string;
+    referralMembersContractInactive?: string;
+    referralMembersEmpty?: string;
+    referralMembersLoading?: string;
+    referralMembersError?: string;
+    referralMembersPage?: string;
+    referralMembersPrev?: string;
+    referralMembersNext?: string;
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
@@ -74,6 +89,23 @@ export interface ProfileTabProps {
     teamCount: number;
     teamAmountUsdt: string;
   } | null;
+  referralMembers?: Array<{
+    userId: string;
+    wallet: string;
+    nickname: string | null;
+    level: number;
+    totalRewardUsdt: string;
+    contractActive: number;
+    createdAt: string;
+  }>;
+  referralMembersMode?: 'direct' | 'team';
+  referralMembersTotal?: number;
+  referralMembersPage?: number;
+  referralMembersPageSize?: number;
+  referralMembersLoading?: boolean;
+  referralMembersError?: string;
+  onReferralModeChange?: (mode: 'direct' | 'team') => void;
+  onReferralPageChange?: (page: number) => void;
 }
 
 const CONTACT_TYPE_LABELS: Record<string, string> = {
@@ -138,6 +170,15 @@ export default function ProfileTab({
   appVersion,
   onCheckUpdate,
   referralSummary,
+  referralMembers,
+  referralMembersMode = 'direct',
+  referralMembersTotal = 0,
+  referralMembersPage = 1,
+  referralMembersPageSize = 20,
+  referralMembersLoading = false,
+  referralMembersError = '',
+  onReferralModeChange,
+  onReferralPageChange,
 }: ProfileTabProps) {
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
@@ -148,6 +189,8 @@ export default function ProfileTab({
   const [exportRevealing, setExportRevealing] = React.useState(false);
   const [exportCopied, setExportCopied] = React.useState(false);
   const [exportError, setExportError] = React.useState('');
+  const members = referralMembers ?? [];
+  const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -262,6 +305,70 @@ export default function ProfileTab({
           </View>
         </View>
       )}
+
+      <View style={s.actionCard}>
+        <Text style={s.sectionTitle}>{t.referralMembersTitle ?? 'Team Members'}</Text>
+        <View style={styles.memberTabRow}>
+          <TouchableOpacity
+            style={[styles.memberTabBtn, referralMembersMode === 'direct' && styles.memberTabBtnActive]}
+            onPress={() => onReferralModeChange?.('direct')}
+          >
+            <Text style={styles.memberTabText}>{t.referralMembersDirectTab ?? 'Direct'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.memberTabBtn, referralMembersMode === 'team' && styles.memberTabBtnActive]}
+            onPress={() => onReferralModeChange?.('team')}
+          >
+            <Text style={styles.memberTabText}>{t.referralMembersTeamTab ?? 'Team'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {referralMembersLoading ? (
+          <Text style={styles.contactEmpty}>{t.referralMembersLoading ?? 'Loading...'}</Text>
+        ) : referralMembersError ? (
+          <Text style={styles.memberErrorText}>{referralMembersError}</Text>
+        ) : members.length === 0 ? (
+          <Text style={styles.contactEmpty}>{t.referralMembersEmpty ?? 'No members yet'}</Text>
+        ) : (
+          <View style={styles.memberListWrap}>
+            {members.map((item) => (
+              <View key={`${item.userId}-${item.level}`} style={styles.memberItem}>
+                <View style={styles.memberItemHeader}>
+                  <Text style={styles.memberNameText}>{item.nickname?.trim() || item.wallet.slice(0, 10) + '...' + item.wallet.slice(-6)}</Text>
+                  <Text style={styles.memberLevelText}>{t.referralMembersLevel ?? 'Level'} {item.level}</Text>
+                </View>
+                <Text style={styles.memberWalletText}>{item.wallet}</Text>
+                <View style={styles.memberMetaRow}>
+                  <Text style={styles.memberMetaText}>{t.referralMembersReward ?? 'Reward'}: {item.totalRewardUsdt} USDT</Text>
+                  <Text style={styles.memberMetaText}>
+                    {t.referralMembersContract ?? 'Contract'}: {item.contractActive ? (t.referralMembersContractActive ?? 'Active') : (t.referralMembersContractInactive ?? 'Inactive')}
+                  </Text>
+                </View>
+                <Text style={styles.memberJoinedText}>{t.referralMembersJoined ?? 'Joined'}: {new Date(item.createdAt).toLocaleDateString('zh-CN')}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.memberPagerRow}>
+          <TouchableOpacity
+            style={[styles.memberPagerBtn, referralMembersPage <= 1 && s.disabledBtn]}
+            onPress={() => onReferralPageChange?.(Math.max(1, referralMembersPage - 1))}
+            disabled={referralMembersPage <= 1}
+          >
+            <Text style={styles.memberPagerText}>{t.referralMembersPrev ?? 'Prev'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.memberPagerInfo}>{t.referralMembersPage ?? 'Page'} {referralMembersPage}/{totalPages}</Text>
+          <TouchableOpacity
+            style={[styles.memberPagerBtn, referralMembersPage >= totalPages && s.disabledBtn]}
+            onPress={() => onReferralPageChange?.(Math.min(totalPages, referralMembersPage + 1))}
+            disabled={referralMembersPage >= totalPages}
+          >
+            <Text style={styles.memberPagerText}>{t.referralMembersNext ?? 'Next'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <View style={s.actionCard}>
         <Text style={s.sectionTitle}>{t.supportContactsTitle}</Text>
         {contacts.length === 0 ? (
@@ -508,6 +615,105 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     marginTop: 6,
+  },
+  memberTabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  memberTabBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    borderRadius: 8,
+    backgroundColor: '#0f213f',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  memberTabBtnActive: {
+    backgroundColor: '#1f4f96',
+    borderColor: '#3f77bc',
+  },
+  memberTabText: {
+    color: '#dbeafe',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  memberListWrap: {
+    gap: 8,
+    marginTop: 4,
+  },
+  memberItem: {
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    borderRadius: 10,
+    padding: 10,
+    gap: 4,
+  },
+  memberItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  memberNameText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+  memberLevelText: {
+    color: '#7dd3fc',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  memberWalletText: {
+    color: '#93a9d1',
+    fontSize: 11,
+  },
+  memberMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  memberMetaText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+  },
+  memberJoinedText: {
+    color: '#7a93c0',
+    fontSize: 11,
+  },
+  memberErrorText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  memberPagerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 10,
+  },
+  memberPagerBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    backgroundColor: '#1f4f96',
+  },
+  memberPagerText: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  memberPagerInfo: {
+    color: '#93a9d1',
+    fontSize: 12,
   },
   exportDivider: {
     height: 1,

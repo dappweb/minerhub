@@ -297,6 +297,24 @@ export type ReferralSummaryDto = {
   teamAmountUsdt: string;
 };
 
+export type ReferralMemberDto = {
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  level: number;
+  totalRewardUsdt: string;
+  contractActive: number;
+  createdAt: string;
+};
+
+export type ReferralMembersPageDto = {
+  mode: 'direct' | 'team';
+  limit: number;
+  offset: number;
+  items: ReferralMemberDto[];
+  total: number;
+};
+
 export type BindReferralResultDto = {
   ok: boolean;
   inviterUserId: string;
@@ -321,6 +339,24 @@ export async function bindReferral(wallet: string, referralWallet: string): Prom
 export async function getReferralSummary(userId: string): Promise<ReferralSummaryDto | null> {
   try {
     return await request<ReferralSummaryDto>(`/api/referrals/${userId}/summary`);
+  } catch {
+    return null;
+  }
+}
+
+export async function getReferralMembers(
+  userId: string,
+  mode: 'direct' | 'team',
+  page: number,
+  pageSize: number,
+): Promise<ReferralMembersPageDto | null> {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : 20;
+  const offset = (safePage - 1) * safePageSize;
+  try {
+    return await request<ReferralMembersPageDto>(
+      `/api/referrals/${userId}/${mode}?limit=${safePageSize}&offset=${offset}`
+    );
   } catch {
     return null;
   }

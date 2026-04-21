@@ -11,8 +11,9 @@ export interface EarningsTabProps {
   todayRewardUsdt: number;
   claimableRewardUsdt: number;
   rewardTokenSymbol: string;
-  rewardRatePerHour: number;
-  rewardRateDailyChange: number;
+  lockCycleDays: number;
+  lockRemainingDays: number | null;
+  lockStatusText: string;
   isBusy: boolean;
   identityReady: boolean;
   chartValues: number[];
@@ -27,8 +28,9 @@ export interface EarningsTabProps {
     todayRewardLabel: string;
     claimableRewardLabel: string;
     yieldRateTitle: string;
-    rewardRatePerHourLabel: string;
-    rewardRateDailyChangeLabel: string;
+    lockCycleLabel: string;
+    lockRemainingLabel: string;
+    lockStatusLabel: string;
     earningsCurveTitle: string;
     range7dLabel: string;
     rewardsSummary: string;
@@ -49,8 +51,9 @@ export default function EarningsTab({
   todayRewardUsdt,
   claimableRewardUsdt,
   rewardTokenSymbol,
-  rewardRatePerHour,
-  rewardRateDailyChange,
+  lockCycleDays,
+  lockRemainingDays,
+  lockStatusText,
   isBusy,
   identityReady,
   chartValues,
@@ -58,8 +61,6 @@ export default function EarningsTab({
   claimReward,
   t,
 }: EarningsTabProps) {
-  const dailyChangePositive = rewardRateDailyChange >= 0;
-
   return (
     <>
       <View style={s.actionCard}>
@@ -108,15 +109,17 @@ export default function EarningsTab({
         <Text style={s.sectionTitle}>{t.yieldRateTitle}</Text>
         <View style={s.metricsRow}>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{Number.isFinite(rewardRatePerHour) ? rewardRatePerHour.toFixed(4) : '0.0000'} USDT/h</Text>
-            <Text style={s.metricLabel}>{t.rewardRatePerHourLabel}</Text>
+            <Text style={s.metricValue}>{lockCycleDays} {lockCycleDays > 1 ? 'days' : 'day'}</Text>
+            <Text style={s.metricLabel}>{t.lockCycleLabel}</Text>
           </View>
           <View style={s.metricCard}>
-            <Text style={[s.metricValue, dailyChangePositive ? styles.changeUp : styles.changeDown]}>
-              {dailyChangePositive ? '+' : ''}{Number.isFinite(rewardRateDailyChange) ? rewardRateDailyChange.toFixed(2) : '0.00'}%
-            </Text>
-            <Text style={s.metricLabel}>{t.rewardRateDailyChangeLabel}</Text>
+            <Text style={s.metricValue}>{lockRemainingDays == null ? '--' : `${lockRemainingDays}d`}</Text>
+            <Text style={s.metricLabel}>{t.lockRemainingLabel}</Text>
           </View>
+        </View>
+        <View style={styles.lockStatusRow}>
+          <Text style={styles.lockStatusLabel}>{t.lockStatusLabel}</Text>
+          <Text style={styles.lockStatusValue}>{lockStatusText}</Text>
         </View>
       </View>
 
@@ -219,10 +222,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  changeUp: {
-    color: '#22d3ee',
+  lockStatusRow: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0b2d60',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
   },
-  changeDown: {
-    color: '#fb7185',
+  lockStatusLabel: {
+    color: '#9ec8ff',
+    fontSize: 12,
+  },
+  lockStatusValue: {
+    color: '#e0f2fe',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

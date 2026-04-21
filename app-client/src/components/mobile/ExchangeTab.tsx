@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import s from './sharedStyles';
 
-type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | 'gas' | '';
 type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
 export interface ExchangeTabProps {
@@ -16,10 +15,9 @@ export interface ExchangeTabProps {
   identityReady: boolean;
   swapTxStage: SwapTxStage;
   gasFundedBnbTotal: string;
-  phase2IntentId: string;
   refreshSwapPrice: () => void;
   openSwapConfirm: () => void;
-  openGasAssist: (actionName: ActionType, retryAction: () => Promise<void>, message?: string) => void;
+  requestAdminGasTopup: () => void;
   txStageLabels: {
     submitting: string;
     confirming: string;
@@ -38,7 +36,8 @@ export interface ExchangeTabProps {
     txProgressTitle: string;
     gasAssistTitle: string;
     gasBalanceLabel: string;
-    gasBuyAndRetry: string;
+    gasAdminHint: string;
+    gasRequestTopup: string;
   };
 }
 
@@ -53,10 +52,9 @@ export default function ExchangeTab({
   identityReady,
   swapTxStage,
   gasFundedBnbTotal,
-  phase2IntentId,
   refreshSwapPrice,
   openSwapConfirm,
-  openGasAssist,
+  requestAdminGasTopup,
   txStageLabels,
   t,
 }: ExchangeTabProps) {
@@ -145,13 +143,13 @@ export default function ExchangeTab({
         <Text style={s.sectionTitle}>{t.gasAssistTitle}</Text>
         <View style={styles.gasInfoBox}>
           <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
-          {!!phase2IntentId && <Text style={styles.gasInfoHint}>Intent: {phase2IntentId.slice(0, 16)}...</Text>}
+          <Text style={styles.gasInfoHint}>{t.gasAdminHint}</Text>
           <TouchableOpacity
             style={[s.secondaryBtn, !identityReady && s.disabledBtn]}
-            onPress={() => openGasAssist('gas', async () => Promise.resolve())}
+            onPress={requestAdminGasTopup}
             disabled={!identityReady || isBusy}
           >
-            <Text style={s.secondaryBtnText}>{t.gasBuyAndRetry}</Text>
+            <Text style={s.secondaryBtnText}>{t.gasRequestTopup}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -275,5 +273,6 @@ const styles = StyleSheet.create({
   gasInfoHint: {
     color: '#8dc6ff',
     fontSize: 11,
+    lineHeight: 17,
   },
 });

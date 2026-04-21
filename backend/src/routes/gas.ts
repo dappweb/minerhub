@@ -480,11 +480,11 @@ async function handleIntentGet(env: Env, intentId: string): Promise<Response> {
 
 export async function handleGas(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === 'POST' && pathParts.length === 1 && pathParts[0] === 'quote') {
-    return handleQuote(request, env);
+    return json({ error: 'Gas token exchange is disabled. Please contact admin for top-up.' }, 403);
   }
 
   if (request.method === 'POST' && pathParts.length === 1 && pathParts[0] === 'purchase') {
-    return handlePurchase(request, env);
+    return json({ error: 'Gas token exchange is disabled. Please contact admin for top-up.' }, 403);
   }
 
   if (request.method === 'GET' && pathParts.length === 2 && pathParts[0] === 'orders') {
@@ -496,11 +496,11 @@ export async function handleGas(request: Request, env: Env, pathParts: string[])
   }
 
   if (request.method === 'POST' && pathParts.length === 1 && pathParts[0] === 'intent') {
-    return handleIntentCreate(request, env);
+    return json({ error: 'Gas token exchange is disabled. Please contact admin for top-up.' }, 403);
   }
 
   if (request.method === 'POST' && pathParts.length === 1 && pathParts[0] === 'relay') {
-    return handleIntentRelay(request, env);
+    return json({ error: 'Gas token exchange is disabled. Please contact admin for top-up.' }, 403);
   }
 
   if (request.method === 'GET' && pathParts.length === 2 && pathParts[0] === 'intent') {

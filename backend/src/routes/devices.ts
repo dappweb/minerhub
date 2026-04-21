@@ -157,7 +157,7 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     await ensureCustomerProfile(env, body.userId);
     await accrueHourlyReward(env, body.userId, deviceId);
 
-    if (typeof body.status === "string" || typeof body.hashrate === "number") {
+    if (typeof body.status === "string") {
       const now = nowIso();
       const current = await env.DB.prepare("SELECT id FROM devices WHERE user_id = ? AND device_id = ?")
         .bind(body.userId, deviceId)
@@ -169,10 +169,6 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
         if (typeof body.status === "string") {
           parts.push("status = ?");
           values.push(body.status);
-        }
-        if (typeof body.hashrate === "number" && Number.isFinite(body.hashrate)) {
-          parts.push("hashrate = ?");
-          values.push(Math.max(0, Math.floor(body.hashrate)));
         }
         parts.push("updated_at = ?");
         values.push(now);
