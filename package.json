@@ -19,7 +19,11 @@
     "cf:bootstrap": "npm --prefix backend run cf:bootstrap",
     "build:cf": "npm run build",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "setup:ios-signing": "node scripts/setup-ios-signing.mjs",
+    "verify:ios-signing": "node scripts/verify-ios-signing.mjs",
+    "eas:build:ios": "cd app-client && eas build --platform ios --profile production",
+    "eas:submit:ios": "cd app-client && eas submit --platform ios --latest"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

@@ -46,6 +46,25 @@ const API_BASE = (process.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const OWNER    = process.env.VITE_OWNER_ADDRESS || process.env.OWNER_ADDRESS || '';
 const APK_PATH = path.join(ROOT, 'public/downloads/app-release.apk');
 
+function getPreferredIosDownloadUrl() {
+  const candidates = [
+    process.env.TESTFLIGHT_PUBLIC_URL,
+    process.env.IOS_TESTFLIGHT_PUBLIC_URL,
+    process.env.APP_STORE_IOS_URL,
+    process.env.APPLE_APP_STORE_URL,
+    process.env.VITE_IOS_DOWNLOAD_URL,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value || '').trim();
+    if (normalized && normalized !== '#') {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
 // ─────────────────────────────────────────────
 // Write / update a key in .env.local
 // ─────────────────────────────────────────────
@@ -67,7 +86,16 @@ function writeEnvKey(key, value) {
 // Main
 // ─────────────────────────────────────────────
 async function main() {
-  console.log('\n🔨 pre-build: 检查 APK 同步状态...');
+  console.log('\n🔨 pre-build: 同步下载地址并检查安装包状态...');
+
+  const iosDownloadUrl = getPreferredIosDownloadUrl();
+  if (iosDownloadUrl) {
+    writeEnvKey('VITE_IOS_DOWNLOAD_URL', iosDownloadUrl);
+    console.log(`🍎 iOS 首页链接已同步：${iosDownloadUrl}`);
+  } else {
+    console.log('ℹ️  未检测到 iOS 公网分发链接，保留现有 VITE_IOS_DOWNLOAD_URL。');
+    console.log('   可配置 TESTFLIGHT_PUBLIC_URL / IOS_TESTFLIGHT_PUBLIC_URL / APP_STORE_IOS_URL。');
+  }
 
   if (!fs.existsSync(APK_PATH)) {
     console.log('ℹ️  未找到 APK (public/downloads/app-release.apk)，跳过上传。');

@@ -19,6 +19,42 @@ const execPromise = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, '..');
 
+function loadEnv() {
+  const envFile = path.join(PROJECT_ROOT, '.env.local');
+  if (!fs.existsSync(envFile)) return;
+  const lines = fs.readFileSync(envFile, 'utf8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+
+function getPreferredIosPublicUrl() {
+  const candidates = [
+    process.env.TESTFLIGHT_PUBLIC_URL,
+    process.env.IOS_TESTFLIGHT_PUBLIC_URL,
+    process.env.APP_STORE_IOS_URL,
+    process.env.APPLE_APP_STORE_URL,
+    process.env.VITE_IOS_DOWNLOAD_URL,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value || '').trim();
+    if (normalized && normalized !== '#') {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+loadEnv();
+
 /**
  * 获取最新的构建信息
  */
@@ -69,7 +105,7 @@ async function getLatestBuilds() {
  */
 function getDownloadUrls(androidBuild, iosBuild) {
   let androidUrl = '';
-  let iosUrl = '';
+  let iosUrl = getPreferredIosPublicUrl();
 
   if (androidBuild) {
     // APK 类型直接下载
@@ -98,11 +134,12 @@ function getDownloadUrls(androidBuild, iosBuild) {
     console.log(`   ID: ${iosBuild.id}`);
     console.log(`   状态: ${iosBuild.status}`);
 
-    // iOS 通常需要提交到 TestFlight 获取公测链接
-    if (iosBuild.status === 'FINISHED') {
+    if (iosUrl) {
+      console.log(`   公网分发链接: ${iosUrl}`);
+    } else if (iosBuild.status === 'FINISHED') {
+      // iOS 通常需要提交到 TestFlight 获取公测链接
       console.log('   💡 运行以下命令提交到 TestFlight:');
       console.log(`      eas submit --platform ios --latest`);
-      iosUrl = 'https://testflight.apple.com/join/YOUR_TESTFLIGHT_ID';
     }
     console.log();
   } else {
@@ -169,7 +206,7 @@ function printSummary(androidUrl, iosUrl) {
     );
   }
 
-  if (iosUrl && iosUrl !== 'https://testflight.apple.com/join/YOUR_TESTFLIGHT_ID') {
+  if (iosUrl) {
     console.log('\n✅ iOS 下载链接已配置');
     console.log(`   VITE_IOS_DOWNLOAD_URL="${iosUrl}"`);
   } else {

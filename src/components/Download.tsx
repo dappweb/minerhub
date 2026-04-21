@@ -70,6 +70,22 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getQrTitle(platform: 'android' | 'ios'): string {
+  return platform === 'android' ? '扫码下载' : '扫码打开';
+}
+
+function getQrHint(platform: 'android' | 'ios'): string {
+  return platform === 'android'
+    ? '使用手机扫码即可直接下载安装。'
+    : '使用 iPhone 扫码可直接打开 TestFlight 或 App Store 链接。';
+}
+
+function getInstallHint(platform: 'android' | 'ios'): string {
+  return platform === 'android'
+    ? '安卓首次安装 APK 时，请先在系统设置中允许安装未知来源应用。'
+    : 'iOS 需通过 TestFlight 或 App Store 安装，首次打开 TestFlight 时请先完成 Apple 登录。';
+}
+
 export default function DownloadSection() {
   const [selectedPlatform, setSelectedPlatform] = React.useState<'android' | 'ios'>('android');
   const [state, setState] = React.useState<DownloadState>({
@@ -306,7 +322,7 @@ export default function DownloadSection() {
           <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 text-center backdrop-blur-sm">
             <div className="mb-4 flex items-center justify-center gap-2 text-cyan-300">
               <QrCode size={20} />
-              <span className="font-semibold">扫码下载</span>
+              <span className="font-semibold">{getQrTitle(selectedPlatform)}</span>
             </div>
 
             {current.available && current.downloadUrl ? (
@@ -326,14 +342,14 @@ export default function DownloadSection() {
               </div>
             )}
 
-            <p className="mb-3 text-sm text-slate-300">使用手机扫码即可直接下载安装。</p>
+            <p className="mb-3 text-sm text-slate-300">{getQrHint(selectedPlatform)}</p>
 
             <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-3 text-left">
               <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                 <Sparkles size={14} />
                 安装提示
               </p>
-              <p className="text-sm text-slate-300">安卓首次安装 APK 时，请先在系统设置中允许安装未知来源应用。</p>
+              <p className="text-sm text-slate-300">{getInstallHint(selectedPlatform)}</p>
             </div>
           </div>
         </motion.div>
