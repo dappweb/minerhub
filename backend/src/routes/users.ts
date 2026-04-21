@@ -100,7 +100,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       return unauthorized(authResult.error || "Signature verification failed");
     }
 
-    const body = (await request.json().catch(() => null)) as { wallet?: string; email?: string; referralWallet?: string } | null;
+    const body = (await request.json().catch(() => null)) as { wallet?: string; email?: string; referralWallet?: string; machineCode?: string } | null;
     if (!body?.wallet) return badRequest("wallet is required");
 
     // 检查请求中的wallet与签名wallet是否一致
@@ -114,6 +114,15 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .first<{ id: string; wallet: string; email: string | null }>();
     if (existing) {
       await ensureCustomerProfile(env, existing.id);
+      if (typeof body.machineCode === "string" && body.machineCode.trim()) {
+        await env.DB.prepare(
+          `UPDATE customer_profiles
+           SET machine_code = COALESCE(NULLIF(TRIM(machine_code), ''), ?), updated_at = ?
+           WHERE user_id = ?`
+        )
+          .bind(body.machineCode.trim(), nowIso(), existing.id)
+          .run();
+      }
       return json({ id: existing.id, wallet: existing.wallet, email: existing.email ?? null });
     }
 
@@ -138,6 +147,13 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     }
 
     await ensureCustomerProfile(env, id);
+    if (typeof body.machineCode === "string" && body.machineCode.trim()) {
+      await env.DB.prepare(
+        "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
+      )
+        .bind(body.machineCode.trim(), nowIso(), id)
+        .run();
+    }
     if (typeof body.referralWallet === "string" && body.referralWallet.trim()) {
       await bindReferralRelation(env, id, normalizedWallet, body.referralWallet);
     }

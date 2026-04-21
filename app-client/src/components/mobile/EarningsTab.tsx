@@ -6,6 +6,9 @@ export interface EarningsTabProps {
   marketTrend: string;
   marketRisk: string;
   marketHint: string;
+  configuredRewardRateUsdtPerHour: number;
+  effectiveRewardRateUsdtPerHour: number;
+  estimatedRewardUsdtPerDay: number;
   totalRewardUsdt: number;
   totalRewardSuper: number;
   todayRewardUsdt: number;
@@ -23,11 +26,14 @@ export interface EarningsTabProps {
     marketStatusTitle: string;
     marketTrendLabel: string;
     marketRiskLabel: string;
+    yieldRateTitle: string;
+    configuredYieldRateLabel: string;
+    effectiveYieldRateLabel: string;
+    estimatedDailyRewardLabel: string;
     rewardTokenTitle: string;
     totalRewardLabel: string;
     todayRewardLabel: string;
     claimableRewardLabel: string;
-    yieldRateTitle: string;
     lockCycleLabel: string;
     lockRemainingLabel: string;
     lockStatusLabel: string;
@@ -46,6 +52,9 @@ export default function EarningsTab({
   marketTrend,
   marketRisk,
   marketHint,
+  configuredRewardRateUsdtPerHour,
+  effectiveRewardRateUsdtPerHour,
+  estimatedRewardUsdtPerDay,
   totalRewardUsdt,
   totalRewardSuper,
   todayRewardUsdt,
@@ -109,9 +118,25 @@ export default function EarningsTab({
         <Text style={s.sectionTitle}>{t.yieldRateTitle}</Text>
         <View style={s.metricsRow}>
           <View style={s.metricCard}>
+            <Text style={s.metricValue}>{Number.isFinite(configuredRewardRateUsdtPerHour) ? configuredRewardRateUsdtPerHour.toFixed(3) : '0.000'} USDT/h</Text>
+            <Text style={s.metricLabel}>{t.configuredYieldRateLabel}</Text>
+          </View>
+          <View style={s.metricCard}>
+            <Text style={s.metricValue}>{Number.isFinite(effectiveRewardRateUsdtPerHour) ? effectiveRewardRateUsdtPerHour.toFixed(3) : '0.000'} USDT/h</Text>
+            <Text style={s.metricLabel}>{t.effectiveYieldRateLabel}</Text>
+          </View>
+        </View>
+        <View style={s.metricsRow}>
+          <View style={s.metricCard}>
+            <Text style={s.metricValue}>{Number.isFinite(estimatedRewardUsdtPerDay) ? estimatedRewardUsdtPerDay.toFixed(3) : '0.000'} USDT</Text>
+            <Text style={s.metricLabel}>{t.estimatedDailyRewardLabel}</Text>
+          </View>
+          <View style={s.metricCard}>
             <Text style={s.metricValue}>{lockCycleDays} {lockCycleDays > 1 ? 'days' : 'day'}</Text>
             <Text style={s.metricLabel}>{t.lockCycleLabel}</Text>
           </View>
+        </View>
+        <View style={s.metricsRow}>
           <View style={s.metricCard}>
             <Text style={s.metricValue}>{lockRemainingDays == null ? '--' : `${lockRemainingDays}d`}</Text>
             <Text style={s.metricLabel}>{t.lockRemainingLabel}</Text>

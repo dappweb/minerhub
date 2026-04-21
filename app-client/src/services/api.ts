@@ -315,6 +315,21 @@ export type ReferralMembersPageDto = {
   total: number;
 };
 
+export type ExchangeRequestDto = {
+  id: string;
+  userId: string;
+  wallet: string;
+  amountSuper: string;
+  amountUsdt: string;
+  mode: 'auto' | 'manual' | string;
+  status: string;
+  note: string | null;
+  txHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
 export type BindReferralResultDto = {
   ok: boolean;
   inviterUserId: string;
@@ -322,10 +337,11 @@ export type BindReferralResultDto = {
   inviterSummary: ReferralSummaryDto;
 };
 
-export async function createUser(wallet: string, referralWallet?: string): Promise<UserDto> {
+export async function createUser(wallet: string, referralWallet?: string, machineCode?: string): Promise<UserDto> {
   return signedRequest<UserDto>("/api/users", "POST", {
     wallet,
     ...(referralWallet ? { referralWallet } : {}),
+    ...(machineCode ? { machineCode } : {}),
   });
 }
 
@@ -388,6 +404,7 @@ export async function registerDevice(payload: {
   deviceId: string;
   hashrate: number;
   wallet?: string;
+  machineCode?: string;
 }): Promise<DeviceDto> {
   return signedRequest<DeviceDto>("/api/devices", "POST", payload);
 }
@@ -412,6 +429,19 @@ export async function createExchangeRequest(payload: {
     amountUsdt: string;
     createdAt: string;
   }>("/api/claims/exchange-request", "POST", payload);
+}
+
+export async function getExchangeRequests(payload: {
+  userId: string;
+  wallet: string;
+  limit?: number;
+}): Promise<ExchangeRequestDto[]> {
+  const res = await signedRequest<{ items: ExchangeRequestDto[] }>(
+    '/api/claims/exchange-request/list',
+    'POST',
+    payload,
+  );
+  return res.items ?? [];
 }
 
 export async function getUser(userId: string): Promise<UserDto | null> {

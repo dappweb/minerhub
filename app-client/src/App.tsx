@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Application from 'expo-application';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -26,8 +27,10 @@ import {
     acceptUserAgreement,
     bindReferral,
     createClaim,
+    createExchangeRequest,
     createUser,
     getAnnouncements,
+    getExchangeRequests,
     getGasWalletBalance,
     getReferralMembers,
     getReferralSummary,
@@ -39,6 +42,7 @@ import {
     registerDevice,
     reportDeviceHeartbeat,
     type AnnouncementDto,
+    type ExchangeRequestDto,
     type ReferralMemberDto,
     type ReferralSummaryDto
 } from './services/api';
@@ -49,7 +53,6 @@ import {
     getWalletBalances,
     registerMinerOnChain,
     sendNativeTokenOnChain,
-    swapUsdtToSuperOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdate, useAutoUpdate } from './services/updates';
 import {
@@ -77,7 +80,7 @@ const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
 const DEFAULT_DEVICE_HASHRATE = 1000;
-const REWARD_LOCK_CYCLE_DAYS = 7;
+const DEFAULT_CONTRACT_TERM_DAYS = 1095;
 const REFERRAL_PAGE_SIZE = 20;
 
 const translations = {
@@ -102,21 +105,26 @@ const translations = {
     ruleHint: 'Rewards accrue by online duration and settle according to backend policy.',
     maintenanceTitle: 'Maintenance Mode',
     maintenanceBody: 'System maintenance in progress. Please try again later.',
-    swapPanelTitle: 'USDT -> SUPER',
-    swapAmount: 'Swap Amount (USDT)',
-    swapAmountPlaceholder: 'Enter USDT amount',
+    swapPanelTitle: 'SUPER -> USDT',
+    swapAmount: 'Swap Amount (SUPER)',
+    swapAmountPlaceholder: 'Enter SUPER amount',
     refreshPrice: 'Refresh Price',
-    quote: 'Estimated SUPER',
+    quote: 'Estimated USDT',
     fee: 'Fee (0.5%)',
     minReceive: 'Minimum Received',
-    swapButton: 'Swap Now',
+    swapButton: 'Submit Exchange',
     swapConfirmTitle: 'Confirm Swap',
-    swapConfirmHint: 'Please verify amount and estimated receive before submitting.',
+    swapConfirmHint: 'Submit to backend exchange workflow (auto/manual by control settings).',
+    exchangeOrderMode: 'Mode',
+    exchangeOrderHistoryTitle: 'My Exchange Requests',
+    exchangeOrderStatus: 'Status',
+    exchangeOrderCreatedAt: 'Created At',
+    exchangeOrderEmpty: 'No exchange requests yet.',
     cancel: 'Cancel',
     confirm: 'Confirm',
     txProgressTitle: 'Transaction Progress',
     txSubmit: 'Submitting',
-    txConfirming: 'On-chain Confirming',
+    txConfirming: 'Processing',
     txSuccess: 'Completed',
     txFailed: 'Failed',
     quickActions: 'Quick Actions',
@@ -146,11 +154,14 @@ const translations = {
     marketStatusTitle: 'Market Yield Status',
     marketTrendLabel: 'Market Trend',
     marketRiskLabel: 'Risk Level',
+    yieldRateTitle: 'Yield Rate',
+    configuredYieldRateLabel: 'Configured Rate',
+    effectiveYieldRateLabel: 'Effective Rate',
+    estimatedDailyRewardLabel: 'Estimated Daily',
     rewardTokenTitle: 'Reward Token',
     totalRewardLabel: 'Total Reward',
     todayRewardLabel: 'Today Reward',
     claimableRewardLabel: 'Estimated Claimable',
-    yieldRateTitle: 'Lock Period',
     lockCycleLabel: 'Lock Cycle',
     lockRemainingLabel: 'Remaining',
     lockStatusLabel: 'Status',
@@ -187,10 +198,10 @@ const translations = {
     claimDoing: 'Submitting claim transaction...',
     claimSuccess: 'Claim success: ',
     claimFail: 'Claim failed: ',
-    invalidSwapAmount: 'Please enter a valid USDT amount',
-    swapDoing: 'Submitting swap transaction...',
-    swapSuccess: 'Swap success: ',
-    swapFail: 'Swap failed: ',
+    invalidSwapAmount: 'Please enter a valid SUPER amount',
+    swapDoing: 'Submitting exchange request...',
+    swapSuccess: 'Exchange request submitted: ',
+    swapFail: 'Exchange request failed: ',
     invalidAddress: 'Please enter a valid destination address',
     invalidAmount: 'Please enter a valid transfer amount',
     transferDoing: 'Submitting transfer...',
@@ -302,21 +313,26 @@ const translations = {
     ruleHint: '收益按在线时长累计，并按后台策略实时结算。',
     maintenanceTitle: '系统维护中',
     maintenanceBody: '系统正在维护，请稍后再试。',
-    swapPanelTitle: 'USDT -> SUPER',
-    swapAmount: '兑换数量（USDT）',
-    swapAmountPlaceholder: '输入USDT数量',
+    swapPanelTitle: 'SUPER -> USDT',
+    swapAmount: '兑换数量（SUPER）',
+    swapAmountPlaceholder: '输入SUPER数量',
     refreshPrice: '刷新价格',
-    quote: '预计获得',
+    quote: '预计获得USDT',
     fee: '手续费（0.5%）',
     minReceive: '最少到账',
-    swapButton: '立即兑换',
+    swapButton: '提交兑换申请',
     swapConfirmTitle: '确认兑换',
-    swapConfirmHint: '请确认兑换数量与预计到账后再提交。',
+    swapConfirmHint: '提交到后台兑换流程（是否自动处理由控制端开关决定）。',
+    exchangeOrderMode: '处理模式',
+    exchangeOrderHistoryTitle: '我的兑换申请',
+    exchangeOrderStatus: '状态',
+    exchangeOrderCreatedAt: '创建时间',
+    exchangeOrderEmpty: '暂无兑换申请记录。',
     cancel: '取消',
     confirm: '确认',
     txProgressTitle: '交易进度',
     txSubmit: '提交交易',
-    txConfirming: '链上确认',
+    txConfirming: '处理中',
     txSuccess: '完成',
     txFailed: '失败',
     quickActions: '快捷操作',
@@ -346,11 +362,14 @@ const translations = {
     marketStatusTitle: '市场收益状态',
     marketTrendLabel: '市场趋势',
     marketRiskLabel: '风险等级',
+    yieldRateTitle: '收益率',
+    configuredYieldRateLabel: '后台配置收益率',
+    effectiveYieldRateLabel: '当前设备收益率',
+    estimatedDailyRewardLabel: '预计日收益',
     rewardTokenTitle: '收益代币',
     totalRewardLabel: '累计收益',
     todayRewardLabel: '今日收益',
     claimableRewardLabel: '预计可领取',
-    yieldRateTitle: '锁定周期',
     lockCycleLabel: '锁定周期',
     lockRemainingLabel: '剩余天数',
     lockStatusLabel: '锁定状态',
@@ -387,10 +406,10 @@ const translations = {
     claimDoing: '正在提交领取交易...',
     claimSuccess: '领取成功：',
     claimFail: '领取失败：',
-    invalidSwapAmount: '请输入有效的USDT数量',
-    swapDoing: '正在提交兑换交易...',
-    swapSuccess: '兑换成功：',
-    swapFail: '兑换失败：',
+    invalidSwapAmount: '请输入有效的SUPER数量',
+    swapDoing: '正在提交兑换申请...',
+    swapSuccess: '兑换申请已提交：',
+    swapFail: '兑换申请失败：',
     invalidAddress: '请输入有效的目标地址',
     invalidAmount: '请输入有效转账数量',
     transferDoing: '正在提交转账...',
@@ -486,6 +505,43 @@ const translations = {
 function createDeviceId() {
   const random = Math.random().toString(36).slice(2, 8);
   return `mobile-${Date.now()}-${random}`;
+}
+
+function createDeviceIdFromSeed(seed: string) {
+  if (!seed) return createDeviceId();
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  const hex = hash.toString(16).toLowerCase().padStart(8, '0');
+  return `mobile-${hex}`;
+}
+
+async function resolveStableDeviceId(): Promise<string> {
+  try {
+    const androidId = await Application.getAndroidId();
+    if (androidId) {
+      return createDeviceIdFromSeed(`android:${androidId}`);
+    }
+  } catch {
+    // ignore and try next source
+  }
+
+  try {
+    const iosId = await Application.getIosIdForVendorAsync();
+    if (iosId) {
+      return createDeviceIdFromSeed(`ios:${iosId}`);
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  return createDeviceId();
+}
+
+function isStableDeviceIdFormat(deviceId: string): boolean {
+  return /^mobile-[0-9a-f]{8}$/.test(deviceId.trim());
 }
 
 function deriveMachineCode(seed: string): string {
@@ -589,6 +645,8 @@ export default function App() {
   const [announcementReadIds, setAnnouncementReadIds] = useState<string[]>([]);
   const [announcementVisible, setAnnouncementVisible] = useState(false);
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
+  const [exchangeOrders, setExchangeOrders] = useState<ExchangeRequestDto[]>([]);
+  const [exchangeOrdersLoading, setExchangeOrdersLoading] = useState(false);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -704,8 +762,8 @@ export default function App() {
     if (fromServer && typeof fromServer === 'string' && fromServer.trim()) {
       return fromServer.trim();
     }
-    return deriveMachineCode(deviceId || walletAddress || userId || '');
-  }, [userDetails, deviceId, walletAddress, userId]);
+    return deriveMachineCode(deviceId || '');
+  }, [userDetails, deviceId]);
 
   const expireDate = useMemo(() => {
     if (!userDetails?.contractEndAt) {
@@ -742,22 +800,22 @@ export default function App() {
   const swapInputNumber = Number(swapAmount);
   const hasValidSwapInput = Number.isFinite(swapInputNumber) && swapInputNumber > 0;
 
-  const estimatedSuper = useMemo(() => {
+  const estimatedUsdt = useMemo(() => {
     if (!hasValidSwapInput || !swapPriceValue || swapPriceValue <= 0) {
       return 0;
     }
-    return swapInputNumber * swapPriceValue;
+    return swapInputNumber / swapPriceValue;
   }, [hasValidSwapInput, swapInputNumber, swapPriceValue]);
 
   const feeUsdt = useMemo(() => {
-    if (!hasValidSwapInput) return 0;
-    return swapInputNumber * SWAP_FEE_RATE;
-  }, [hasValidSwapInput, swapInputNumber]);
+    if (estimatedUsdt <= 0) return 0;
+    return estimatedUsdt * SWAP_FEE_RATE;
+  }, [estimatedUsdt]);
 
-  const minReceiveSuper = useMemo(() => {
-    if (estimatedSuper <= 0) return 0;
-    return estimatedSuper * (1 - SWAP_SLIPPAGE_RATE);
-  }, [estimatedSuper]);
+  const minReceiveUsdt = useMemo(() => {
+    if (estimatedUsdt <= 0) return 0;
+    return estimatedUsdt * (1 - SWAP_SLIPPAGE_RATE);
+  }, [estimatedUsdt]);
 
   const swapPriceText = useMemo(() => {
     if (!swapPriceValue || swapPriceValue <= 0) {
@@ -825,30 +883,76 @@ export default function App() {
   const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
   const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
   const claimableRewardUsdt = Math.max(0, Math.min(totalRewardUsdt, todayRewardUsdt));
+  const configuredRewardRateUsdtPerHour = useMemo(() => {
+    const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
+    if (profileRate > 0) {
+      return profileRate;
+    }
 
-  const lockCycleDays = REWARD_LOCK_CYCLE_DAYS;
+    const systemRate = Number(systemStatus?.rewardRateUsdtPerHour ?? 0);
+    if (Number.isFinite(systemRate) && systemRate > 0) {
+      return systemRate;
+    }
+
+    return 0.084;
+  }, [systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
+  const effectiveRewardRateUsdtPerHour = useMemo(() => {
+    const hashrateFactor = Math.max(1, deviceHashrate / DEFAULT_DEVICE_HASHRATE);
+    return configuredRewardRateUsdtPerHour * hashrateFactor;
+  }, [configuredRewardRateUsdtPerHour, deviceHashrate]);
+  const estimatedRewardUsdtPerDay = useMemo(() => effectiveRewardRateUsdtPerHour * 24, [effectiveRewardRateUsdtPerHour]);
+  const exchangeModeLabel = useMemo(() => {
+    const globalAuto = Boolean(systemStatus?.exchangeAutoEnabled);
+    const userAuto = Number(userDetails?.exchangeAutoEnabled ?? 1) === 1;
+    const isAuto = globalAuto && userAuto;
+    if (lang === 'zh') {
+      return isAuto ? '当前模式：自动处理' : '当前模式：人工审核';
+    }
+    return isAuto ? 'Current mode: auto' : 'Current mode: manual';
+  }, [lang, systemStatus?.exchangeAutoEnabled, userDetails?.exchangeAutoEnabled]);
+
+  const lockCycleDays = useMemo(() => {
+    const startMs = userDetails?.contractStartAt ? new Date(userDetails.contractStartAt).getTime() : NaN;
+    const endMs = userDetails?.contractEndAt ? new Date(userDetails.contractEndAt).getTime() : NaN;
+
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+      return Math.max(1, Math.ceil((endMs - startMs) / 86400_000));
+    }
+
+    const profileTerm = Number(userDetails?.contractTermDays);
+    if (Number.isFinite(profileTerm) && profileTerm > 0) {
+      return Math.max(1, Math.floor(profileTerm));
+    }
+
+    const systemTerm = Number(systemStatus?.contractTermDaysDefault);
+    if (Number.isFinite(systemTerm) && systemTerm > 0) {
+      return Math.max(1, Math.floor(systemTerm));
+    }
+
+    return DEFAULT_CONTRACT_TERM_DAYS;
+  }, [systemStatus?.contractTermDaysDefault, userDetails?.contractEndAt, userDetails?.contractStartAt, userDetails?.contractTermDays]);
+
   const lockRemainingDays = useMemo(() => {
-    if (!userDetails?.contractStartAt) return null;
-    const startMs = new Date(userDetails.contractStartAt).getTime();
-    if (Number.isNaN(startMs)) return null;
-    const lockEnd = startMs + REWARD_LOCK_CYCLE_DAYS * 86400_000;
-    const diff = lockEnd - Date.now();
+    if (!userDetails?.contractEndAt) return null;
+    const endMs = new Date(userDetails.contractEndAt).getTime();
+    if (Number.isNaN(endMs)) return null;
+    const diff = endMs - Date.now();
     if (diff <= 0) return 0;
     return Math.ceil(diff / 86400_000);
-  }, [userDetails?.contractStartAt]);
+  }, [userDetails?.contractEndAt]);
 
   const lockStatusText = useMemo(() => {
-    if (!userDetails?.contractStartAt) {
+    if (!userDetails?.contractStartAt || !userDetails?.contractEndAt) {
       return lang === 'zh' ? '未激活' : 'Not Activated';
     }
     if (lockRemainingDays === null) {
-      return lang === 'zh' ? '锁定期未知' : 'Unknown';
+      return lang === 'zh' ? '合同信息异常' : 'Contract Info Invalid';
     }
     if (lockRemainingDays > 0) {
-      return lang === 'zh' ? `锁定中（剩余 ${lockRemainingDays} 天）` : `Locked (${lockRemainingDays} days left)`;
+      return lang === 'zh' ? `合同有效（剩余 ${lockRemainingDays} 天）` : `Active (${lockRemainingDays} days left)`;
     }
-    return lang === 'zh' ? '已解锁，可正常领取' : 'Unlocked, claim is available';
-  }, [lang, lockRemainingDays, userDetails?.contractStartAt]);
+    return lang === 'zh' ? '合同已到期，请续期' : 'Expired, renewal required';
+  }, [lang, lockRemainingDays, userDetails?.contractEndAt, userDetails?.contractStartAt]);
 
   const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
   const rewardRateDailyChange = yesterdayRewardUsdt > 0
@@ -906,17 +1010,24 @@ export default function App() {
           setLang(storedLang);
         }
 
+        const stableId = await resolveStableDeviceId();
         const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
         if (existing) {
-          setDeviceId(existing);
+          const shouldMigrateToStable = isStableDeviceIdFormat(stableId) && existing !== stableId;
+          if (shouldMigrateToStable) {
+            await AsyncStorage.setItem(DEVICE_ID_KEY, stableId);
+            setDeviceId(stableId);
+          } else {
+            setDeviceId(existing);
+          }
           return;
         }
 
-        const next = createDeviceId();
-        await AsyncStorage.setItem(DEVICE_ID_KEY, next);
-        setDeviceId(next);
+        await AsyncStorage.setItem(DEVICE_ID_KEY, stableId);
+        setDeviceId(stableId);
       } catch {
-        setDeviceId(createDeviceId());
+        const fallback = await resolveStableDeviceId();
+        setDeviceId(fallback);
       }
     };
 
@@ -947,14 +1058,12 @@ export default function App() {
     };
   }, []);
 
-  const handleOnboardingComplete = async (_years: 1 | 2 | 3, referralWallet?: string) => {
+  const handleOnboardingComplete = async (_years: 1 | 2 | 3, referralWallet: string) => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
-      if (referralWallet && referralWallet.trim()) {
-        const normalized = referralWallet.trim().toLowerCase();
-        await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
-        setPendingReferralWallet(normalized);
-      }
+      const normalized = referralWallet.trim().toLowerCase();
+      await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
+      setPendingReferralWallet(normalized);
     } catch {}
     setOnboardingVisible(false);
   };
@@ -1238,6 +1347,9 @@ export default function App() {
       if (cachedUserId) {
         const existing = await getUser(cachedUserId);
         if (existing) {
+          if (existing.wallet.toLowerCase() !== address.toLowerCase()) {
+            await AsyncStorage.removeItem(USER_ID_KEY).catch(() => null);
+          } else {
           await tryBindReferralIfNeeded(existing.wallet);
           setUserId(existing.id);
           const details = await getUserDetails(existing.id);
@@ -1251,6 +1363,7 @@ export default function App() {
           setUsdtBalance(balances.usdt);
           setStatus(t.initDone);
           return;
+          }
         }
       }
 
@@ -1274,7 +1387,11 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      let user = await createUser(address, pendingReferralWallet || undefined).catch(async (err) => {
+      if (!pendingReferralWallet.trim()) {
+        throw new Error(lang === 'zh' ? '请先绑定推荐人地址后再完成注册。' : 'Please bind an inviter wallet before registration.');
+      }
+
+      let user = await createUser(address, pendingReferralWallet || undefined, machineCode).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1365,10 +1482,33 @@ export default function App() {
       setReferralMembersTotal(0);
       setReferralMembersPage(1);
       setReferralMembersError('');
+      setExchangeOrders([]);
       return;
     }
     void refreshReferralSummary(userId);
   }, [userId]);
+
+  const refreshExchangeOrders = async () => {
+    if (!userId || !walletAddress) {
+      setExchangeOrders([]);
+      return;
+    }
+    setExchangeOrdersLoading(true);
+    try {
+      const items = await getExchangeRequests({ userId, wallet: walletAddress, limit: 10 });
+      setExchangeOrders(items);
+    } catch {
+      setExchangeOrders([]);
+    } finally {
+      setExchangeOrdersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!userId || !walletAddress) return;
+    if (activeTab !== 'exchange') return;
+    void refreshExchangeOrders();
+  }, [activeTab, userId, walletAddress]);
 
   useEffect(() => {
     if (!userId) return;
@@ -1403,6 +1543,7 @@ export default function App() {
         deviceId,
         hashrate: finalHashrate,
         wallet: walletAddress,
+        machineCode,
       });
 
       await createClaim({ userId, amount: '10', wallet: walletAddress });
@@ -1419,6 +1560,13 @@ export default function App() {
 
       if (!minerReady && alreadyRegistered) {
         try {
+          await registerDevice({
+            userId,
+            deviceId,
+            hashrate: finalHashrate,
+            wallet: walletAddress,
+            machineCode,
+          });
           await markMinerReady();
           setStatus(t.minerRecovered);
         } catch (fallbackError) {
@@ -1503,12 +1651,21 @@ export default function App() {
     }, 1200);
 
     try {
-      const txHash = await swapUsdtToSuperOnChain(swapAmount);
+      const order = await createExchangeRequest({
+        userId,
+        wallet: walletAddress,
+        amountSuper: swapAmount,
+        amountUsdt: minReceiveUsdt.toFixed(6),
+        note: 'mobile_exchange_request',
+      });
       clearSwapConfirmTimer();
-      setLastTxHash(txHash);
+      setLastTxHash(order.id);
       setSwapTxStage('success');
-      setStatus(`${t.swapSuccess}${shortHash(txHash)}`);
-      await refreshSwapPrice();
+      const modeHint = order.mode === 'auto'
+        ? (lang === 'zh' ? '自动处理' : 'auto')
+        : (lang === 'zh' ? '人工审核' : 'manual');
+      setStatus(`${t.swapSuccess}${order.id} (${modeHint})`);
+      await refreshExchangeOrders();
     } catch (error) {
       clearSwapConfirmTimer();
       const message = toFriendlyErrorMessage(error);
@@ -1577,14 +1734,11 @@ export default function App() {
       setImportPrivateKey('');
       setWalletAddress(address);
       setStatus(lang === 'zh' ? '钱包已导入，请重新初始化账户' : 'Wallet imported, please reinitialize account');
-      // Reset user and device to force re-initialization
+      // Reset user only; keep device identity stable on same phone.
       setUserId('');
-      setDeviceId('');
-      // Trigger initialization
+      await AsyncStorage.removeItem(USER_ID_KEY).catch(() => null);
       setTimeout(() => {
-        const newDeviceId = createDeviceId();
-        setDeviceId(newDeviceId);
-        void AsyncStorage.setItem(DEVICE_ID_KEY, newDeviceId).catch(() => null);
+        void initializeAccount();
       }, 500);
     } catch (error) {
       const message = error instanceof Error ? error.message : lang === 'zh' ? '导入失败' : 'Import failed';
@@ -1826,6 +1980,9 @@ export default function App() {
               marketTrend={marketTrend}
               marketRisk={marketRisk}
               marketHint={marketHint}
+              configuredRewardRateUsdtPerHour={configuredRewardRateUsdtPerHour}
+              effectiveRewardRateUsdtPerHour={effectiveRewardRateUsdtPerHour}
+              estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
               totalRewardUsdt={totalRewardUsdt}
               totalRewardSuper={totalRewardSuper}
               todayRewardUsdt={todayRewardUsdt}
@@ -1848,9 +2005,9 @@ export default function App() {
               swapAmount={swapAmount}
               setSwapAmount={setSwapAmount}
               swapPriceText={swapPriceText}
-              estimatedSuper={estimatedSuper}
+              estimatedUsdt={estimatedUsdt}
               feeUsdt={feeUsdt}
-              minReceiveSuper={minReceiveSuper}
+              minReceiveUsdt={minReceiveUsdt}
               isBusy={isBusy}
               identityReady={identityReady}
               swapTxStage={swapTxStage}
@@ -1858,6 +2015,10 @@ export default function App() {
               refreshSwapPrice={refreshSwapPrice}
               openSwapConfirm={openSwapConfirm}
               requestAdminGasTopup={() => requestAdminGasTopup('swap')}
+              exchangeModeLabel={exchangeModeLabel}
+              exchangeOrders={exchangeOrders}
+              exchangeOrdersLoading={exchangeOrdersLoading}
+              refreshExchangeOrders={refreshExchangeOrders}
               txStageLabels={txStageLabels}
               t={t}
             />
@@ -1979,11 +2140,11 @@ export default function App() {
 
             <View style={styles.modalRow}>
               <Text style={styles.modalLabel}>{t.swapAmount}</Text>
-              <Text style={styles.modalValue}>{swapAmount || '0'} USDT</Text>
+              <Text style={styles.modalValue}>{swapAmount || '0'} SUPER</Text>
             </View>
             <View style={styles.modalRow}>
               <Text style={styles.modalLabel}>{t.quote}</Text>
-              <Text style={styles.modalValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
+              <Text style={styles.modalValue}>{estimatedUsdt.toFixed(6)} USDT</Text>
             </View>
             <View style={styles.modalRow}>
               <Text style={styles.modalLabel}>{t.fee}</Text>
@@ -1991,7 +2152,7 @@ export default function App() {
             </View>
             <View style={styles.modalRow}>
               <Text style={styles.modalLabel}>{t.minReceive}</Text>
-              <Text style={styles.modalValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
+              <Text style={styles.modalValue}>{minReceiveUsdt.toFixed(6)} USDT</Text>
             </View>
 
             <View style={styles.modalBtnRow}>

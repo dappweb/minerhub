@@ -402,14 +402,14 @@ export default function App() {
                     )}
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                    <h3 className="text-2xl font-bold mb-3">挖矿 App (Android / iOS)</h3>
-                    <p className="text-slate-400 mb-6">下载双端兼容客户端，连接钱包后一键开启链上挖矿。</p>
+                    <h3 className="text-2xl font-bold mb-3">APP 下载中心</h3>
+                    <p className="text-slate-400 mb-6">下载最新版安卓 APK 或进入 iOS 渠道，手机端可直接查看收益、设备与团队成员数据。</p>
                     <div className="flex flex-wrap gap-3">
                       <a
                         href="#download"
                         className="inline-flex px-5 py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors"
                       >
-                        前往下载
+                        立即下载 APP
                       </a>
                     </div>
                   </div>

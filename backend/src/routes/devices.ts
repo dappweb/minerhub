@@ -99,7 +99,7 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { userId?: string; deviceId?: string; hashrate?: number; wallet?: string }
+      | { userId?: string; deviceId?: string; hashrate?: number; wallet?: string; machineCode?: string }
       | null;
 
     if (!body?.userId || !body.deviceId || typeof body.hashrate !== "number") {
@@ -114,11 +114,25 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     const id = createId("dev");
     const now = nowIso();
 
-    await env.DB.prepare(
-      "INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    const existingDevice = await env.DB.prepare(
+      "SELECT id FROM devices WHERE user_id = ? AND device_id = ?"
     )
-      .bind(id, body.userId, body.deviceId, body.hashrate, "active", now, now)
-      .run();
+      .bind(body.userId, body.deviceId)
+      .first<{ id: string }>();
+
+    if (existingDevice) {
+      await env.DB.prepare(
+        "UPDATE devices SET hashrate = ?, status = 'active', updated_at = ? WHERE id = ?"
+      )
+        .bind(body.hashrate, now, existingDevice.id)
+        .run();
+    } else {
+      await env.DB.prepare(
+        "INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+        .bind(id, body.userId, body.deviceId, body.hashrate, "active", now, now)
+        .run();
+    }
 
     await ensureCustomerProfile(env, body.userId);
     await env.DB.prepare(
@@ -134,7 +148,15 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
       .bind(now, now, body.userId)
       .run();
 
-    return json({ id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: "active" }, 201);
+    if (typeof body.machineCode === "string" && body.machineCode.trim()) {
+      await env.DB.prepare(
+        "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
+      )
+        .bind(body.machineCode.trim(), now, body.userId)
+        .run();
+    }
+
+    return json({ id: existingDevice?.id ?? id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: "active" }, existingDevice ? 200 : 201);
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "heartbeat") {

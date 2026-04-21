@@ -2,6 +2,24 @@ import { Apple, Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, 
 import { motion } from 'motion/react';
 import React from 'react';
 
+const DEFAULT_API_BASE_URL = 'https://coin-planet-api.dappweb.workers.dev';
+
+function resolveApiBaseUrl(): string {
+  const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (envBase) {
+    return envBase.replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const { origin, hostname } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return origin.replace(/\/+$/, '');
+    }
+  }
+
+  return DEFAULT_API_BASE_URL;
+}
+
 interface DownloadInfo {
   available: boolean;
   version?: string;
@@ -59,7 +77,7 @@ export default function DownloadSection() {
     ios: { available: false },
   });
   const [loading, setLoading] = React.useState(true);
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+  const apiBase = React.useMemo(() => resolveApiBaseUrl(), []);
 
   React.useEffect(() => {
     let canceled = false;
@@ -105,16 +123,16 @@ export default function DownloadSection() {
   const platformMeta = {
     android: {
       name: 'Android',
-      subtitle: 'APK direct install',
+      subtitle: '安卓 APK 直接安装',
       requirement: 'Android 7.0+ (API 24+)',
-      cta: 'Download APK',
+      cta: '立即下载 APK',
       icon: Smartphone,
     },
     ios: {
       name: 'iOS',
-      subtitle: 'TestFlight release',
+      subtitle: 'TestFlight 安装',
       requirement: 'iOS 16.1+',
-      cta: 'Open TestFlight',
+      cta: '打开 TestFlight',
       icon: Apple,
     },
   } as const;
@@ -134,11 +152,11 @@ export default function DownloadSection() {
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-14 text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/35 bg-cyan-400/10 px-3 py-1 text-sm font-medium text-cyan-300">
             <Download size={14} />
-            Download App
+            APP 下载
           </div>
-          <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">Get Coin Planet</h2>
+          <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">下载 Coin Planet App</h2>
           <p className="mx-auto max-w-2xl text-lg text-slate-300/90">
-            {loading ? 'Loading release channels...' : 'Install the latest app build and start mining in less than one minute.'}
+            {loading ? '正在读取最新发布版本...' : '下载最新版 APP，安装后即可在手机端查看收益、设备状态与团队数据。'}
           </p>
         </motion.div>
 
@@ -210,7 +228,7 @@ export default function DownloadSection() {
                 </div>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${current.available ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                {current.available ? 'Live channel' : 'Pending release'}
+                {current.available ? '可下载' : '待发布'}
               </span>
             </div>
 
@@ -218,14 +236,14 @@ export default function DownloadSection() {
               <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4">
                 <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                   <ShieldCheck size={14} />
-                  Compatibility
+                  安装要求
                 </p>
                 <p className="text-sm font-medium text-slate-100">{selectedMeta.requirement}</p>
               </div>
               <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4">
                 <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                   <HardDrive size={14} />
-                  Package size
+                  安装包大小
                 </p>
                 <p className="text-sm font-medium text-slate-100">{selectedPlatform === 'android' ? formatBytes(state.android.size) : '--'}</p>
               </div>
@@ -235,15 +253,15 @@ export default function DownloadSection() {
                 <div className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
                   <div>
-                    <p className="font-semibold text-slate-100">Release track</p>
-                    <p className="text-sm text-slate-400">{selectedPlatform === 'android' ? 'Public APK package' : 'Apple TestFlight channel'}</p>
+                    <p className="font-semibold text-slate-100">发布通道</p>
+                    <p className="text-sm text-slate-400">{selectedPlatform === 'android' ? '线上 APK 直装包' : 'Apple TestFlight 渠道'}</p>
                   </div>
                 </div>
                 {current.version && (
                   <div className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
                     <div>
-                      <p className="font-semibold text-slate-100">Version</p>
+                      <p className="font-semibold text-slate-100">版本号</p>
                       <p className="text-sm text-slate-400">v{current.version}</p>
                     </div>
                   </div>
@@ -252,7 +270,7 @@ export default function DownloadSection() {
                   <div className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
                     <div>
-                      <p className="font-semibold text-slate-100">Updated</p>
+                      <p className="font-semibold text-slate-100">更新时间</p>
                       <p className="text-sm text-slate-400">{new Date(current.uploadedAt).toLocaleDateString('zh-CN')}</p>
                     </div>
                   </div>
@@ -274,21 +292,21 @@ export default function DownloadSection() {
               ) : (
                 <>
                   <ExternalLink size={20} />
-                  Not Available
+                  暂不可用
                 </>
               )}
             </button>
 
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Clock3 size={13} />
-              <span>{current.uploadedAt ? `Last updated ${new Date(current.uploadedAt).toLocaleString('zh-CN')}` : 'Release timestamp will appear after upload.'}</span>
+              <span>{current.uploadedAt ? `最近更新 ${new Date(current.uploadedAt).toLocaleString('zh-CN')}` : '发布后这里会显示更新时间。'}</span>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 text-center backdrop-blur-sm">
             <div className="mb-4 flex items-center justify-center gap-2 text-cyan-300">
               <QrCode size={20} />
-              <span className="font-semibold">Scan to Download</span>
+              <span className="font-semibold">扫码下载</span>
             </div>
 
             {current.available && current.downloadUrl ? (
@@ -303,19 +321,19 @@ export default function DownloadSection() {
               <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/70">
                 <div className="text-center">
                   <QrCode size={40} className="mx-auto mb-2 text-slate-500" />
-                  <p className="text-sm text-slate-300">{loading ? 'Loading...' : 'No download'}</p>
+                  <p className="text-sm text-slate-300">{loading ? '读取中...' : '暂无下载'}</p>
                 </div>
               </div>
             )}
 
-            <p className="mb-3 text-sm text-slate-300">Scan with your phone camera and install directly.</p>
+            <p className="mb-3 text-sm text-slate-300">使用手机扫码即可直接下载安装。</p>
 
             <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-3 text-left">
               <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                 <Sparkles size={14} />
-                Install tips
+                安装提示
               </p>
-              <p className="text-sm text-slate-300">Enable network access and keep enough storage space before installation.</p>
+              <p className="text-sm text-slate-300">安卓首次安装 APK 时，请先在系统设置中允许安装未知来源应用。</p>
             </div>
           </div>
         </motion.div>
@@ -327,7 +345,7 @@ export default function DownloadSection() {
             viewport={{ once: true }}
             className="mt-7 rounded-xl border border-amber-400/35 bg-amber-400/10 p-4 text-center"
           >
-            <p className="text-sm text-amber-300">App package has not been uploaded yet. Admin can publish the build from API backend.</p>
+            <p className="text-sm text-amber-300">当前还没有可下载的安装包，管理员上传发布后这里会自动更新。</p>
           </motion.div>
         )}
 
@@ -339,15 +357,15 @@ export default function DownloadSection() {
         >
           <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
             <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Security</p>
-            <p>Signed release package</p>
+            <p>正式签名安装包</p>
           </div>
           <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
             <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Network</p>
-            <p>Optimized for global nodes</p>
+            <p>连接线上下载分发接口</p>
           </div>
           <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
-            <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Rewards</p>
-            <p>Real-time mining sync</p>
+            <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Experience</p>
+            <p>手机端收益与团队实时同步</p>
           </div>
         </motion.div>
       </div>

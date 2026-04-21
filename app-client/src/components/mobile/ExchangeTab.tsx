@@ -4,13 +4,22 @@ import s from './sharedStyles';
 
 type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
+type ExchangeItem = {
+  id: string;
+  amountSuper: string;
+  amountUsdt: string;
+  mode: string;
+  status: string;
+  createdAt: string;
+};
+
 export interface ExchangeTabProps {
   swapAmount: string;
   setSwapAmount: (v: string) => void;
   swapPriceText: string;
-  estimatedSuper: number;
+  estimatedUsdt: number;
   feeUsdt: number;
-  minReceiveSuper: number;
+  minReceiveUsdt: number;
   isBusy: boolean;
   identityReady: boolean;
   swapTxStage: SwapTxStage;
@@ -18,6 +27,10 @@ export interface ExchangeTabProps {
   refreshSwapPrice: () => void;
   openSwapConfirm: () => void;
   requestAdminGasTopup: () => void;
+  exchangeModeLabel: string;
+  exchangeOrders: ExchangeItem[];
+  exchangeOrdersLoading: boolean;
+  refreshExchangeOrders: () => void;
   txStageLabels: {
     submitting: string;
     confirming: string;
@@ -38,6 +51,12 @@ export interface ExchangeTabProps {
     gasBalanceLabel: string;
     gasAdminHint: string;
     gasRequestTopup: string;
+    exchangeOrderMode: string;
+    exchangeOrderHistoryTitle: string;
+    exchangeOrderStatus: string;
+    exchangeOrderCreatedAt: string;
+    exchangeOrderEmpty: string;
+    refreshPrice: string;
   };
 }
 
@@ -45,9 +64,9 @@ export default function ExchangeTab({
   swapAmount,
   setSwapAmount,
   swapPriceText,
-  estimatedSuper,
+  estimatedUsdt,
   feeUsdt,
-  minReceiveSuper,
+  minReceiveUsdt,
   isBusy,
   identityReady,
   swapTxStage,
@@ -55,6 +74,10 @@ export default function ExchangeTab({
   refreshSwapPrice,
   openSwapConfirm,
   requestAdminGasTopup,
+  exchangeModeLabel,
+  exchangeOrders,
+  exchangeOrdersLoading,
+  refreshExchangeOrders,
   txStageLabels,
   t,
 }: ExchangeTabProps) {
@@ -82,9 +105,10 @@ export default function ExchangeTab({
         <Text style={styles.hint}>{swapPriceText}</Text>
 
         <View style={styles.previewBox}>
+          <Text style={styles.modeHint}>{exchangeModeLabel}</Text>
           <View style={s.rowBetween}>
             <Text style={styles.previewLabel}>{t.quote}</Text>
-            <Text style={styles.previewValue}>{estimatedSuper.toFixed(6)} SUPER</Text>
+            <Text style={styles.previewValue}>{estimatedUsdt.toFixed(6)} USDT</Text>
           </View>
           <View style={s.rowBetween}>
             <Text style={styles.previewLabel}>{t.fee}</Text>
@@ -92,7 +116,7 @@ export default function ExchangeTab({
           </View>
           <View style={s.rowBetween}>
             <Text style={styles.previewLabel}>{t.minReceive}</Text>
-            <Text style={styles.previewValue}>{minReceiveSuper.toFixed(6)} SUPER</Text>
+            <Text style={styles.previewValue}>{minReceiveUsdt.toFixed(6)} USDT</Text>
           </View>
         </View>
 
@@ -139,6 +163,31 @@ export default function ExchangeTab({
         )}
       </View>
 
+      <View style={styles.historyCard}>
+        <View style={s.rowBetween}>
+          <Text style={styles.historyTitle}>{t.exchangeOrderHistoryTitle}</Text>
+          <TouchableOpacity onPress={refreshExchangeOrders} disabled={isBusy || exchangeOrdersLoading}>
+            <Text style={styles.refreshText}>{t.refreshPrice}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {exchangeOrdersLoading ? (
+          <Text style={styles.historyHint}>...</Text>
+        ) : exchangeOrders.length === 0 ? (
+          <Text style={styles.historyHint}>{t.exchangeOrderEmpty}</Text>
+        ) : (
+          exchangeOrders.map((item) => (
+            <View key={item.id} style={styles.historyItem}>
+              <Text style={styles.historyItemId}>{item.id}</Text>
+              <Text style={styles.historyItemMeta}>{item.amountSuper} SUPER -> {item.amountUsdt} USDT</Text>
+              <Text style={styles.historyItemMeta}>{t.exchangeOrderMode}: {item.mode}</Text>
+              <Text style={styles.historyItemMeta}>{t.exchangeOrderStatus}: {item.status}</Text>
+              <Text style={styles.historyItemTime}>{t.exchangeOrderCreatedAt}: {item.createdAt}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
       <View style={s.actionCard}>
         <Text style={s.sectionTitle}>{t.gasAssistTitle}</Text>
         <View style={styles.gasInfoBox}>
@@ -182,6 +231,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#072f67',
     padding: 10,
     gap: 8,
+  },
+  modeHint: {
+    color: '#8dd3ff',
+    fontSize: 11,
+    marginBottom: 2,
   },
   previewLabel: {
     color: '#b7dbff',
@@ -256,6 +310,44 @@ const styles = StyleSheet.create({
     color: '#b7dbff',
     fontSize: 11,
     textAlign: 'center',
+  },
+  historyCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4aa8ff',
+    backgroundColor: '#072f67',
+    padding: 10,
+    gap: 8,
+  },
+  historyTitle: {
+    color: '#d7f3ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyHint: {
+    color: '#8dc6ff',
+    fontSize: 12,
+  },
+  historyItem: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0b2d60',
+    padding: 8,
+    gap: 4,
+  },
+  historyItemId: {
+    color: '#f0fdff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  historyItemMeta: {
+    color: '#b7dbff',
+    fontSize: 11,
+  },
+  historyItemTime: {
+    color: '#8dc6ff',
+    fontSize: 10,
   },
   gasInfoBox: {
     borderRadius: 10,

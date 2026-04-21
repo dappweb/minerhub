@@ -19,6 +19,70 @@ async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
 }
 
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "exchange-request" && pathParts[1] === "list") {
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      userId?: string;
+      wallet?: string;
+      limit?: number;
+    } | null;
+
+    if (!body?.userId || !body.wallet) {
+      return badRequest("userId and wallet are required");
+    }
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch");
+    }
+
+    const limit = Math.min(50, Math.max(1, Number(body.limit ?? 10) || 10));
+
+    const { results } = await env.DB.prepare(
+      `SELECT
+        id, user_id, wallet, amount_super, amount_usdt, mode, status,
+        request_note, tx_hash, created_at, updated_at, completed_at
+       FROM exchange_orders
+       WHERE user_id = ? AND wallet = ?
+       ORDER BY created_at DESC
+       LIMIT ?`
+    )
+      .bind(body.userId, body.wallet.toLowerCase(), limit)
+      .all<{
+        id: string;
+        user_id: string;
+        wallet: string;
+        amount_super: string;
+        amount_usdt: string;
+        mode: string;
+        status: string;
+        request_note: string | null;
+        tx_hash: string | null;
+        created_at: string;
+        updated_at: string;
+        completed_at: string | null;
+      }>();
+
+    return json({
+      items: (results ?? []).map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        wallet: row.wallet,
+        amountSuper: row.amount_super,
+        amountUsdt: row.amount_usdt,
+        mode: row.mode,
+        status: row.status,
+        note: row.request_note,
+        txHash: row.tx_hash,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        completedAt: row.completed_at,
+      })),
+    });
+  }
+
   if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "exchange-request") {
     if (await isMaintenanceEnabled(env)) {
       return json({ error: "System is under maintenance" }, 503);
