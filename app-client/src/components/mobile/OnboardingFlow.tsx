@@ -7,7 +7,7 @@ type OnboardingFlowProps = {
   visible: boolean;
   lang: OnboardingLang;
   machineCode: string;
-  onComplete: (contractYears: 1 | 2 | 3, referralWallet: string) => void;
+  onComplete: (referralWallet: string) => void;
 };
 
 const COPY = {
@@ -27,17 +27,13 @@ const COPY = {
     s2Body:
       'Send this code to our support when you purchase a monthly card. It binds your phone to your contract.',
     s2Hint: 'You can also find this code in the Home tab.',
-    s3Title: 'Choose a Contract Term',
-    s3Body: 'The duration your monthly card will remain active. You can extend it later anytime.',
+    s3Title: 'Bind Inviter Wallet',
+    s3Body: 'Use your inviter wallet address to complete registration. Contract duration is managed by support.',
     referralTitle: 'Inviter Wallet Address',
     referralHint: 'Required. Use inviter wallet address (0x...).',
     referralPlaceholder: '0x... inviter wallet',
     referralInvalid: 'Please enter a valid wallet address.',
-    years1: '1 Year',
-    years2: '2 Years',
-    years3: '3 Years',
-    recommended: 'Recommended',
-    tip: 'Tip: support can override this based on your purchase.',
+    tip: 'Tip: support will activate and manage contract duration after monthly card purchase.',
   },
   zh: {
     step: '第',
@@ -53,23 +49,18 @@ const COPY = {
     s2Title: '您的机器码',
     s2Body: '购买月卡时请将此机器码告知客服，用于将本机绑定到您的合同。',
     s2Hint: '您也可以在"首页"随时查看此机器码。',
-    s3Title: '选择合同周期',
-    s3Body: '即您月卡的有效时长。后续可随时延长。',
+    s3Title: '绑定推荐人钱包',
+    s3Body: '请输入推荐人钱包地址完成注册，合同周期由客服开通后统一管理。',
     referralTitle: '推荐人钱包地址',
     referralHint: '必填，请输入推荐人的钱包地址（0x...）。',
     referralPlaceholder: '输入推荐人钱包地址 0x...',
     referralInvalid: '请输入有效的钱包地址。',
-    years1: '1 年',
-    years2: '2 年',
-    years3: '3 年',
-    recommended: '推荐',
-    tip: '提示：实际周期以客服开通为准。',
+    tip: '提示：购买月卡后由客服统一开通并管理合同周期。',
   },
 } as const;
 
 export default function OnboardingFlow({ visible, lang, machineCode, onComplete }: OnboardingFlowProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [years, setYears] = useState<1 | 2 | 3>(3);
   const [referralWallet, setReferralWallet] = useState('');
   const [referralError, setReferralError] = useState('');
   const t = COPY[lang];
@@ -88,7 +79,7 @@ export default function OnboardingFlow({ visible, lang, machineCode, onComplete 
     }
 
     setReferralError('');
-    onComplete(years, normalized);
+    onComplete(normalized);
   };
 
   const back = () => {
@@ -148,22 +139,6 @@ export default function OnboardingFlow({ visible, lang, machineCode, onComplete 
                 />
                 <Text style={styles.hint}>{t.referralHint}</Text>
                 {referralError ? <Text style={styles.errorText}>{referralError}</Text> : null}
-                <View style={styles.yearsRow}>
-                  {[1, 2, 3].map((y) => {
-                    const active = years === y;
-                    const label = y === 1 ? t.years1 : y === 2 ? t.years2 : t.years3;
-                    return (
-                      <Pressable
-                        key={y}
-                        onPress={() => setYears(y as 1 | 2 | 3)}
-                        style={[styles.yearBtn, active && styles.yearBtnActive]}
-                      >
-                        <Text style={[styles.yearLabel, active && styles.yearLabelActive]}>{label}</Text>
-                        {y === 3 && <Text style={styles.recommended}>{t.recommended}</Text>}
-                      </Pressable>
-                    );
-                  })}
-                </View>
                 <Text style={styles.hint}>{t.tip}</Text>
               </>
             )}
@@ -243,20 +218,6 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   codeText: { color: '#22d3ee', fontSize: 22, fontWeight: '700', letterSpacing: 2 },
-  yearsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  yearBtn: {
-    flex: 1,
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  yearBtnActive: { backgroundColor: 'rgba(167,139,250,0.15)', borderColor: '#a78bfa' },
-  yearLabel: { color: '#cbd5e1', fontWeight: '600', fontSize: 15 },
-  yearLabelActive: { color: '#f1f5f9' },
-  recommended: { color: '#a78bfa', fontSize: 10, marginTop: 4, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
   btn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   btnPrimary: { backgroundColor: '#a78bfa' },

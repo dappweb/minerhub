@@ -56,7 +56,6 @@ export interface ExchangeTabProps {
     exchangeOrderStatus: string;
     exchangeOrderCreatedAt: string;
     exchangeOrderEmpty: string;
-    refreshPrice: string;
   };
 }
 
@@ -179,7 +178,7 @@ export default function ExchangeTab({
           exchangeOrders.map((item) => (
             <View key={item.id} style={styles.historyItem}>
               <Text style={styles.historyItemId}>{item.id}</Text>
-              <Text style={styles.historyItemMeta}>{item.amountSuper} SUPER -> {item.amountUsdt} USDT</Text>
+              <Text style={styles.historyItemMeta}>{item.amountSuper} SUPER {'->'} {item.amountUsdt} USDT</Text>
               <Text style={styles.historyItemMeta}>{t.exchangeOrderMode}: {item.mode}</Text>
               <Text style={styles.historyItemMeta}>{t.exchangeOrderStatus}: {item.status}</Text>
               <Text style={styles.historyItemTime}>{t.exchangeOrderCreatedAt}: {item.createdAt}</Text>

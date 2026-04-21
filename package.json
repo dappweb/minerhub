@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:api": "npm --prefix backend run dev",
-    "build": "vite build",
+    "build": "node scripts/pre-build.mjs && vite build",
     "preview": "vite preview",
     "deploy:cf": "npm run build && wrangler pages deploy dist",
     "deploy:api": "npm --prefix backend run deploy",

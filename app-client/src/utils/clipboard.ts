@@ -11,8 +11,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 
   if (Platform.OS !== 'web') {
     try {
-      const mod = await import('expo-clipboard');
-      await mod.setStringAsync(text);
+      const clipboard = require('expo-clipboard') as typeof import('expo-clipboard');
+      await clipboard.setStringAsync(text);
       return true;
     } catch {
       return false;

@@ -26,7 +26,6 @@ import ProfileTab from './components/mobile/ProfileTab';
 import {
     acceptUserAgreement,
     bindReferral,
-    createClaim,
     createExchangeRequest,
     createUser,
     getAnnouncements,
@@ -739,7 +738,6 @@ export default function App() {
 
   const handleCopyAddress = async () => {
     if (!walletAddress) return;
-    const { copyToClipboard } = await import('./utils/clipboard');
     const ok = await copyToClipboard(walletAddress);
     setCopyState(ok ? 'copied' : 'failed');
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -1058,7 +1056,7 @@ export default function App() {
     };
   }, []);
 
-  const handleOnboardingComplete = async (_years: 1 | 2 | 3, referralWallet: string) => {
+  const handleOnboardingComplete = async (referralWallet: string) => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
       const normalized = referralWallet.trim().toLowerCase();
@@ -1258,8 +1256,24 @@ export default function App() {
     userDetails?.agreementAcceptedVersion,
   ]);
 
-  const refreshSwapPrice = async () => {
+  const refreshSwapPrice = async (preferredStatus?: Awaited<ReturnType<typeof getSystemStatus>> | null) => {
+    const configuredPrice = Number(preferredStatus?.swapPriceSuperPerUsdt ?? systemStatus?.swapPriceSuperPerUsdt ?? 0);
+    if (Number.isFinite(configuredPrice) && configuredPrice > 0) {
+      setSwapPriceValue(configuredPrice);
+      return;
+    }
+
     try {
+      const latestStatus = await getSystemStatus().catch(() => null);
+      if (latestStatus) {
+        setSystemStatus(latestStatus);
+        const latestConfiguredPrice = Number(latestStatus.swapPriceSuperPerUsdt ?? 0);
+        if (Number.isFinite(latestConfiguredPrice) && latestConfiguredPrice > 0) {
+          setSwapPriceValue(latestConfiguredPrice);
+          return;
+        }
+      }
+
       const price = await getSwapPriceOnChain();
       const parsed = Number(price) / 1e18;
       if (Number.isFinite(parsed) && parsed > 0) {
@@ -1355,7 +1369,7 @@ export default function App() {
           const details = await getUserDetails(existing.id);
           setUserDetails(details);
           await refreshReferralSummary(existing.id);
-          await refreshSwapPrice();
+          await refreshSwapPrice(status);
           // Fetch wallet balances
           const balances = await getWalletBalances();
           setBnbBalance(balances.bnb);
@@ -1376,7 +1390,7 @@ export default function App() {
         const details = await getUserDetails(existingByWallet.id);
         setUserDetails(details);
         await refreshReferralSummary(existingByWallet.id);
-        await refreshSwapPrice();
+        await refreshSwapPrice(status);
         // Fetch wallet balances
         const balances = await getWalletBalances();
         setBnbBalance(balances.bnb);
@@ -1408,7 +1422,7 @@ export default function App() {
       const details = await getUserDetails(user.id);
       setUserDetails(details);
       await refreshReferralSummary(user.id);
-      await refreshSwapPrice();
+      await refreshSwapPrice(status);
       // Fetch wallet balances
       const balances = await getWalletBalances();
       setBnbBalance(balances.bnb);
@@ -1546,7 +1560,6 @@ export default function App() {
         machineCode,
       });
 
-      await createClaim({ userId, amount: '10', wallet: walletAddress });
       await markMinerReady();
       setLastTxHash(txHash);
       setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
