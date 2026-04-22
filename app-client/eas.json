@@ -21,18 +21,7 @@
         "buildType": "apk"
       },
       "ios": {
-        "distribution": "store",
-        "credentialsSource": "local"
-      }
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "appleId": "$APPLE_ID",
-        "appleIdPassword": "@keychain:APPLE_ID_PASSWORD",
-        "teamId": "$APPLE_TEAM_ID",
-        "bundleIdentifier": "com.coinplanet.mobile"
+        "distribution": "store"
       }
     }
   }
