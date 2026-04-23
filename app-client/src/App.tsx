@@ -2073,6 +2073,9 @@ export default function App() {
               identityReady={identityReady}
               startMining={startMining}
               initializeAccount={initializeAccount}
+              exchangeOrders={exchangeOrders}
+              exchangeOrdersLoading={exchangeOrdersLoading}
+              onRefreshExchangeOrders={refreshExchangeOrders}
               t={t}
             />
           )}
