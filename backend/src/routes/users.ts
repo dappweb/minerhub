@@ -177,7 +177,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
 
     const user = await env.DB.prepare(
       `SELECT
-        u.id, u.wallet, u.email, u.role, u.status, u.created_at, u.updated_at,
+        u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
         cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
         COALESCE(cp.contract_term_days, 1095) AS contract_term_days,
         COALESCE(cp.monthly_card_days, 30) AS monthly_card_days,

@@ -1,6 +1,7 @@
 import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
+import { getAppDownloadInfo } from './api';
 
 type Lang = 'en' | 'zh';
 
@@ -206,3 +207,115 @@ export const currentUpdateInfo = {
   createdAt: Updates.createdAt,
   isEmbeddedLaunch: Updates.isEmbeddedLaunch,
 };
+
+// ──────────────────────────────────────────
+// 原生 APK 版本检查（大版本升级）
+// ──────────────────────────────────────────
+
+/**
+ * 比较版本号，若 remote > local 返回 true。
+ * 支持 major.minor.patch 格式。
+ */
+function isNewerVersion(remote: string, local: string): boolean {
+  const parse = (v: string) => v.replace(/[^0-9.]/g, '').split('.').map(Number);
+  const r = parse(remote);
+  const l = parse(local);
+  for (let i = 0; i < Math.max(r.length, l.length); i++) {
+    const rv = r[i] ?? 0;
+    const lv = l[i] ?? 0;
+    if (rv > lv) return true;
+    if (rv < lv) return false;
+  }
+  return false;
+}
+
+/**
+ * 检查服务端是否有更新的 APK 版本。
+ * 有新版本时弹窗引导用户打开下载链接。
+ */
+export async function checkNativeAppUpdate(
+  currentVersion: string,
+  lang: Lang = 'zh',
+): Promise<void> {
+  const info = await getAppDownloadInfo();
+  if (!info?.android?.available || !info.android.version || !info.android.downloadUrl) return;
+
+  if (!isNewerVersion(info.android.version, currentVersion)) return;
+
+  const downloadUrl = info.android.downloadUrl.startsWith('http')
+    ? info.android.downloadUrl
+    : `https://api.coinplanets.net${info.android.downloadUrl}`;
+
+  if (lang === 'zh') {
+    Alert.alert(
+      '发现新版本',
+      `最新版本 v${info.android.version}，当前版本 v${currentVersion}。\n请下载新版安装包升级。`,
+      [
+        { text: '稍后', style: 'cancel' },
+        {
+          text: '立即下载',
+          onPress: () => { void Linking.openURL(downloadUrl); },
+        },
+      ],
+    );
+  } else {
+    Alert.alert(
+      'New Version Available',
+      `Latest: v${info.android.version}  |  Current: v${currentVersion}\nDownload and install the new APK to upgrade.`,
+      [
+        { text: 'Later', style: 'cancel' },
+        {
+          text: 'Download',
+          onPress: () => { void Linking.openURL(downloadUrl); },
+        },
+      ],
+    );
+  }
+}
+
+/**
+ * 手动检查原生版本更新（供个人中心"检查更新"按钮调用）。
+ * OTA 检查完毕后，若已是最新 bundle，再检查 APK 版本。
+ */
+export async function manualCheckForUpdateFull(
+  currentVersion: string,
+  lang: Lang = 'zh',
+): Promise<void> {
+  const t = MESSAGES[lang];
+
+  // 1. 先检查 OTA 热更新
+  if (Updates.isEnabled && !__DEV__) {
+    const result = await checkForUpdateSilently();
+    if (result.error) {
+      Alert.alert(t.failed, result.error);
+      return;
+    }
+    if (result.available) {
+      promptUpdateReady(lang);
+      return;
+    }
+  }
+
+  // 2. 再检查原生 APK 版本（Android only）
+  if (Platform.OS === 'android') {
+    const info = await getAppDownloadInfo();
+    if (info?.android?.available && info.android.version && isNewerVersion(info.android.version, currentVersion)) {
+      const downloadUrl = info.android.downloadUrl?.startsWith('http')
+        ? info.android.downloadUrl
+        : `https://api.coinplanets.net${info.android.downloadUrl ?? '/api/downloads/android'}`;
+
+      const title = lang === 'zh' ? '发现新版本' : 'New Version Available';
+      const msg = lang === 'zh'
+        ? `最新版本 v${info.android.version}，当前版本 v${currentVersion}，请下载安装升级。`
+        : `Latest: v${info.android.version}  |  Current: v${currentVersion}. Download the new APK to upgrade.`;
+      Alert.alert(title, msg, [
+        { text: lang === 'zh' ? '稍后' : 'Later', style: 'cancel' },
+        { text: lang === 'zh' ? '立即下载' : 'Download', onPress: () => { void Linking.openURL(downloadUrl); } },
+      ]);
+      return;
+    }
+  }
+
+  // 3. 均为最新
+  Alert.alert(t.title, t.upToDate);
+}

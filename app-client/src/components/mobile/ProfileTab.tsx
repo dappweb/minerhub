@@ -60,6 +60,9 @@ export interface ProfileTabProps {
     checkUpdateButton?: string;
     checkUpdateHint?: string;
     appVersionLabel?: string;
+    inviterTitle?: string;
+    inviterWallet?: string;
+    inviterEmpty?: string;
     referralTitle?: string;
     referralDirectCount?: string;
     referralDirectAmount?: string;
@@ -83,6 +86,10 @@ export interface ProfileTabProps {
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
+  inviterInfo?: {
+    userId: string;
+    wallet: string | null;
+  } | null;
   referralSummary?: {
     directCount: number;
     directAmountUsdt: string;
@@ -169,6 +176,7 @@ export default function ProfileTab({
   t,
   appVersion,
   onCheckUpdate,
+  inviterInfo,
   referralSummary,
   referralMembers,
   referralMembersMode = 'direct',
@@ -280,6 +288,14 @@ export default function ProfileTab({
             <Text style={styles.expiredBannerBody}>{t.contractExpiredBody}</Text>
           </View>
         )}
+      </View>
+
+      <View style={s.actionCard}>
+        <Text style={s.sectionTitle}>{t.inviterTitle ?? 'My Inviter'}</Text>
+        <Text style={styles.referralLabel}>{t.inviterWallet ?? 'Inviter Wallet'}</Text>
+        <Text style={styles.inviterValueText}>
+          {inviterInfo?.wallet?.trim() || inviterInfo?.userId || t.inviterEmpty || 'No inviter bound yet'}
+        </Text>
       </View>
 
       {referralSummary && (
@@ -613,6 +629,12 @@ const styles = StyleSheet.create({
   referralValue: {
     color: '#e2e8f0',
     fontSize: 16,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  inviterValueText: {
+    color: '#e2e8f0',
+    fontSize: 15,
     fontWeight: '700',
     marginTop: 6,
   },

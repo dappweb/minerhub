@@ -1,18 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -24,39 +24,39 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-    acceptUserAgreement,
-    bindReferral,
-    createExchangeRequest,
-    createUser,
-    getAnnouncements,
-    getExchangeRequests,
-    getGasWalletBalance,
-    getReferralMembers,
-    getReferralSummary,
-    getSystemStatus,
-    getUser,
-    getUserByWallet,
-    getUserDetails,
-    markAnnouncementRead as markAnnouncementReadApi,
-    registerDevice,
-    reportDeviceHeartbeat,
-    type AnnouncementDto,
-    type ExchangeRequestDto,
-    type ReferralMemberDto,
-    type ReferralSummaryDto
+  acceptUserAgreement,
+  bindReferral,
+  createExchangeRequest,
+  createUser,
+  getAnnouncements,
+  getExchangeRequests,
+  getGasWalletBalance,
+  getReferralMembers,
+  getReferralSummary,
+  getSystemStatus,
+  getUser,
+  getUserByWallet,
+  getUserDetails,
+  markAnnouncementRead as markAnnouncementReadApi,
+  registerDevice,
+  reportDeviceHeartbeat,
+  type AnnouncementDto,
+  type ExchangeRequestDto,
+  type ReferralMemberDto,
+  type ReferralSummaryDto
 } from './services/api';
 import {
-    claimRewardOnChain,
-    getSwapPriceOnChain,
-    getWalletAddress,
-    getWalletBalances,
-    registerMinerOnChain,
-    sendNativeTokenOnChain,
+  claimRewardOnChain,
+  getSwapPriceOnChain,
+  getWalletAddress,
+  getWalletBalances,
+  registerMinerOnChain,
+  sendNativeTokenOnChain,
 } from './services/blockchain';
-import { manualCheckForUpdate, useAutoUpdate } from './services/updates';
+import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-    exportWalletPrivateKey,
-    importWalletPrivateKey
+  exportWalletPrivateKey,
+  importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -270,6 +270,9 @@ const translations = {
     checkUpdateButton: 'Check for Updates',
     checkUpdateHint: 'Fetches the latest features and fixes without reinstalling.',
     appVersionLabel: 'Current Version',
+    inviterTitle: 'My Inviter',
+    inviterWallet: 'Inviter Wallet',
+    inviterEmpty: 'No inviter bound yet',
     referralTitle: 'Referral Summary',
     referralDirectCount: 'Direct Accounts',
     referralDirectAmount: 'Direct Amount (USDT)',
@@ -478,6 +481,9 @@ const translations = {
     checkUpdateButton: '检查更新',
     checkUpdateHint: '无需重新安装，在线获取最新功能与修复。',
     appVersionLabel: '当前版本',
+    inviterTitle: '我的推荐人',
+    inviterWallet: '推荐人钱包',
+    inviterEmpty: '暂未绑定推荐人',
     referralTitle: '推荐统计',
     referralDirectCount: '直推账号数',
     referralDirectAmount: '直推金额(USDT)',
@@ -631,6 +637,7 @@ export default function App() {
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
+  const [inviterUser, setInviterUser] = useState<Awaited<ReturnType<typeof getUser>> | null>(null);
   const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
   const [referralMode, setReferralMode] = useState<'direct' | 'team'>('direct');
   const [referralMembers, setReferralMembers] = useState<ReferralMemberDto[]>([]);
@@ -1491,6 +1498,7 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) {
+      setInviterUser(null);
       setReferralSummary(null);
       setReferralMembers([]);
       setReferralMembersTotal(0);
@@ -1501,6 +1509,25 @@ export default function App() {
     }
     void refreshReferralSummary(userId);
   }, [userId]);
+
+  useEffect(() => {
+    const parentUserId = userDetails?.parentUserId?.trim();
+    if (!parentUserId) {
+      setInviterUser(null);
+      return;
+    }
+
+    let cancelled = false;
+    void getUser(parentUserId).then((user) => {
+      if (!cancelled) {
+        setInviterUser(user);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userDetails?.parentUserId]);
 
   const refreshExchangeOrders = async () => {
     if (!userId || !walletAddress) {
@@ -2072,6 +2099,10 @@ export default function App() {
               onImportWalletClick={() => setImportWalletVisible(true)}
               t={t}
               appVersion={APP_VERSION}
+              inviterInfo={userDetails?.parentUserId ? {
+                userId: userDetails.parentUserId,
+                wallet: inviterUser?.wallet ?? null,
+              } : null}
               referralSummary={referralSummary}
               referralMembers={referralMembers}
               referralMembersMode={referralMode}
@@ -2086,7 +2117,7 @@ export default function App() {
               }}
               onReferralPageChange={(nextPage) => setReferralMembersPage(nextPage)}
               onCheckUpdate={() => {
-                void manualCheckForUpdate(lang);
+                void manualCheckForUpdateFull(APP_VERSION, lang);
               }}
             />
           )}

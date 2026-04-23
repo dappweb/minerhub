@@ -1,11 +1,12 @@
 import { getAuthHeaders } from './signature';
 
 const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-const DEFAULT_API_BASE_URL = 'https://coin-planet-api.dappweb.workers.dev';
+const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
 // 追加可选的自定义域回退地址，避开 *.workers.dev 在部分地区的网络污染 / 限速。
 // 部署自定义域后可通过 EXPO_PUBLIC_API_BASE_URL 覆盖，或直接在此数组首位写死。
 const FALLBACK_API_BASE_URLS = [
   DEFAULT_API_BASE_URL,
+  'https://coin-planet-api.dappweb.workers.dev',
 ];
 const REQUEST_TIMEOUT_MS = 25_000;
 const REQUEST_RETRY_COUNT = 3;
@@ -556,5 +557,27 @@ export async function reportDeviceHeartbeat(payload: {
 
 export async function acceptUserAgreement(userId: string, version: string, wallet: string): Promise<{ ok: boolean; version: string; acceptedAt: string }> {
   return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/agreement`, 'POST', { version, wallet });
+}
+
+export interface AppDownloadInfo {
+  android: {
+    available: boolean;
+    version?: string;
+    size?: number;
+    uploadedAt?: string;
+    downloadUrl?: string;
+  };
+  ios: {
+    available: boolean;
+    downloadUrl?: string;
+  };
+}
+
+export async function getAppDownloadInfo(): Promise<AppDownloadInfo | null> {
+  try {
+    return await request<AppDownloadInfo>('/api/downloads');
+  } catch {
+    return null;
+  }
 }
 
