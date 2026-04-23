@@ -18,6 +18,13 @@ async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
     .run();
 }
 
+async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND wallet = ?")
+    .bind(userId, wallet.toLowerCase())
+    .first<{ id: string }>();
+  return Boolean(row?.id);
+}
+
 async function accrueHourlyReward(env: Env, userId: string, deviceId: string): Promise<void> {
   const device = await env.DB.prepare(
     `SELECT id, hashrate, updated_at FROM devices WHERE user_id = ? AND device_id = ?`
@@ -28,10 +35,10 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   if (!device) return;
 
   const profile = await env.DB.prepare(
-    `SELECT contract_active, contract_end_at, reward_rate_usdt_per_hour, total_reward_usdt FROM customer_profiles WHERE user_id = ?`
+    `SELECT contract_active, contract_end_at, reward_rate_usdt_per_hour FROM customer_profiles WHERE user_id = ?`
   )
     .bind(userId)
-    .first<{ contract_active: number; contract_end_at: string | null; reward_rate_usdt_per_hour: string | null; total_reward_usdt: string | null }>();
+    .first<{ contract_active: number; contract_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
 
   if (!profile || Number(profile.contract_active ?? 0) !== 1) return;
   if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < Date.now()) return;
@@ -67,11 +74,15 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
     )
     .run();
 
-  const nextTotal = (Number(profile.total_reward_usdt ?? "0") + rewardUsdt).toFixed(6);
   await env.DB.prepare(
-    `UPDATE customer_profiles SET total_reward_usdt = ?, last_seen_at = ?, online_status = 'online', updated_at = ? WHERE user_id = ?`
+    `UPDATE customer_profiles
+     SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
+         last_seen_at = ?,
+         online_status = 'online',
+         updated_at = ?
+     WHERE user_id = ?`
   )
-    .bind(nextTotal, nowIsoValue, nowIsoValue, userId)
+    .bind(rewardUsdt, nowIsoValue, nowIsoValue, userId)
     .run();
 
   await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
@@ -104,6 +115,10 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
 
     if (!body?.userId || !body.deviceId || typeof body.hashrate !== "number") {
       return badRequest("userId, deviceId, hashrate are required");
+    }
+
+    if (!(await assertUserOwnedByWallet(env, body.userId, authResult.wallet!))) {
+      return unauthorized("User does not belong to signed wallet");
     }
 
     // 验证用户钱包一致性（可选，增强安全）
@@ -172,6 +187,9 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     const deviceId = pathParts[0];
     const body = (await request.json().catch(() => null)) as { userId?: string; wallet?: string; status?: string; hashrate?: number } | null;
     if (!body?.userId) return badRequest("userId is required");
+    if (!(await assertUserOwnedByWallet(env, body.userId, authResult.wallet!))) {
+      return unauthorized("User does not belong to signed wallet");
+    }
     if (body.wallet && body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
       return badRequest("Wallet mismatch");
     }

@@ -50,18 +50,14 @@ async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
 
 async function updateProfileTotalRewards(env: Env, userId: string, rewardUsdtDelta: number, rewardSuperDelta: number): Promise<void> {
   await ensureCustomerProfile(env, userId);
-  const profile = await env.DB.prepare(
-    "SELECT total_reward_usdt, total_reward_super FROM customer_profiles WHERE user_id = ?"
-  )
-    .bind(userId)
-    .first<{ total_reward_usdt: string | null; total_reward_super: string | null }>();
-
-  const nextUsdt = (Number(profile?.total_reward_usdt ?? "0") + rewardUsdtDelta).toFixed(6);
-  const nextSuper = (Number(profile?.total_reward_super ?? "0") + rewardSuperDelta).toFixed(6);
   await env.DB.prepare(
-    "UPDATE customer_profiles SET total_reward_usdt = ?, total_reward_super = ?, updated_at = ? WHERE user_id = ?"
+    `UPDATE customer_profiles
+     SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
+         total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) + ?, 6) AS TEXT),
+         updated_at = ?
+     WHERE user_id = ?`
   )
-    .bind(nextUsdt, nextSuper, nowIso(), userId)
+    .bind(rewardUsdtDelta, rewardSuperDelta, nowIso(), userId)
     .run();
 }
 
@@ -94,6 +90,22 @@ async function handleBatchRewards(request: Request, env: Env): Promise<Response>
 
     await ensureCustomerProfile(env, item.userId);
 
+    const source = item.source ?? "batch_manual";
+    const dedupe = await env.DB.prepare(
+      `SELECT id FROM reward_ledger
+       WHERE user_id = ?
+         AND COALESCE(device_id, '') = COALESCE(?, '')
+         AND COALESCE(accrued_from, '') = COALESCE(?, '')
+         AND COALESCE(accrued_to, '') = COALESCE(?, '')
+         AND source = ?
+       LIMIT 1`
+    )
+      .bind(item.userId, item.deviceId ?? null, item.accruedFrom ?? null, item.accruedTo ?? null, source)
+      .first<{ id: string }>();
+    if (dedupe?.id) {
+      continue;
+    }
+
     const rowId = createId("rwd");
     await env.DB.prepare(
       `INSERT INTO reward_ledger (
@@ -110,7 +122,7 @@ async function handleBatchRewards(request: Request, env: Env): Promise<Response>
         String(item.rateUsdtPerHour ?? 0),
         item.accruedFrom ?? null,
         item.accruedTo ?? null,
-        item.source ?? "batch_manual",
+        source,
         item.note ?? null,
         now,
         now,
@@ -194,13 +206,13 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
     .bind(orderId)
     .first<ExchangeOrder>();
   if (!order) return json({ error: "Exchange order not found" }, 404);
-  if (order.status !== "approved" && order.status !== "auto_processing") {
+  if (order.status !== "approved") {
     return badRequest("Order cannot be completed in current status");
   }
 
-  const amountUsdt = Number(body?.amountUsdt ?? order.amount_usdt ?? "0");
+  const amountUsdt = Number(order.amount_usdt ?? "0");
   if (!Number.isFinite(amountUsdt) || amountUsdt < 0) {
-    return badRequest("Invalid amountUsdt");
+    return badRequest("Invalid order amountUsdt");
   }
 
   const now = nowIso();
@@ -215,9 +227,15 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
   await env.DB.prepare(
     `UPDATE swap_trade_logs
      SET status = 'completed', amount_out = ?, tx_hash = ?, note = ?, updated_at = ?
-     WHERE user_id = ? AND created_at <= ? AND status IN ('manual_pending', 'auto_processing', 'approved', 'submitted')`
+     WHERE id = (
+       SELECT id
+       FROM swap_trade_logs
+       WHERE user_id = ? AND status IN ('manual_pending', 'auto_processing', 'approved', 'submitted')
+       ORDER BY created_at DESC
+       LIMIT 1
+     )`
   )
-    .bind(String(amountUsdt), body?.txHash ?? null, "exchange completed", now, order.user_id, now)
+    .bind(String(amountUsdt), body?.txHash ?? null, "exchange completed", now, order.user_id)
     .run();
 
   return json({ ok: true, id: orderId, status: "completed", amountUsdt: String(amountUsdt), completedAt: now });

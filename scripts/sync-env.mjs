@@ -33,6 +33,11 @@ if (!fs.existsSync(DEPLOYMENT_PATH)) {
 
 const deployment = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
 const { contracts } = deployment;
+const ownerAddress = deployment.deployer || '';
+const chainAdmins = Array.isArray(deployment.initialization?.chainAdmins)
+  ? deployment.initialization.chainAdmins.filter(Boolean)
+  : [];
+const adminAddresses = Array.from(new Set([ownerAddress, ...chainAdmins].filter(Boolean)));
 
 const missing = Object.entries(contracts).filter(([, v]) => !v);
 if (missing.length > 0) {
@@ -103,6 +108,9 @@ const frontendUpdates = {
   VITE_MINER_CONTRACT_ADDRESS: contracts.MiningPool,
   VITE_SWAP_ROUTER_ADDRESS: contracts.SwapRouter,
   VITE_SWAP_CONTRACT_ADDRESS: contracts.SwapRouter,
+  VITE_OWNER_ADDRESS: ownerAddress,
+  VITE_OWNER_WALLET: ownerAddress,
+  VITE_ADMIN_ADDRESSES: adminAddresses.join(','),
   VITE_USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support both real USDT and mock
 };
 const frontendContent = mergeEnvVars(readEnvFile(frontendEnvPath), frontendUpdates);
@@ -130,6 +138,8 @@ const backendUpdates = {
   SUPER_TOKEN_ADDRESS: contracts.SUPER,
   MINING_POOL_ADDRESS: contracts.MiningPool,
   SWAP_ROUTER_ADDRESS: contracts.SwapRouter,
+  OWNER_ADDRESS: ownerAddress,
+  ADMIN_ADDRESSES: adminAddresses.join(','),
   USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support both real USDT and mock
 };
 const backendContent = mergeEnvVars(readEnvFile(backendEnvPath), backendUpdates);
