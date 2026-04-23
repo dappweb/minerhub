@@ -40,12 +40,20 @@ async function main() {
 	await mintTx.wait();
 	console.log("Minted initial SUPER:", ethers.formatEther(initialSuperMint));
 
-	console.log("\nDeploying USDT Mock...");
-	const USDT = await ethers.getContractFactory("USDT_Mock");
-	const usdt = await USDT.deploy();
-	await usdt.waitForDeployment();
-	const usdtAddress = await usdt.getAddress();
-	console.log("USDT Mock deployed:", usdtAddress);
+	let usdtAddress: string;
+	let usdt: any;
+	if (process.env.USDT_REUSE_ADDRESS) {
+		usdtAddress = process.env.USDT_REUSE_ADDRESS;
+		console.log("\nUsing existing USDT:", usdtAddress);
+		usdt = await ethers.getContractAt("IERC20", usdtAddress);
+	} else {
+		console.log("\nDeploying USDT Mock...");
+		const USDT = await ethers.getContractFactory("USDT_Mock");
+		usdt = await USDT.deploy();
+		await usdt.waitForDeployment();
+		usdtAddress = await usdt.getAddress();
+		console.log("USDT Mock deployed:", usdtAddress);
+	}
 
 	console.log("\nDeploying MiningPool...");
 	const MiningPool = await ethers.getContractFactory("MiningPool");
@@ -81,10 +89,15 @@ async function main() {
 	console.log("Deployer SUPER:", ethers.formatEther(superBalance));
 	console.log("Deployer USDT:", ethers.formatUnits(usdtBalance, 18));
 
-	await (await superToken.approve(swapRouterAddress, ethers.MaxUint256)).wait();
-	await (await usdt.approve(swapRouterAddress, ethers.MaxUint256)).wait();
-	await (await swapRouter.initializeLiquidity(initialLiquiditySuper, initialLiquidityUSDT)).wait();
-	console.log("Liquidity initialized");
+	if (usdtBalance < initialLiquidityUSDT) {
+		console.warn(`[WARNING] Deployer USDT Balance (${ethers.formatUnits(usdtBalance, 18)}) < Required (${ethers.formatUnits(initialLiquidityUSDT, 18)})`);
+		console.warn("[WARNING] Skipping liquidity initialization! Please initialize manually after sending USDT.");
+	} else {
+		await (await superToken.approve(swapRouterAddress, ethers.MaxUint256)).wait();
+		await (await usdt.approve(swapRouterAddress, ethers.MaxUint256)).wait();
+		await (await swapRouter.initializeLiquidity(initialLiquiditySuper, initialLiquidityUSDT)).wait();
+		console.log("Liquidity initialized");
+	}
 
 	const deploymentInfo = {
 		network: "bsc",

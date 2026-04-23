@@ -1,12 +1,12 @@
 {
   "network": "bsc",
-  "timestamp": "2026-04-23T12:44:16.911Z",
+  "timestamp": "2026-04-23T12:52:29.376Z",
   "deployer": "0x571f87436C7bd84327d3b751BB911Bbc3E19bF56",
   "contracts": {
-    "SUPER": "0x88eF10cA51B75a9dBe600eeE7aCFDd71121D4118",
-    "USDT_Mock": "0xe2851f5FF214e68a0629baefF96B5020D9c708dB",
-    "MiningPool": "0xC1Ad01d383f736e1D9DD635b6D6b26a92D7a81e7",
-    "SwapRouter": "0x865a15341463D1a9E59ed92ff8f7229fA22DE6c7"
+    "SUPER": "0x427cf0ddFA97cf7a10F009810e07D8F935e5ec4e",
+    "USDT_Mock": "0x55d398326f99059fF775485246999027B3197955",
+    "MiningPool": "0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54",
+    "SwapRouter": "0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B"
   },
   "initialization": {
     "liquiditySuper": "50000000.0",
@@ -15,8 +15,8 @@
       "0x571f87436C7bd84327d3b751BB911Bbc3E19bF56"
     ],
     "superMinters": [
-      "0xC1Ad01d383f736e1D9DD635b6D6b26a92D7a81e7",
-      "0x865a15341463D1a9E59ed92ff8f7229fA22DE6c7"
+      "0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54",
+      "0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B"
     ]
   }
 }
