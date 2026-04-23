@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isAddress } from 'viem';
+import { addAdminOnChain, getMiningPoolAdminsOnChain, getMiningPoolOwnerOnChain, removeAdminOnChain } from '../lib/blockchain';
 
 type OwnerConsoleProps = {
   adminWallet: string;
@@ -51,7 +53,7 @@ type AuditRow = {
   createdAt: string;
 };
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
 export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerConsoleProps) {
   const [tab, setTab] = useState<Tab>('overview');
@@ -128,11 +130,64 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   // --- Overview ---
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [loadingOverview, setLoadingOverview] = useState(false);
+  const [adminAddresses, setAdminAddresses] = useState<string[]>([]);
+  const [chainOwnerAddress, setChainOwnerAddress] = useState('');
+  const [nextAdminAddress, setNextAdminAddress] = useState('');
+  const [adminManagerLoading, setAdminManagerLoading] = useState(false);
+  const [adminManagerMsg, setAdminManagerMsg] = useState('');
   const loadOverview = useCallback(async () => {
     try { setLoadingOverview(true); setOverview(await authedFetch<OverviewData>('/api/owner/overview')); }
     catch (e) { console.error(e); }
     finally { setLoadingOverview(false); }
   }, [authedFetch]);
+
+  const loadAdminAccess = useCallback(async () => {
+    try {
+      const [ownerAddress, admins] = await Promise.all([
+        getMiningPoolOwnerOnChain(),
+        getMiningPoolAdminsOnChain(),
+      ]);
+      setChainOwnerAddress(ownerAddress);
+      setAdminAddresses(admins);
+    } catch (e) {
+      setAdminManagerMsg(e instanceof Error ? e.message : '加载管理员列表失败');
+    }
+  }, []);
+
+  const runAddAdmin = useCallback(async () => {
+    const candidate = nextAdminAddress.trim();
+    if (!isAddress(candidate)) {
+      setAdminManagerMsg('请输入有效的钱包地址');
+      return;
+    }
+
+    setAdminManagerLoading(true);
+    setAdminManagerMsg('');
+    try {
+      const result = await addAdminOnChain(candidate as `0x${string}`);
+      setAdminManagerMsg(`管理员已添加，同步 ${result.hashes.length} 笔链上交易`);
+      setNextAdminAddress('');
+      await loadAdminAccess();
+    } catch (e) {
+      setAdminManagerMsg(e instanceof Error ? e.message : '添加管理员失败');
+    } finally {
+      setAdminManagerLoading(false);
+    }
+  }, [loadAdminAccess, nextAdminAddress]);
+
+  const runRemoveAdmin = useCallback(async (wallet: string) => {
+    setAdminManagerLoading(true);
+    setAdminManagerMsg('');
+    try {
+      const result = await removeAdminOnChain(wallet as `0x${string}`);
+      setAdminManagerMsg(`管理员已移除，同步 ${result.hashes.length} 笔链上交易`);
+      await loadAdminAccess();
+    } catch (e) {
+      setAdminManagerMsg(e instanceof Error ? e.message : '移除管理员失败');
+    } finally {
+      setAdminManagerLoading(false);
+    }
+  }, [loadAdminAccess]);
 
   // --- Token ops ---
   const [mintTo, setMintTo] = useState('');
@@ -314,7 +369,10 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
 
   useEffect(() => {
     if (!isAuthed) return;
-    if (tab === 'overview') void loadOverview();
+    if (tab === 'overview') {
+      void loadOverview();
+      void loadAdminAccess();
+    }
     if (tab === 'earnings') void loadEarnings();
     if (tab === 'audit') void loadAudit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -323,9 +381,9 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   if (!isAuthed) {
     return (
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
-        <h3 className="text-lg font-bold text-amber-300 mb-3">Owner 控制台 · 需要登录</h3>
+        <h3 className="text-lg font-bold text-amber-300 mb-3">管理员控制台 · 需要登录</h3>
         <p className="text-sm text-slate-400 mb-4">
-          使用 owner 钱包签名换取 JWT 会话 (2 小时)。登录后无需每次签名；敏感写操作仍会再次请求签名。
+          使用管理员钱包签名换取 JWT 会话 (2 小时)。登录后无需每次签名；敏感写操作仍会再次请求签名。
         </p>
         <button
           onClick={login}
@@ -342,7 +400,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   return (
     <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/60 p-6 mb-8">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-cyan-300">Owner 控制台</h3>
+        <h3 className="text-lg font-bold text-cyan-300">管理员控制台</h3>
         <div className="flex items-center gap-3 text-xs text-slate-400">
           <span>会话到期: {new Date(expiresAt).toLocaleString()}</span>
           <button onClick={logout} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">退出</button>
@@ -361,7 +419,10 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
 
       {tab === 'overview' && (
         <div className="space-y-3 text-sm">
-          <button onClick={loadOverview} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">刷新</button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={loadOverview} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">刷新统计</button>
+            <button onClick={() => void loadAdminAccess()} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">刷新管理员</button>
+          </div>
           {loadingOverview && <p className="text-slate-400">加载中...</p>}
           {overview && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -382,6 +443,54 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
               )}
             </div>
           )}
+
+          <Card title={`管理员权限 (${adminAddresses.length})`}>
+            <div className="flex flex-wrap gap-2">
+              <input
+                className={inputCls}
+                placeholder="新增管理员钱包 0x..."
+                value={nextAdminAddress}
+                onChange={(e) => setNextAdminAddress(e.target.value)}
+              />
+              <button onClick={runAddAdmin} disabled={adminManagerLoading || !nextAdminAddress.trim()} className={btnCls}>
+                {adminManagerLoading ? '提交中...' : '添加管理员'}
+              </button>
+            </div>
+            {adminManagerMsg && <p className="mt-3 text-xs text-cyan-300 break-all">{adminManagerMsg}</p>}
+            <div className="mt-4 overflow-auto max-h-96">
+              <table className="text-xs w-full">
+                <thead className="text-slate-400">
+                  <tr>
+                    <th className="text-left py-1 pr-2">钱包</th>
+                    <th className="text-left pr-2">角色</th>
+                    <th className="text-left pr-2">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminAddresses.map((wallet) => {
+                    const isOwner = chainOwnerAddress && wallet.toLowerCase() === chainOwnerAddress.toLowerCase();
+                    const isCurrent = wallet.toLowerCase() === adminWallet.toLowerCase();
+                    return (
+                      <tr key={wallet} className="border-t border-slate-800 align-top">
+                        <td className="py-2 pr-2 font-mono text-slate-200 break-all">{wallet}</td>
+                        <td className="pr-2 text-slate-400">{isOwner ? 'Owner / Admin' : isCurrent ? '当前管理员' : 'Admin'}</td>
+                        <td className="pr-2">
+                          <button
+                            onClick={() => void runRemoveAdmin(wallet)}
+                            disabled={adminManagerLoading || isOwner}
+                            className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                          >
+                            移除
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">链上管理员会同步写入 MiningPool、SUPER、SwapRouter。Owner 账户保留为永久管理员，不能移除。</p>
+          </Card>
         </div>
       )}
 
@@ -518,7 +627,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
             <button onClick={loadAudit} className={btnCls}>查询</button>
           </div>
           {auditLoading && <p className="text-slate-400">加载中...</p>}
-          <div className="overflow-auto max-h-[500px]">
+          <div className="overflow-auto max-h-125">
             <table className="text-xs w-full">
               <thead className="text-slate-400">
                 <tr>

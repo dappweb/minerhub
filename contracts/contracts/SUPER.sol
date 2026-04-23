@@ -3,14 +3,14 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "./AdminAccess.sol";
 
 /**
  * @title SUPER Token
  * @notice Coin Planet 鐢熸€佷唬甯侊紝鏀寔閾搁€犮€侀攢姣併€佹爣鍑?ERC20 鎿嶄綔
  */
-contract SUPER is ERC20, ERC20Burnable, Ownable, ERC20Permit {
+contract SUPER is ERC20, ERC20Burnable, AdminAccess, ERC20Permit {
     // 浠ｅ竵鎬讳緵搴旈噺锛?0 浜?SUPER
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 * 10 ** 18;
     
@@ -35,7 +35,7 @@ contract SUPER is ERC20, ERC20Burnable, Ownable, ERC20Permit {
      * @notice 娣诲姞閾搁€犺€呮潈闄愶紙浠?Owner锛?
      * @param _minter 閾搁€犺€呭湴鍧€
      */
-    function addMinter(address _minter) external onlyOwner {
+    function addMinter(address _minter) external onlyAdmin {
         require(_minter != address(0), "Invalid minter address");
         minters[_minter] = true;
         emit MinterAdded(_minter);
@@ -45,7 +45,7 @@ contract SUPER is ERC20, ERC20Burnable, Ownable, ERC20Permit {
      * @notice 绉婚櫎閾搁€犺€呮潈闄愶紙浠?Owner锛?
      * @param _minter 閾搁€犺€呭湴鍧€
      */
-    function removeMinter(address _minter) external onlyOwner {
+    function removeMinter(address _minter) external onlyAdmin {
         require(minters[_minter], "Address is not a minter");
         minters[_minter] = false;
         emit MinterRemoved(_minter);
@@ -57,7 +57,7 @@ contract SUPER is ERC20, ERC20Burnable, Ownable, ERC20Permit {
      * @param _amount 閾搁€犳暟閲?
      */
     function mint(address _to, uint256 _amount) external {
-        require(msg.sender == owner() || minters[msg.sender], "Only minter or owner can mint");
+        require(isAdmin(msg.sender) || minters[msg.sender], "Only minter or admin can mint");
         require(_to != address(0), "Invalid recipient address");
         require(totalMinted + _amount <= TOTAL_SUPPLY, "Exceeds max supply");
         
@@ -99,7 +99,7 @@ contract SUPER is ERC20, ERC20Burnable, Ownable, ERC20Permit {
      * @return 鏄惁涓洪摳閫犺€?
      */
     function isMinter(address _account) external view returns (bool) {
-        return _account == owner() || minters[_account];
+        return isAdmin(_account) || minters[_account];
     }
 }
 

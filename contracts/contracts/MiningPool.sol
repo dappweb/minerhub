@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./AdminAccess.sol";
 
 /**
  * @title MiningPool
@@ -13,7 +13,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
  * - 鎻愬彇鍐峰嵈鏈哄埗
  * - 闃蹭綔寮婃娴?
  */
-contract MiningPool is Ownable, ReentrancyGuard {
+contract MiningPool is AdminAccess, ReentrancyGuard {
     // SUPER 浠ｅ竵鍦板潃
     IERC20 public superToken;
     
@@ -183,7 +183,7 @@ contract MiningPool is Ownable, ReentrancyGuard {
     /**
      * @notice 璋冩暣闅惧害 (瀹氭湡璋冪敤)
      */
-    function adjustDifficulty() external onlyOwner {
+    function adjustDifficulty() external onlyAdmin {
         require(block.timestamp >= lastDifficultyAdjustment + difficultyAdjustmentPeriod, "Too early to adjust");
         
         globalHashrate = totalActiveHashrate;
@@ -197,7 +197,7 @@ contract MiningPool is Ownable, ReentrancyGuard {
      * @param _rewardPerHash 姣忓崟浣嶇畻鍔涚殑濂栧姳
      * @param _claimCooldown 鏂扮殑鍐峰嵈鏃堕棿
      */
-    function updateRewardParameters(uint256 _rewardPerHash, uint256 _claimCooldown) external onlyOwner {
+    function updateRewardParameters(uint256 _rewardPerHash, uint256 _claimCooldown) external onlyAdmin {
         rewardPerHashPerDay = _rewardPerHash;
         claimCooldown = _claimCooldown;
         
@@ -208,7 +208,7 @@ contract MiningPool is Ownable, ReentrancyGuard {
      * @notice 鍋滅敤鐭垮伐 (寮傚父妫€娴?
      * @param _miner 鐭垮伐鍦板潃
      */
-    function deactivateMiner(address _miner, string calldata _reason) external onlyOwner {
+    function deactivateMiner(address _miner, string calldata _reason) external onlyAdmin {
         require(registeredMiners[_miner], "Miner not registered");
         
         Miner storage miner = miners[_miner];

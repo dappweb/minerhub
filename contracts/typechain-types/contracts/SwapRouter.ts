@@ -29,17 +29,22 @@ export interface SwapRouterInterface extends Interface {
       | "FEE_BIPS"
       | "accumulatedEcosystemFee"
       | "accumulatedPlatformFee"
+      | "addAdmin"
       | "addLiquidity"
+      | "adminCount"
       | "collectEcosystemFee"
       | "collectPlatformFee"
       | "ecosystemFeeShare"
+      | "getAdmins"
       | "getPrice"
       | "initializeLiquidity"
+      | "isAdmin"
       | "lpFeeShare"
       | "lpShares"
       | "owner"
       | "platformFeeShare"
       | "priceHistory"
+      | "removeAdmin"
       | "removeLiquidity"
       | "renounceOwnership"
       | "reserveSuper"
@@ -54,6 +59,8 @@ export interface SwapRouterInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "AdminAdded"
+      | "AdminRemoved"
       | "FeeCollected"
       | "LiquidityAdded"
       | "LiquidityRemoved"
@@ -72,8 +79,16 @@ export interface SwapRouterInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "addAdmin",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "addLiquidity",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "adminCount",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "collectEcosystemFee",
@@ -87,10 +102,15 @@ export interface SwapRouterInterface extends Interface {
     functionFragment: "ecosystemFeeShare",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "getAdmins", values?: undefined): string;
   encodeFunctionData(functionFragment: "getPrice", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "initializeLiquidity",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isAdmin",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "lpFeeShare",
@@ -108,6 +128,10 @@ export interface SwapRouterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "priceHistory",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "removeAdmin",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "removeLiquidity",
@@ -156,10 +180,12 @@ export interface SwapRouterInterface extends Interface {
     functionFragment: "accumulatedPlatformFee",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "addAdmin", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "addLiquidity",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "adminCount", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "collectEcosystemFee",
     data: BytesLike
@@ -172,11 +198,13 @@ export interface SwapRouterInterface extends Interface {
     functionFragment: "ecosystemFeeShare",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getAdmins", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getPrice", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "initializeLiquidity",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "isAdmin", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "lpFeeShare", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "lpShares", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
@@ -186,6 +214,10 @@ export interface SwapRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "priceHistory",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "removeAdmin",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -222,6 +254,32 @@ export interface SwapRouterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "usdtToken", data: BytesLike): Result;
+}
+
+export namespace AdminAddedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AdminRemovedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace FeeCollectedEvent {
@@ -392,11 +450,15 @@ export interface SwapRouter extends BaseContract {
 
   accumulatedPlatformFee: TypedContractMethod<[], [bigint], "view">;
 
+  addAdmin: TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+
   addLiquidity: TypedContractMethod<
     [_superAmount: BigNumberish, _usdtAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
+
+  adminCount: TypedContractMethod<[], [bigint], "view">;
 
   collectEcosystemFee: TypedContractMethod<
     [_recipient: AddressLike],
@@ -408,6 +470,8 @@ export interface SwapRouter extends BaseContract {
 
   ecosystemFeeShare: TypedContractMethod<[], [bigint], "view">;
 
+  getAdmins: TypedContractMethod<[], [string[]], "view">;
+
   getPrice: TypedContractMethod<[], [bigint], "view">;
 
   initializeLiquidity: TypedContractMethod<
@@ -415,6 +479,8 @@ export interface SwapRouter extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  isAdmin: TypedContractMethod<[account: AddressLike], [boolean], "view">;
 
   lpFeeShare: TypedContractMethod<[], [bigint], "view">;
 
@@ -428,6 +494,12 @@ export interface SwapRouter extends BaseContract {
     [arg0: BigNumberish],
     [[bigint, bigint] & { timestamp: bigint; priceSuperPerUSDT: bigint }],
     "view"
+  >;
+
+  removeAdmin: TypedContractMethod<
+    [account: AddressLike],
+    [void],
+    "nonpayable"
   >;
 
   removeLiquidity: TypedContractMethod<
@@ -480,12 +552,18 @@ export interface SwapRouter extends BaseContract {
     nameOrSignature: "accumulatedPlatformFee"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "addAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "addLiquidity"
   ): TypedContractMethod<
     [_superAmount: BigNumberish, _usdtAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "adminCount"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "collectEcosystemFee"
   ): TypedContractMethod<[_recipient: AddressLike], [void], "nonpayable">;
@@ -496,6 +574,9 @@ export interface SwapRouter extends BaseContract {
     nameOrSignature: "ecosystemFeeShare"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getAdmins"
+  ): TypedContractMethod<[], [string[]], "view">;
+  getFunction(
     nameOrSignature: "getPrice"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -505,6 +586,9 @@ export interface SwapRouter extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "isAdmin"
+  ): TypedContractMethod<[account: AddressLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "lpFeeShare"
   ): TypedContractMethod<[], [bigint], "view">;
@@ -524,6 +608,9 @@ export interface SwapRouter extends BaseContract {
     [[bigint, bigint] & { timestamp: bigint; priceSuperPerUSDT: bigint }],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "removeAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "removeLiquidity"
   ): TypedContractMethod<[_sharesToBurn: BigNumberish], [void], "nonpayable">;
@@ -555,6 +642,20 @@ export interface SwapRouter extends BaseContract {
     nameOrSignature: "usdtToken"
   ): TypedContractMethod<[], [string], "view">;
 
+  getEvent(
+    key: "AdminAdded"
+  ): TypedContractEvent<
+    AdminAddedEvent.InputTuple,
+    AdminAddedEvent.OutputTuple,
+    AdminAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AdminRemoved"
+  ): TypedContractEvent<
+    AdminRemovedEvent.InputTuple,
+    AdminRemovedEvent.OutputTuple,
+    AdminRemovedEvent.OutputObject
+  >;
   getEvent(
     key: "FeeCollected"
   ): TypedContractEvent<
@@ -599,6 +700,28 @@ export interface SwapRouter extends BaseContract {
   >;
 
   filters: {
+    "AdminAdded(address,address)": TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+    AdminAdded: TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+
+    "AdminRemoved(address,address)": TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+    AdminRemoved: TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+
     "FeeCollected(uint256,uint256)": TypedContractEvent<
       FeeCollectedEvent.InputTuple,
       FeeCollectedEvent.OutputTuple,

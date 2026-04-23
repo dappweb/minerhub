@@ -137,7 +137,7 @@ async function ensureAnnouncementsSchema(env: Env): Promise<void> {
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
   const wallet = request.headers.get("x-wallet");
-  if (!isOwnerWallet(env, wallet)) {
+  if (!(await isOwnerWallet(env, wallet))) {
     return unauthorized("Owner wallet required");
   }
   return null;
@@ -149,7 +149,7 @@ async function requireOwner(request: Request, env: Env): Promise<Response | null
     return unauthorized(auth.error || "Signature verification failed");
   }
 
-  if (!isOwnerWallet(env, auth.wallet ?? null)) {
+  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
     return unauthorized("Owner wallet required");
   }
 

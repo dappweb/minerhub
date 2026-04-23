@@ -36,7 +36,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   if (!body?.wallet || !body?.signature || !body?.nonce || body?.ts === undefined) {
     return badRequest("wallet, signature, nonce, ts required");
   }
-  if (!isOwnerWallet(env, body.wallet)) return unauthorized("Not owner wallet");
+  if (!(await isOwnerWallet(env, body.wallet))) return unauthorized("Not owner wallet");
 
   // Nonce uniqueness (reuse KV)
   const kvKey = `owner-login-nonce:${body.nonce}`;

@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { isOwnerWallet } from "../lib/ownerAuth";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
 import { readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
@@ -22,16 +23,12 @@ type ExchangeOrder = {
   updated_at: string;
 };
 
-function isOwnerWallet(env: Env, wallet: string | null): boolean {
-  return Boolean(env.OWNER_ADDRESS && wallet && wallet.toLowerCase() === env.OWNER_ADDRESS.toLowerCase());
-}
-
 async function requireOwner(request: Request, env: Env): Promise<{ wallet: string } | Response> {
   const auth = await extractAndVerifyAuth(request, env);
   if (!auth.valid) {
     return unauthorized(auth.error || "Signature verification failed");
   }
-  if (!isOwnerWallet(env, auth.wallet ?? null)) {
+  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
     return unauthorized("Owner wallet required");
   }
   return { wallet: auth.wallet!.toLowerCase() };

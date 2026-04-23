@@ -1,21 +1,26 @@
+import { BadgeCheck, BarChart3, Cpu, Link2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Link2, Cpu, BarChart3 } from 'lucide-react';
 
 const steps = [
   {
     icon: Link2,
-    title: '连接钱包并完成校验',
-    desc: '通过 RainbowKit 连接钱包，系统会自动校验 owner 权限。',
+    title: '身份同步与推荐人绑定',
+    desc: '首次进入 App 先完成身份同步，并绑定推荐人钱包地址，确保账户可正常初始化。',
+  },
+  {
+    icon: BadgeCheck,
+    title: '机器码开通月卡',
+    desc: '在首页查看机器码并提交给客服/管理员，完成月卡开通后再继续矿机激活。',
   },
   {
     icon: Cpu,
-    title: '注册矿工并同步算力',
-    desc: '完成设备注册后，算力与状态会写入链上并持续更新。',
+    title: '矿机设置与 Gas 准备',
+    desc: '点击矿机设置完成链上注册；若提示 BNB 不足，请联系管理员充值 Gas。',
   },
   {
     icon: BarChart3,
-    title: '查看实时收益与风控',
-    desc: '在数据面板里查看待领取、累计发放和风险评分。',
+    title: '保持在线开始累计收益',
+    desc: '设备保持在线后，系统按在线时长累计收益，可在 App 内执行领取与兑换。',
   },
 ];
 
@@ -24,11 +29,11 @@ export default function FlowSteps() {
     <section className="py-18 bg-slate-950 border-y border-slate-800/40">
       <div className="max-w-7xl mx-auto px-6">
         <div className="mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold">3 步完成上链运营</h2>
-          <p className="mt-3 text-slate-400 max-w-2xl">把 onboarding 变成可验证的链上流程，而不是黑盒后台。</p>
+          <h2 className="text-3xl md:text-4xl font-bold">4 步完成挖矿准备</h2>
+          <p className="mt-3 text-slate-400 max-w-2xl">将“注册-开通-激活-在线”流程可视化，用户按步骤即可快速开始挖矿。</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
           {steps.map((step, index) => (
             <motion.div
               key={step.title}

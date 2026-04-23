@@ -8,11 +8,11 @@
  *
  * Requires:
  *   OWNER_ADDRESS  — env var or set in .env.local
- *   VITE_API_BASE_URL — Worker base URL (e.g. https://coin-planet-api.xxx.workers.dev)
+ *   VITE_API_BASE_URL — API base URL (e.g. https://api.coinplanets.net)
  *
  * Example:
  *   OWNER_ADDRESS=0xABC... \
- *   VITE_API_BASE_URL=https://coin-planet-api.xxx.workers.dev \
+ *   VITE_API_BASE_URL=https://api.coinplanets.net \
  *   node scripts/upload-app.mjs android ./app-client/coin-planet.apk 1.2.0
  */
 

@@ -2,17 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -24,39 +24,39 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-  acceptUserAgreement,
-  bindReferral,
-  createExchangeRequest,
-  createUser,
-  getAnnouncements,
-  getExchangeRequests,
-  getGasWalletBalance,
-  getReferralMembers,
-  getReferralSummary,
-  getSystemStatus,
-  getUser,
-  getUserByWallet,
-  getUserDetails,
-  markAnnouncementRead as markAnnouncementReadApi,
-  registerDevice,
-  reportDeviceHeartbeat,
-  type AnnouncementDto,
-  type ExchangeRequestDto,
-  type ReferralMemberDto,
-  type ReferralSummaryDto
+    acceptUserAgreement,
+    bindReferral,
+    createExchangeRequest,
+    createUser,
+    getAnnouncements,
+    getExchangeRequests,
+    getGasWalletBalance,
+    getReferralMembers,
+    getReferralSummary,
+    getSystemStatus,
+    getUser,
+    getUserByWallet,
+    getUserDetails,
+    markAnnouncementRead as markAnnouncementReadApi,
+    registerDevice,
+    reportDeviceHeartbeat,
+    type AnnouncementDto,
+    type ExchangeRequestDto,
+    type ReferralMemberDto,
+    type ReferralSummaryDto
 } from './services/api';
 import {
-  claimRewardOnChain,
-  getSwapPriceOnChain,
-  getWalletAddress,
-  getWalletBalances,
-  registerMinerOnChain,
-  sendNativeTokenOnChain,
+    claimRewardOnChain,
+    getSwapPriceOnChain,
+    getWalletAddress,
+    getWalletBalances,
+    registerMinerOnChain,
+    sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-  exportWalletPrivateKey,
-  importWalletPrivateKey
+    exportWalletPrivateKey,
+    importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -86,9 +86,9 @@ const translations = {
   en: {
     appTitle: 'Coin Planet',
     subtitle: 'Device Center · BNB Smart Chain',
-    flow1: 'Finish identity setup to unlock on-chain actions',
-    flow2: 'Register miner to start rewards',
-    flow3: 'Daily mode: swap and claim rewards',
+    flow1: 'Finish identity sync and inviter binding first',
+    flow2: 'Submit machine code for monthly-card activation, then setup miner',
+    flow3: 'Keep device online to accrue rewards; claim and swap anytime',
     profileId: 'ID',
     profileVip: 'VIP',
     profileUnbind: 'Unbind',
@@ -138,9 +138,9 @@ const translations = {
     tabProfile: 'Me',
     guideTitle: 'Getting Started',
     guideReadyTitle: 'Daily Console Ready',
-    guideDescInit: 'Create your local identity first, then unlock on-chain operations and account sync.',
-    guideDescMine: 'Activate your miner so rewards and online time can start accruing.',
-    guideDescReady: 'Identity and miner are ready. Use the bottom menu for daily rewards and swaps.',
+    guideDescInit: 'Complete identity sync and bind inviter wallet first, then unlock miner operations.',
+    guideDescMine: 'Send machine code to support to activate monthly card, then setup miner (admin gas top-up if needed).',
+    guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/swap.',
     guideStepIdentity: 'Identity Sync',
     guideStepMiner: 'Miner Activation',
     guideStepReward: 'Rewards & Swap',
@@ -297,9 +297,9 @@ const translations = {
   zh: {
     appTitle: 'Coin Planet',
     subtitle: '设备中心 · BNB 智能链',
-    flow1: '请先完成身份初始化，解锁链上操作',
-    flow2: '请先注册矿机，开始计收益',
-    flow3: '日常模式：兑换与领取收益',
+    flow1: '请先完成身份同步并绑定推荐人钱包',
+    flow2: '提交机器码开通月卡后再进行矿机设置',
+    flow3: '保持手机在线累计收益，随时可领取与兑换',
     profileId: 'ID',
     profileVip: 'VIP',
     profileUnbind: '解绑',
@@ -349,9 +349,9 @@ const translations = {
     tabProfile: '我的',
     guideTitle: '启动引导',
     guideReadyTitle: '日常控制台已就绪',
-    guideDescInit: '先完成本机身份建立，再解锁链上操作与账户同步。',
-    guideDescMine: '完成矿机激活后，收益与在线时长才会开始累计。',
-    guideDescReady: '身份和矿机都已准备完成，后续可通过底部菜单进入日常收益与兑换。',
+    guideDescInit: '先完成身份同步并绑定推荐人钱包，再解锁后续矿机操作。',
+    guideDescMine: '将机器码提供给客服开通月卡后，再执行矿机设置（如缺 Gas 请联系管理员充值）。',
+    guideDescReady: '矿机激活后保持手机在线，收益会按在线时长累计，可在底部菜单领取与兑换。',
     guideStepIdentity: '身份同步',
     guideStepMiner: '矿机激活',
     guideStepReward: '收益与兑换',

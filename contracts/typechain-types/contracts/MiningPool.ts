@@ -29,21 +29,26 @@ export interface MiningPoolInterface extends Interface {
       | "DAILY_EMISSION"
       | "MAX_HASHRATE"
       | "MIN_HASHRATE"
+      | "addAdmin"
       | "adjustDifficulty"
+      | "adminCount"
       | "calculatePendingReward"
       | "claimCooldown"
       | "claimReward"
       | "deactivateMiner"
       | "difficultyAdjustmentPeriod"
+      | "getAdmins"
       | "getGlobalStats"
       | "getMinerInfo"
       | "globalHashrate"
+      | "isAdmin"
       | "lastDifficultyAdjustment"
       | "lockupPeriod"
       | "miners"
       | "owner"
       | "registerMiner"
       | "registeredMiners"
+      | "removeAdmin"
       | "renounceOwnership"
       | "rewardPerHashPerDay"
       | "superToken"
@@ -57,6 +62,8 @@ export interface MiningPoolInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "AdminAdded"
+      | "AdminRemoved"
       | "DifficultyAdjusted"
       | "HashrateUpdated"
       | "MinerDeactivated"
@@ -80,7 +87,15 @@ export interface MiningPoolInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "addAdmin",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "adjustDifficulty",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "adminCount",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -103,6 +118,7 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "difficultyAdjustmentPeriod",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "getAdmins", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "getGlobalStats",
     values?: undefined
@@ -114,6 +130,10 @@ export interface MiningPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "globalHashrate",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isAdmin",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "lastDifficultyAdjustment",
@@ -131,6 +151,10 @@ export interface MiningPoolInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "registeredMiners",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "removeAdmin",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
@@ -182,10 +206,12 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "MIN_HASHRATE",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "addAdmin", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "adjustDifficulty",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "adminCount", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "calculatePendingReward",
     data: BytesLike
@@ -206,6 +232,7 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "difficultyAdjustmentPeriod",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getAdmins", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getGlobalStats",
     data: BytesLike
@@ -218,6 +245,7 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "globalHashrate",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "isAdmin", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "lastDifficultyAdjustment",
     data: BytesLike
@@ -234,6 +262,10 @@ export interface MiningPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "registeredMiners",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "removeAdmin",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -269,6 +301,32 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "updateRewardParameters",
     data: BytesLike
   ): Result;
+}
+
+export namespace AdminAddedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AdminRemovedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace DifficultyAdjustedEvent {
@@ -443,7 +501,11 @@ export interface MiningPool extends BaseContract {
 
   MIN_HASHRATE: TypedContractMethod<[], [bigint], "view">;
 
+  addAdmin: TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+
   adjustDifficulty: TypedContractMethod<[], [void], "nonpayable">;
+
+  adminCount: TypedContractMethod<[], [bigint], "view">;
 
   calculatePendingReward: TypedContractMethod<
     [_miner: AddressLike],
@@ -462,6 +524,8 @@ export interface MiningPool extends BaseContract {
   >;
 
   difficultyAdjustmentPeriod: TypedContractMethod<[], [bigint], "view">;
+
+  getAdmins: TypedContractMethod<[], [string[]], "view">;
 
   getGlobalStats: TypedContractMethod<
     [],
@@ -490,6 +554,8 @@ export interface MiningPool extends BaseContract {
   >;
 
   globalHashrate: TypedContractMethod<[], [bigint], "view">;
+
+  isAdmin: TypedContractMethod<[account: AddressLike], [boolean], "view">;
 
   lastDifficultyAdjustment: TypedContractMethod<[], [bigint], "view">;
 
@@ -520,6 +586,12 @@ export interface MiningPool extends BaseContract {
   >;
 
   registeredMiners: TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+
+  removeAdmin: TypedContractMethod<
+    [account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -565,8 +637,14 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "MIN_HASHRATE"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "addAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "adjustDifficulty"
   ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "adminCount"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "calculatePendingReward"
   ): TypedContractMethod<[_miner: AddressLike], [bigint], "view">;
@@ -586,6 +664,9 @@ export interface MiningPool extends BaseContract {
   getFunction(
     nameOrSignature: "difficultyAdjustmentPeriod"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getAdmins"
+  ): TypedContractMethod<[], [string[]], "view">;
   getFunction(
     nameOrSignature: "getGlobalStats"
   ): TypedContractMethod<
@@ -617,6 +698,9 @@ export interface MiningPool extends BaseContract {
   getFunction(
     nameOrSignature: "globalHashrate"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "isAdmin"
+  ): TypedContractMethod<[account: AddressLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "lastDifficultyAdjustment"
   ): TypedContractMethod<[], [bigint], "view">;
@@ -654,6 +738,9 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "registeredMiners"
   ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "removeAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
@@ -685,6 +772,20 @@ export interface MiningPool extends BaseContract {
     "nonpayable"
   >;
 
+  getEvent(
+    key: "AdminAdded"
+  ): TypedContractEvent<
+    AdminAddedEvent.InputTuple,
+    AdminAddedEvent.OutputTuple,
+    AdminAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AdminRemoved"
+  ): TypedContractEvent<
+    AdminRemovedEvent.InputTuple,
+    AdminRemovedEvent.OutputTuple,
+    AdminRemovedEvent.OutputObject
+  >;
   getEvent(
     key: "DifficultyAdjusted"
   ): TypedContractEvent<
@@ -743,6 +844,28 @@ export interface MiningPool extends BaseContract {
   >;
 
   filters: {
+    "AdminAdded(address,address)": TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+    AdminAdded: TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+
+    "AdminRemoved(address,address)": TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+    AdminRemoved: TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+
     "DifficultyAdjusted(uint256)": TypedContractEvent<
       DifficultyAdjustedEvent.InputTuple,
       DifficultyAdjustedEvent.OutputTuple,

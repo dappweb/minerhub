@@ -2,11 +2,27 @@
 import { ethers } from "hardhat";
 import * as path from "path";
 
+function parseAdminAddresses(raw: string | undefined): string[] {
+	if (!raw) return [];
+	return Array.from(
+		new Set(
+			raw
+				.split(",")
+				.map((item) => item.trim())
+				.filter(Boolean)
+				.map((item) => ethers.getAddress(item))
+		)
+	);
+}
+
 async function main() {
 	console.log("Coin Planet Smart Contracts Deployment Started");
 	console.log("================================================\n");
 
 	const [deployer] = await ethers.getSigners();
+	const additionalAdmins = parseAdminAddresses(process.env.DEPLOY_ADMIN_ADDRESSES).filter(
+		(address) => address.toLowerCase() !== deployer.address.toLowerCase()
+	);
 	console.log("Deployer Address:", deployer.address);
 
 	const balance = await ethers.provider.getBalance(deployer.address);
@@ -48,6 +64,12 @@ async function main() {
 	console.log("\nSetting up contract permissions...");
 	await (await superToken.addMinter(miningPoolAddress)).wait();
 	await (await superToken.addMinter(swapRouterAddress)).wait();
+	for (const adminAddress of additionalAdmins) {
+		console.log("Adding chain admin:", adminAddress);
+		await (await superToken.addAdmin(adminAddress)).wait();
+		await (await miningPool.addAdmin(adminAddress)).wait();
+		await (await swapRouter.addAdmin(adminAddress)).wait();
+	}
 	console.log("Permissions configured");
 
 	console.log("\nInitializing liquidity pool...");
@@ -77,6 +99,7 @@ async function main() {
 		initialization: {
 			liquiditySuper: ethers.formatEther(initialLiquiditySuper),
 			liquidityUSDT: ethers.formatUnits(initialLiquidityUSDT, 18),
+			chainAdmins: [deployer.address, ...additionalAdmins],
 			superMinters: [miningPoolAddress, swapRouterAddress],
 		},
 	};

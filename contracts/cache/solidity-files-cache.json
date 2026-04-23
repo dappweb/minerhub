@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\MiningPool.sol": {
-      "lastModificationDate": 1775863124006,
-      "contentHash": "b58c10aae18fb135592e8a00508e11b4",
+      "lastModificationDate": 1776943825879,
+      "contentHash": "3c618d3465a0b7c1367f0e295c0464d9",
       "sourceName": "contracts/MiningPool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -30,9 +30,9 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/access/Ownable.sol",
         "@openzeppelin/contracts/token/ERC20/IERC20.sol",
-        "@openzeppelin/contracts/security/ReentrancyGuard.sol"
+        "@openzeppelin/contracts/security/ReentrancyGuard.sol",
+        "./AdminAccess.sol"
       ],
       "versionPragmas": [
         "^0.8.24"
@@ -718,8 +718,8 @@
       ]
     },
     "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\SUPER.sol": {
-      "lastModificationDate": 1775863024691,
-      "contentHash": "7f49d36dfeb970d2561a97ee83debe6f",
+      "lastModificationDate": 1776943825879,
+      "contentHash": "ecba379dafc1d7bcdaec95a9792babbd",
       "sourceName": "contracts/SUPER.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -748,8 +748,8 @@
       "imports": [
         "@openzeppelin/contracts/token/ERC20/ERC20.sol",
         "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol",
-        "@openzeppelin/contracts/access/Ownable.sol",
-        "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol"
+        "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol",
+        "./AdminAccess.sol"
       ],
       "versionPragmas": [
         "^0.8.24"
@@ -759,8 +759,8 @@
       ]
     },
     "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\SwapRouter.sol": {
-      "lastModificationDate": 1775863124008,
-      "contentHash": "165fdaa43ebf006f9b5aeb1d8691b967",
+      "lastModificationDate": 1776943825876,
+      "contentHash": "357406a47bd0ea766e2109b14a6a022d",
       "sourceName": "contracts/SwapRouter.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -787,9 +787,9 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/access/Ownable.sol",
         "@openzeppelin/contracts/token/ERC20/IERC20.sol",
-        "@openzeppelin/contracts/security/ReentrancyGuard.sol"
+        "@openzeppelin/contracts/security/ReentrancyGuard.sol",
+        "./AdminAccess.sol"
       ],
       "versionPragmas": [
         "^0.8.24"
@@ -835,6 +835,44 @@
       ],
       "artifacts": [
         "USDT_Mock"
+      ]
+    },
+    "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\AdminAccess.sol": {
+      "lastModificationDate": 1776943825876,
+      "contentHash": "f2ba6eaba3e3545b034ad63ac6c9f3cf",
+      "sourceName": "contracts/AdminAccess.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "AdminAccess"
       ]
     }
   }

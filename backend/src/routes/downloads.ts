@@ -32,7 +32,7 @@ function corsHeaders() {
   };
 }
 
-function isOwner(request: Request, env: Env): boolean {
+async function isOwner(request: Request, env: Env): Promise<boolean> {
   const wallet = request.headers.get("x-wallet");
   return isOwnerWallet(env, wallet);
 }
@@ -110,7 +110,7 @@ async function downloadIos(env: Env): Promise<Response> {
 // ──────────────────────────────────────────
 
 async function uploadAndroid(request: Request, env: Env): Promise<Response> {
-  if (!isOwner(request, env)) {
+  if (!(await isOwner(request, env))) {
     return unauthorized("Owner wallet required");
   }
   if (!env.APP_BUCKET) {
@@ -164,7 +164,7 @@ async function uploadAndroid(request: Request, env: Env): Promise<Response> {
 }
 
 async function updateIosUrl(request: Request, env: Env): Promise<Response> {
-  if (!isOwner(request, env)) {
+  if (!(await isOwner(request, env))) {
     return unauthorized("Owner wallet required");
   }
 
@@ -184,7 +184,7 @@ async function updateIosUrl(request: Request, env: Env): Promise<Response> {
 }
 
 async function deleteAndroid(request: Request, env: Env): Promise<Response> {
-  if (!isOwner(request, env)) {
+  if (!(await isOwner(request, env))) {
     return unauthorized("Owner wallet required");
   }
   if (!env.APP_BUCKET) {

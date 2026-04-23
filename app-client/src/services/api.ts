@@ -2,11 +2,9 @@ import { getAuthHeaders } from './signature';
 
 const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
-// 追加可选的自定义域回退地址，避开 *.workers.dev 在部分地区的网络污染 / 限速。
-// 部署自定义域后可通过 EXPO_PUBLIC_API_BASE_URL 覆盖，或直接在此数组首位写死。
+// 可通过 EXPO_PUBLIC_API_BASE_URL 配置多个地址（逗号分隔）实现可控回退。
 const FALLBACK_API_BASE_URLS = [
   DEFAULT_API_BASE_URL,
-  'https://coin-planet-api.dappweb.workers.dev',
 ];
 const REQUEST_TIMEOUT_MS = 25_000;
 const REQUEST_RETRY_COUNT = 3;

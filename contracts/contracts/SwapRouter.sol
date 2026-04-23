@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./AdminAccess.sol";
 
 /**
  * @title SwapRouter
@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
  * - 鍒濆娴佸姩鎬э細50M SUPER + 50k USDT
  * - 鎵嬬画璐癸細0.5% (70% LP, 20% 骞冲彴, 10% 鐢熸€?
  */
-contract SwapRouter is Ownable, ReentrancyGuard {
+contract SwapRouter is AdminAccess, ReentrancyGuard {
     IERC20 public superToken;
     IERC20 public usdtToken;
     
@@ -59,7 +59,7 @@ contract SwapRouter is Ownable, ReentrancyGuard {
      * @param _superAmount SUPER 浠ｅ竵鏁伴噺
      * @param _usdtAmount USDT 鏁伴噺
      */
-    function initializeLiquidity(uint256 _superAmount, uint256 _usdtAmount) external onlyOwner nonReentrant {
+    function initializeLiquidity(uint256 _superAmount, uint256 _usdtAmount) external onlyAdmin nonReentrant {
         require(reserveSuper == 0 && reserveUSDT == 0, "Liquidity already initialized");
         require(_superAmount > 0 && _usdtAmount > 0, "Invalid amounts");
         
@@ -222,7 +222,7 @@ contract SwapRouter is Ownable, ReentrancyGuard {
     /**
      * @notice 鎻愬彇骞冲彴鎵嬬画璐?(浠?Owner)
      */
-    function collectPlatformFee() external onlyOwner nonReentrant {
+    function collectPlatformFee() external onlyAdmin nonReentrant {
         uint256 fee = accumulatedPlatformFee;
         require(fee > 0, "No fee to collect");
         accumulatedPlatformFee = 0;
@@ -233,7 +233,7 @@ contract SwapRouter is Ownable, ReentrancyGuard {
     /**
      * @notice 鎻愬彇鐢熸€佸熀閲?(浠?Owner)
      */
-    function collectEcosystemFee(address _recipient) external onlyOwner nonReentrant {
+    function collectEcosystemFee(address _recipient) external onlyAdmin nonReentrant {
         uint256 fee = accumulatedEcosystemFee;
         require(fee > 0, "No fee to collect");
         accumulatedEcosystemFee = 0;

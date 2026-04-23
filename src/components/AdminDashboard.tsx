@@ -9,6 +9,8 @@ import {
     getGlobalStatsOnChain,
     getMinerInfoOnChain,
     getMiningPoolAddress,
+    getMiningPoolAdminsOnChain,
+    getMiningPoolOwnerOnChain,
     getSuperTokenAddress,
     getSuperTokenStatsOnChain,
     getSwapPoolStatsOnChain,
@@ -355,6 +357,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [minerInfo, setMinerInfo] = useState<MiningPoolMinerInfo | null>(null);
   const [superStats, setSuperStats] = useState<SuperTokenStats | null>(null);
   const [swapStats, setSwapStats] = useState<SwapPoolStats | null>(null);
+  const [chainOwnerAddress, setChainOwnerAddress] = useState<string>('');
+  const [chainAdminAddresses, setChainAdminAddresses] = useState<readonly string[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [adminSummary, setAdminSummary] = useState<AdminWalletSummary | null>(null);
@@ -415,7 +419,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [deviceDetail, setDeviceDetail] = useState<AdminDeviceDetail | null>(null);
   const [deviceDetailForm, setDeviceDetailForm] = useState<DeviceDetailFormState | null>(null);
-  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
   const poolAddress = getMiningPoolAddress();
   const superAddress = getSuperTokenAddress();
@@ -691,15 +695,19 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         getMinerInfoOnChain(adminWallet as `0x${string}`),
       ]);
 
-      const [superToken, swapPool] = await Promise.all([
+      const [superToken, swapPool, chainOwner, chainAdmins] = await Promise.all([
         superAddress ? getSuperTokenStatsOnChain().catch(() => null) : Promise.resolve(null),
         swapRouterAddress ? getSwapPoolStatsOnChain().catch(() => null) : Promise.resolve(null),
+        getMiningPoolOwnerOnChain().catch(() => '' as `0x${string}`),
+        getMiningPoolAdminsOnChain().catch(() => [] as `0x${string}`[]),
       ]);
 
       setGlobalStats(global);
       setMinerInfo(miner);
       setSuperStats(superToken);
       setSwapStats(swapPool);
+      setChainOwnerAddress(chainOwner);
+      setChainAdminAddresses(chainAdmins);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : '读取链上数据失败';
       setError(message);
@@ -826,6 +834,30 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       : minerInfo.active
         ? 'text-green-400 bg-green-400/10'
         : 'text-slate-300 bg-slate-700/40';
+
+  const isCurrentWalletChainAdmin = Boolean(
+    adminWallet && chainAdminAddresses.some((address) => address.toLowerCase() === adminWallet.toLowerCase())
+  );
+
+  const quickAdminCards = useMemo(() => {
+    return [
+      {
+        label: '链上管理员数',
+        value: chainAdminAddresses.length || '--',
+        detail: 'MiningPool.getAdmins',
+      },
+      {
+        label: '链上 Owner',
+        value: chainOwnerAddress ? shortWallet(chainOwnerAddress) : '--',
+        detail: chainOwnerAddress || 'owner()',
+      },
+      {
+        label: '当前钱包角色',
+        value: !adminWallet ? '--' : isCurrentWalletChainAdmin ? 'Admin' : '未授权',
+        detail: adminWallet ? shortWallet(adminWallet) : '请先连接钱包',
+      },
+    ];
+  }, [adminWallet, chainAdminAddresses, chainOwnerAddress, isCurrentWalletChainAdmin]);
 
   const handleRegisterMiner = async () => {
     const parsedHashrate = Number(registerHashrate);
@@ -1544,6 +1576,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
             {/* Top Stats (Overview) */}
             {section === 'overview' && (
+            <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {stats.map((stat, i) => (
                 <div key={i} className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
@@ -1553,6 +1586,60 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 </div>
               ))}
             </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mb-8">
+              <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <div className="text-sm font-semibold text-cyan-200">管理员权限快照</div>
+                    <div className="text-xs text-slate-400 mt-1">总览直接查看链上管理员状态，详细增删仍在管理员控制台。</div>
+                  </div>
+                  <button
+                    onClick={() => setSection('owner')}
+                    className="px-3 py-2 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold hover:bg-cyan-400 transition-colors"
+                  >
+                    打开管理员控制台
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  {quickAdminCards.map((card) => (
+                    <div key={card.label} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                      <div className="text-xs text-slate-400 mb-2">{card.label}</div>
+                      <div className="text-lg font-bold text-slate-100 mb-1 break-all">{card.value}</div>
+                      <div className="text-xs text-slate-500 break-all">{card.detail}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <div className="text-xs text-slate-400 mb-2">管理员名单</div>
+                  <div className="flex flex-wrap gap-2">
+                    {chainAdminAddresses.length > 0 ? chainAdminAddresses.map((address) => {
+                      const isOwner = chainOwnerAddress && address.toLowerCase() === chainOwnerAddress.toLowerCase();
+                      const isCurrent = adminWallet && address.toLowerCase() === adminWallet.toLowerCase();
+                      return (
+                        <span key={address} className={`rounded-full px-3 py-1 text-xs border ${isOwner ? 'border-amber-400/40 bg-amber-400/10 text-amber-200' : 'border-slate-700 bg-slate-900 text-slate-200'}`}>
+                          {shortWallet(address)}{isOwner ? ' · Owner' : isCurrent ? ' · Current' : ''}
+                        </span>
+                      );
+                    }) : (
+                      <span className="text-xs text-slate-500">暂无链上管理员数据</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div className="text-sm font-semibold text-slate-200 mb-3">管理规则</div>
+                <div className="space-y-3 text-xs text-slate-400 leading-6">
+                  <p>所有链上管理员与 owner 拥有同等业务管理权限。</p>
+                  <p>管理员增删会同步写入 MiningPool、SUPER、SwapRouter 三份核心合约。</p>
+                  <p>Owner 作为永久管理员保留，不能从管理员列表移除。</p>
+                </div>
+              </div>
+            </div>
+            </>
             )}
 
             {/* Toolbar + Miner register (On-chain) */}

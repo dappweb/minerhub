@@ -40,6 +40,11 @@ export type SwapPoolStats = {
   ecosystemFeeShare: bigint;
 };
 
+export type AdminSyncResult = {
+  target: Address;
+  hashes: Hex[];
+};
+
 declare global {
   interface Window {
     ethereum?: any;
@@ -53,6 +58,34 @@ const minerAbi = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'isAdmin',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'getAdmins',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address[]' }],
+  },
+  {
+    type: 'function',
+    name: 'addAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'removeAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
   },
   {
     type: 'function',
@@ -228,6 +261,27 @@ const swapAbi = [
 const superAbi = [
   {
     type: 'function',
+    name: 'isAdmin',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'addAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'removeAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'totalSupply',
     stateMutability: 'view',
     inputs: [],
@@ -296,6 +350,30 @@ const erc20Abi = [
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+const adminAbi = [
+  {
+    type: 'function',
+    name: 'isAdmin',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'addAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'removeAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [],
   },
 ] as const;
 
@@ -411,6 +489,13 @@ function requireSwapRouterAddress(): Address {
   return swapContractAddress;
 }
 
+function requireMiningPoolAddress(): Address {
+  if (!minerContractAddress) {
+    throw new Error('缺少 VITE_MINING_POOL_ADDRESS（或 VITE_MINER_CONTRACT_ADDRESS）配置。');
+  }
+  return minerContractAddress;
+}
+
 function requireSuperAddress(): Address {
   if (!superTokenAddress) {
     throw new Error('缺少 VITE_SUPER_ADDRESS 配置。');
@@ -419,18 +504,82 @@ function requireSuperAddress(): Address {
 }
 
 export async function getMiningPoolOwnerOnChain(): Promise<Address> {
-  if (!minerContractAddress) {
-    throw new Error('缺少 VITE_MINING_POOL_ADDRESS（或 VITE_MINER_CONTRACT_ADDRESS）配置。');
-  }
+  const miningPool = requireMiningPoolAddress();
 
   const publicClient = getPublicClient();
   const owner = await publicClient.readContract({
-    address: minerContractAddress,
+    address: miningPool,
     abi: minerAbi,
     functionName: 'owner',
   });
 
   return owner;
+}
+
+export async function getMiningPoolAdminsOnChain(): Promise<Address[]> {
+  const miningPool = requireMiningPoolAddress();
+  const publicClient = getPublicClient();
+  const admins = await publicClient.readContract({
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'getAdmins',
+  });
+
+  return admins;
+}
+
+export async function isWalletAdminOnChain(account: Address): Promise<boolean> {
+  const miningPool = requireMiningPoolAddress();
+  const publicClient = getPublicClient();
+
+  return publicClient.readContract({
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'isAdmin',
+    args: [account],
+  });
+}
+
+async function syncAdminAcrossContracts(target: Address, mode: 'add' | 'remove'): Promise<AdminSyncResult> {
+  const account = await ensureConnectedAddress();
+  const publicClient = getPublicClient();
+  const walletClient = getWalletClient();
+  const targets = [requireMiningPoolAddress(), requireSuperAddress(), requireSwapRouterAddress()];
+  const hashes: Hex[] = [];
+
+  for (const contractAddress of targets) {
+    const alreadyAdmin = await publicClient.readContract({
+      address: contractAddress,
+      abi: adminAbi,
+      functionName: 'isAdmin',
+      args: [target],
+    });
+
+    if ((mode === 'add' && alreadyAdmin) || (mode === 'remove' && !alreadyAdmin)) {
+      continue;
+    }
+
+    const hash = await walletClient.writeContract({
+      account,
+      address: contractAddress,
+      abi: adminAbi,
+      functionName: mode === 'add' ? 'addAdmin' : 'removeAdmin',
+      args: [target],
+    });
+
+    await waitForTx(hash as Hex);
+    hashes.push(hash as Hex);
+  }
+
+  return { target, hashes };
+}
+
+export async function addAdminOnChain(target: Address): Promise<AdminSyncResult> {
+  return syncAdminAcrossContracts(target, 'add');
+}
+
+export async function removeAdminOnChain(target: Address): Promise<AdminSyncResult> {
+  return syncAdminAcrossContracts(target, 'remove');
 }
 
 export async function getGlobalStatsOnChain(): Promise<MiningPoolGlobalStats> {

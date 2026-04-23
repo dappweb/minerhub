@@ -28,7 +28,9 @@ export interface SUPERInterface extends Interface {
     nameOrSignature:
       | "DOMAIN_SEPARATOR"
       | "TOTAL_SUPPLY"
+      | "addAdmin"
       | "addMinter"
+      | "adminCount"
       | "allowance"
       | "approve"
       | "balanceOf"
@@ -37,7 +39,9 @@ export interface SUPERInterface extends Interface {
       | "decimals"
       | "decreaseAllowance"
       | "eip712Domain"
+      | "getAdmins"
       | "increaseAllowance"
+      | "isAdmin"
       | "isMinter"
       | "mint"
       | "minters"
@@ -46,6 +50,7 @@ export interface SUPERInterface extends Interface {
       | "owner"
       | "permit"
       | "remainingSupply"
+      | "removeAdmin"
       | "removeMinter"
       | "renounceOwnership"
       | "symbol"
@@ -58,6 +63,8 @@ export interface SUPERInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "AdminAdded"
+      | "AdminRemoved"
       | "Approval"
       | "EIP712DomainChanged"
       | "MinterAdded"
@@ -77,8 +84,16 @@ export interface SUPERInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "addAdmin",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "addMinter",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "adminCount",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "allowance",
@@ -106,9 +121,14 @@ export interface SUPERInterface extends Interface {
     functionFragment: "eip712Domain",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "getAdmins", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "increaseAllowance",
     values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isAdmin",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "isMinter",
@@ -140,6 +160,10 @@ export interface SUPERInterface extends Interface {
   encodeFunctionData(
     functionFragment: "remainingSupply",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "removeAdmin",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "removeMinter",
@@ -179,7 +203,9 @@ export interface SUPERInterface extends Interface {
     functionFragment: "TOTAL_SUPPLY",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "addAdmin", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "addMinter", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "adminCount", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "allowance", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "approve", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "balanceOf", data: BytesLike): Result;
@@ -194,10 +220,12 @@ export interface SUPERInterface extends Interface {
     functionFragment: "eip712Domain",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getAdmins", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "increaseAllowance",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "isAdmin", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "isMinter", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "mint", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "minters", data: BytesLike): Result;
@@ -207,6 +235,10 @@ export interface SUPERInterface extends Interface {
   decodeFunctionResult(functionFragment: "permit", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "remainingSupply",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "removeAdmin",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -235,6 +267,32 @@ export interface SUPERInterface extends Interface {
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
+}
+
+export namespace AdminAddedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AdminRemovedEvent {
+  export type InputTuple = [admin: AddressLike, operator: AddressLike];
+  export type OutputTuple = [admin: string, operator: string];
+  export interface OutputObject {
+    admin: string;
+    operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace ApprovalEvent {
@@ -393,7 +451,11 @@ export interface SUPER extends BaseContract {
 
   TOTAL_SUPPLY: TypedContractMethod<[], [bigint], "view">;
 
+  addAdmin: TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+
   addMinter: TypedContractMethod<[_minter: AddressLike], [void], "nonpayable">;
+
+  adminCount: TypedContractMethod<[], [bigint], "view">;
 
   allowance: TypedContractMethod<
     [owner: AddressLike, spender: AddressLike],
@@ -441,11 +503,15 @@ export interface SUPER extends BaseContract {
     "view"
   >;
 
+  getAdmins: TypedContractMethod<[], [string[]], "view">;
+
   increaseAllowance: TypedContractMethod<
     [spender: AddressLike, addedValue: BigNumberish],
     [boolean],
     "nonpayable"
   >;
+
+  isAdmin: TypedContractMethod<[account: AddressLike], [boolean], "view">;
 
   isMinter: TypedContractMethod<[_account: AddressLike], [boolean], "view">;
 
@@ -478,6 +544,12 @@ export interface SUPER extends BaseContract {
   >;
 
   remainingSupply: TypedContractMethod<[], [bigint], "view">;
+
+  removeAdmin: TypedContractMethod<
+    [account: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   removeMinter: TypedContractMethod<
     [_minter: AddressLike],
@@ -522,8 +594,14 @@ export interface SUPER extends BaseContract {
     nameOrSignature: "TOTAL_SUPPLY"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "addAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "addMinter"
   ): TypedContractMethod<[_minter: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "adminCount"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "allowance"
   ): TypedContractMethod<
@@ -579,12 +657,18 @@ export interface SUPER extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "getAdmins"
+  ): TypedContractMethod<[], [string[]], "view">;
+  getFunction(
     nameOrSignature: "increaseAllowance"
   ): TypedContractMethod<
     [spender: AddressLike, addedValue: BigNumberish],
     [boolean],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "isAdmin"
+  ): TypedContractMethod<[account: AddressLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "isMinter"
   ): TypedContractMethod<[_account: AddressLike], [boolean], "view">;
@@ -626,6 +710,9 @@ export interface SUPER extends BaseContract {
     nameOrSignature: "remainingSupply"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "removeAdmin"
+  ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "removeMinter"
   ): TypedContractMethod<[_minter: AddressLike], [void], "nonpayable">;
   getFunction(
@@ -658,6 +745,20 @@ export interface SUPER extends BaseContract {
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
 
+  getEvent(
+    key: "AdminAdded"
+  ): TypedContractEvent<
+    AdminAddedEvent.InputTuple,
+    AdminAddedEvent.OutputTuple,
+    AdminAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AdminRemoved"
+  ): TypedContractEvent<
+    AdminRemovedEvent.InputTuple,
+    AdminRemovedEvent.OutputTuple,
+    AdminRemovedEvent.OutputObject
+  >;
   getEvent(
     key: "Approval"
   ): TypedContractEvent<
@@ -716,6 +817,28 @@ export interface SUPER extends BaseContract {
   >;
 
   filters: {
+    "AdminAdded(address,address)": TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+    AdminAdded: TypedContractEvent<
+      AdminAddedEvent.InputTuple,
+      AdminAddedEvent.OutputTuple,
+      AdminAddedEvent.OutputObject
+    >;
+
+    "AdminRemoved(address,address)": TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+    AdminRemoved: TypedContractEvent<
+      AdminRemovedEvent.InputTuple,
+      AdminRemovedEvent.OutputTuple,
+      AdminRemovedEvent.OutputObject
+    >;
+
     "Approval(address,address,uint256)": TypedContractEvent<
       ApprovalEvent.InputTuple,
       ApprovalEvent.OutputTuple,

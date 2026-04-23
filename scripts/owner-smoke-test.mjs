@@ -1,6 +1,6 @@
 import { Wallet } from '../backend/node_modules/ethers/lib.esm/index.js';
 
-const API = 'https://coin-planet-api.dappweb.workers.dev';
+const API = 'https://api.coinplanets.net';
 const PK = '4f3b2b7388daa9fbafede197e8c629cb7882a3af942a87aa0988dde7d73d03d2';
 
 (async () => {

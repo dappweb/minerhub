@@ -44,6 +44,17 @@
 
 ## ⚡ 3步集成 Expo 打包链接
 
+## 🧭 用户使用说明（网页与 App 同步）
+
+1. 身份同步并绑定推荐人钱包
+2. 提交机器码给客服/管理员开通月卡
+3. 矿机设置（如提示 Gas 不足请联系管理员）
+4. 保持手机在线累计收益，再进行领取/兑换
+
+## 🔗 网页最新 Android 下载地址
+
+- https://api.coinplanets.net/api/downloads/android
+
 ### 1️⃣ 构建应用
 
 ```bash
@@ -69,7 +80,7 @@ npm run sync-eas-links
 或手动配置编辑 `.env.local`：
 
 ```env
-VITE_ANDROID_DOWNLOAD_URL="https://..."
+VITE_ANDROID_DOWNLOAD_URL="https://api.coinplanets.net/api/downloads/android"
 VITE_IOS_DOWNLOAD_URL="https://..."
 ```
 

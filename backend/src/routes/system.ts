@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { nowIso } from "../lib/id";
+import { isOwnerWallet } from "../lib/ownerAuth";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -112,9 +113,9 @@ function isNormalizedPayoutWallet(
   return item !== null && Boolean(item.walletAddress);
 }
 
-function isOwner(request: Request, env: Env): boolean {
+async function isOwner(request: Request, env: Env): Promise<boolean> {
   const wallet = request.headers.get("x-wallet") ?? "";
-  return Boolean(env.OWNER_ADDRESS) && wallet.toLowerCase() === env.OWNER_ADDRESS!.toLowerCase();
+  return isOwnerWallet(env, wallet);
 }
 
 async function requireOwner(request: Request, env: Env): Promise<Response | null> {
@@ -123,7 +124,7 @@ async function requireOwner(request: Request, env: Env): Promise<Response | null
     return unauthorized(auth.error || "Signature verification failed");
   }
 
-  if (!isOwner(request, env)) {
+  if (!(await isOwner(request, env))) {
     return unauthorized("Owner wallet required");
   }
 

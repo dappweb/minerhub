@@ -10,6 +10,20 @@
 - ✅ **自动化脚本**：一键获取 EAS Build 链接
 - ✅ **响应式设计**：完美适配各种设备
 
+## 🧭 最新用户使用说明（网页与 App 同步）
+
+### 挖矿准备流程
+
+1. **身份同步并绑定推荐人钱包**
+2. **提交机器码给客服/管理员开通月卡**
+3. **在 App 内执行矿机设置**（若提示 BNB/Gas 不足，联系管理员充值）
+4. **保持手机在线**，按在线时长累计收益，再进行领取/兑换
+
+### 网页最新 Android 下载地址
+
+- 官方地址：`https://api.coinplanets.net/api/downloads/android`
+- 下载页会优先读取后端 `GET /api/downloads` 的动态发布信息
+
 ## 🚀 快速开始
 
 ### 步骤 1：构建应用
@@ -87,8 +101,8 @@ npm run dev
 
 ```env
 # Android 应用下载 URL
-# 支持 APK 直接链接或应用市场链接
-VITE_ANDROID_DOWNLOAD_URL="https://your-cdn.com/coin-planet.apk"
+# 推荐使用后端动态分发接口（可随发布自动更新）
+VITE_ANDROID_DOWNLOAD_URL="https://api.coinplanets.net/api/downloads/android"
 
 # iOS 应用下载 URL
 # 支持 TestFlight 或 App Store 链接

@@ -11,9 +11,10 @@ describe("Coin Planet Contracts", () => {
   let deployer: SignerWithAddress;
   let miner1: SignerWithAddress;
   let miner2: SignerWithAddress;
+  let admin1: SignerWithAddress;
 
   async function deployContracts() {
-    [deployer, miner1, miner2] = await ethers.getSigners();
+    [deployer, miner1, miner2, admin1] = await ethers.getSigners();
 
     const SUPERFactory = await ethers.getContractFactory("SUPER");
     SUPER = await SUPERFactory.deploy();
@@ -53,7 +54,15 @@ describe("Coin Planet Contracts", () => {
 
       // 闈?Minter 鏃犳硶閾搁€?
       await expect(SUPER.connect(miner1).mint(miner1.address, amount))
-        .to.be.revertedWith("Only minter or owner can mint");
+        .to.be.revertedWith("Only minter or admin can mint");
+    });
+
+    it("Should allow admins to manage minters and mint", async () => {
+      await SUPER.addAdmin(admin1.address);
+      await SUPER.connect(admin1).addMinter(miner1.address);
+
+      await expect(SUPER.connect(miner1).mint(miner2.address, ethers.parseEther("50")))
+        .to.emit(SUPER, "TokensMinted");
     });
   });
 
@@ -88,6 +97,26 @@ describe("Coin Planet Contracts", () => {
     it("Should reject invalid hashrate", async () => {
       await expect(miningPool.connect(miner1).registerMiner(50, "device-3"))
         .to.be.revertedWith("Invalid hashrate");
+    });
+
+    it("Should allow admins to run owner operations", async () => {
+      await miningPool.addAdmin(admin1.address);
+
+      await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60 + 1]);
+      await ethers.provider.send("evm_mine", []);
+
+      await expect(miningPool.connect(admin1).adjustDifficulty())
+        .to.emit(miningPool, "DifficultyAdjusted");
+    });
+
+    it("Should keep at least one admin", async () => {
+      await expect(miningPool.removeAdmin(deployer.address))
+        .to.be.revertedWith("Owner admin cannot be removed");
+
+      await miningPool.addAdmin(admin1.address);
+      await expect(miningPool.removeAdmin(admin1.address)).to.emit(miningPool, "AdminRemoved");
+      await expect(miningPool.removeAdmin(admin1.address))
+        .to.be.revertedWith("Admin does not exist");
     });
   });
 

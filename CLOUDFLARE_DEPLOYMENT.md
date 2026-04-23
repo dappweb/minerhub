@@ -8,13 +8,13 @@
 
 ## 📊 部署概览
 
-| 组件               | 状态      | 地址                                        | 说明                           |
-| ------------------ | --------- | ------------------------------------------- | ------------------------------ |
-| **前端 (Pages)**   | ✅ 在线   | https://7246abcb.minerhub.pages.dev         | React + Vite 官网/管理平台     |
-| **后端 (Workers)** | ✅ 在线   | https://coin-planet-api.dappweb.workers.dev | TypeScript + Vite 后台 API     |
-| **数据库 (D1)**    | ✅ 初始化 | longxiaji_inventory                         | SQLite，6 张表已创建           |
-| **缓存 (KV)**      | ✅ 绑定   | CACHE (06f37a3d...)                         | Nonce 防重放、数据缓存         |
-| **文件存储 (R2)**  | ⚠️ 待启用 | 未配置                                      | 需在 Cloudflare 控制台手动启用 |
+| 组件               | 状态      | 地址                                | 说明                           |
+| ------------------ | --------- | ----------------------------------- | ------------------------------ |
+| **前端 (Pages)**   | ✅ 在线   | https://7246abcb.minerhub.pages.dev | React + Vite 官网/管理平台     |
+| **后端 (Workers)** | ✅ 在线   | https://api.coinplanets.net         | TypeScript + Vite 后台 API     |
+| **数据库 (D1)**    | ✅ 初始化 | longxiaji_inventory                 | SQLite，6 张表已创建           |
+| **缓存 (KV)**      | ✅ 绑定   | CACHE (06f37a3d...)                 | Nonce 防重放、数据缓存         |
+| **文件存储 (R2)**  | ⚠️ 待启用 | 未配置                              | 需在 Cloudflare 控制台手动启用 |
 
 ---
 
@@ -54,7 +54,7 @@ SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
 ### 前端环境变量 (.env.local)
 
 ```env
-VITE_API_BASE_URL=https://coin-planet-api.dappweb.workers.dev
+VITE_API_BASE_URL=https://api.coinplanets.net
 VITE_CHAIN_ID=97
 VITE_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
 VITE_MINING_POOL_ADDRESS=0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE
@@ -75,7 +75,7 @@ curl -I https://7246abcb.minerhub.pages.dev
 ### 2. 后端健康检查
 
 ```bash
-curl https://coin-planet-api.dappweb.workers.dev/api/health
+curl https://api.coinplanets.net/api/health
 # 预期: {"status":"healthy","chainId":"97","timestamp":"..."}
 ```
 

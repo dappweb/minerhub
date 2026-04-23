@@ -2,7 +2,7 @@ import { Apple, Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, 
 import { motion } from 'motion/react';
 import React from 'react';
 
-const DEFAULT_API_BASE_URL = 'https://coin-planet-api.dappweb.workers.dev';
+const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
 
 function resolveApiBaseUrl(): string {
   const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
@@ -39,7 +39,7 @@ function buildFallbackState(): DownloadState {
 
   // Keep a deterministic local fallback so static Pages deployments can serve
   // APK directly without requiring backend upload metadata first.
-  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '/downloads/app-release.apk';
+  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '/api/downloads/android';
   const iosUrl = iosEnvUrl && iosEnvUrl !== '#' ? iosEnvUrl : '';
 
   return {
@@ -82,7 +82,7 @@ function getQrHint(platform: 'android' | 'ios'): string {
 
 function getInstallHint(platform: 'android' | 'ios'): string {
   return platform === 'android'
-    ? '安卓首次安装 APK 时，请先在系统设置中允许安装未知来源应用。'
+    ? '安装后请先完成身份同步，再用机器码联系管理员开通月卡，最后点击“矿机设置”开始累计收益。'
     : 'iOS 需通过 TestFlight 或 App Store 安装，首次打开 TestFlight 时请先完成 Apple 登录。';
 }
 
@@ -172,7 +172,7 @@ export default function DownloadSection() {
           </div>
           <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">下载 Coin Planet App</h2>
           <p className="mx-auto max-w-2xl text-lg text-slate-300/90">
-            {loading ? '正在读取最新发布版本...' : '下载最新版 APP，安装后即可在手机端查看收益、设备状态与团队数据。'}
+            {loading ? '正在读取最新发布版本...' : '下载最新版 APP，按“身份同步 → 月卡开通 → 矿机设置 → 保持在线”完成挖矿准备。'}
           </p>
         </motion.div>
 
@@ -316,6 +316,10 @@ export default function DownloadSection() {
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Clock3 size={13} />
               <span>{current.uploadedAt ? `最近更新 ${new Date(current.uploadedAt).toLocaleString('zh-CN')}` : '发布后这里会显示更新时间。'}</span>
+            </div>
+
+            <div className="mt-2 text-xs text-slate-500">
+              官方下载地址：{resolveUrl(current.downloadUrl) || `${apiBase}/api/downloads/android`}
             </div>
           </div>
 

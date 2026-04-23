@@ -54,6 +54,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ShortStrings__factory>;
     getContractFactory(
+      name: "AdminAccess",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.AdminAccess__factory>;
+    getContractFactory(
       name: "MiningPool",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MiningPool__factory>;
@@ -121,6 +125,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ShortStrings>;
     getContractAt(
+      name: "AdminAccess",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.AdminAccess>;
+    getContractAt(
       name: "MiningPool",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -182,6 +191,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ShortStrings>;
     deployContract(
+      name: "AdminAccess",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.AdminAccess>;
+    deployContract(
       name: "MiningPool",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MiningPool>;
@@ -248,6 +261,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ShortStrings>;
+    deployContract(
+      name: "AdminAccess",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.AdminAccess>;
     deployContract(
       name: "MiningPool",
       args: any[],

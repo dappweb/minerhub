@@ -26,6 +26,8 @@ export type { EIP712 } from "./@openzeppelin/contracts/utils/cryptography/EIP712
 export { EIP712__factory } from "./factories/@openzeppelin/contracts/utils/cryptography/EIP712__factory";
 export type { ShortStrings } from "./@openzeppelin/contracts/utils/ShortStrings";
 export { ShortStrings__factory } from "./factories/@openzeppelin/contracts/utils/ShortStrings__factory";
+export type { AdminAccess } from "./contracts/AdminAccess";
+export { AdminAccess__factory } from "./factories/contracts/AdminAccess__factory";
 export type { MiningPool } from "./contracts/MiningPool";
 export { MiningPool__factory } from "./factories/contracts/MiningPool__factory";
 export type { SUPER } from "./contracts/SUPER";

@@ -11,7 +11,7 @@ import { useAccount, useChainId, useSignMessage, useSwitchChain } from 'wagmi';
 import BscBadge from './components/BscBadge';
 import Hero from './components/Hero';
 import SuperLogo from './components/SuperLogo';
-import { getMiningPoolOwnerOnChain } from './lib/blockchain';
+import { getMiningPoolAdminsOnChain, getMiningPoolOwnerOnChain } from './lib/blockchain';
 import { coinPlanetChain } from './lib/wallet';
 
 // Lazy-load non-critical components for faster initial render
@@ -41,6 +41,7 @@ export default function App() {
   const [viewMode, setViewMode] = React.useState<ViewMode>('website');
   const [adminLoginStatus, setAdminLoginStatus] = React.useState<string>('请先使用钱包登录后台');
   const [ownerAuthorityAddress, setOwnerAuthorityAddress] = React.useState<string>('');
+  const [authorizedAdminAddresses, setAuthorizedAdminAddresses] = React.useState<string[]>([]);
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
   const autoVerifyAttemptedWalletRef = React.useRef<string>('');
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
@@ -98,11 +99,10 @@ export default function App() {
       .split(',')
       .map((s) => s.trim().toLowerCase())
       .filter((s) => /^0x[0-9a-f]{40}$/i.test(s));
-    // Fallback: hard-coded admin allowlist so production works even when the
-    // Cloudflare Pages env var is not yet configured. These addresses are
-    // already public (they are treasury/admin wallets on BSC testnet).
-    const fallback = ['0xca949919f03e3e52949d1436442312d8a023fe41'];
-    return Array.from(new Set([...fromEnv, ...fallback]));
+    // Default admin fallback so production still has one known admin wallet
+    // even when the Pages env var has not been configured yet.
+    const defaultAdminAddress = '0xca949919f03e3e52949d1436442312d8a023fe41';
+    return Array.from(new Set([...fromEnv, defaultAdminAddress]));
   }, []);
 
   React.useEffect(() => {
@@ -110,13 +110,22 @@ export default function App() {
 
     const loadOwnerAuthority = async () => {
       try {
-        const chainOwner = await getMiningPoolOwnerOnChain();
+        const [chainOwner, chainAdmins] = await Promise.all([
+          getMiningPoolOwnerOnChain(),
+          getMiningPoolAdminsOnChain(),
+        ]);
         if (!canceled) {
           setOwnerAuthorityAddress(chainOwner);
+          setAuthorizedAdminAddresses(
+            Array.from(new Set([...extraAdminAddresses, ...chainAdmins.map((address) => address.toLowerCase())]))
+          );
         }
       } catch {
         if (!canceled) {
           setOwnerAuthorityAddress(ownerWalletAddress);
+          setAuthorizedAdminAddresses(
+            Array.from(new Set([...extraAdminAddresses, ownerWalletAddress ? ownerWalletAddress.toLowerCase() : '']))
+          );
         }
       }
     };
@@ -125,14 +134,14 @@ export default function App() {
     return () => {
       canceled = true;
     };
-  }, [ownerWalletAddress]);
+  }, [extraAdminAddresses, ownerWalletAddress]);
 
   React.useEffect(() => {
     let canceled = false;
 
     const loadSystemStatus = async () => {
       try {
-        const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://coin-planet-api.dappweb.workers.dev';
+        const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
         const response = await fetch(`${baseUrl}/api/system/status`);
         const data = (await response.json()) as { maintenanceEnabled?: boolean; maintenanceMessageZh?: string; maintenanceMessageEn?: string };
         if (!canceled) {
@@ -163,8 +172,8 @@ export default function App() {
     if (ownerAuthorityAddress && lower === ownerAuthorityAddress.toLowerCase()) {
       return true;
     }
-    return extraAdminAddresses.includes(lower);
-  }, [ownerAuthorityAddress, extraAdminAddresses]);
+    return authorizedAdminAddresses.includes(lower);
+  }, [authorizedAdminAddresses, ownerAuthorityAddress]);
 
   const adminWallet = isConnected && address ? address : '';
   const isSignatureVerified =
@@ -187,13 +196,13 @@ export default function App() {
     if (!isOwnerAddress(adminWallet)) {
       autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
-      setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
+      setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
       setViewMode('website');
       return;
     }
 
     if (!isSignatureVerified) {
-      setAdminLoginStatus('owner 钱包已连接，请完成链上签名验证后进入数据面板。');
+      setAdminLoginStatus('管理员钱包已连接，请完成链上签名验证后进入数据面板。');
       setViewMode('website');
     }
   }, [adminWallet, isOwnerAddress, isSignatureVerified]);
@@ -207,7 +216,7 @@ export default function App() {
 
       if (!isOwnerAddress(walletAddress)) {
         setVerifiedOwnerWallet('');
-        setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
+        setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
         setViewMode('website');
         return;
       }
@@ -233,7 +242,7 @@ export default function App() {
         }
 
         setVerifiedOwnerWallet(walletAddress);
-        setAdminLoginStatus('链上签名验证成功，已进入 Coin Planet Admin。');
+        setAdminLoginStatus('链上签名验证成功，已进入 Coin Planet 管理后台。');
         setViewMode('admin');
       } catch (error) {
         setVerifiedOwnerWallet('');
@@ -277,7 +286,7 @@ export default function App() {
               : isSignaturePending
                 ? '签名验证中...'
                 : '签名验证进入后台'
-            : '非 owner 钱包';
+            : '非管理员钱包';
 
         return (
           <button
@@ -288,7 +297,7 @@ export default function App() {
               }
 
               if (!isOwnerAddress(account.address)) {
-                setAdminLoginStatus('当前钱包不是链上 owner 账户，无法进入管理后台。');
+                setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
                 setViewMode('website');
                 return;
               }

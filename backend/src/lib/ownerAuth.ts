@@ -1,4 +1,4 @@
-import { verifyMessage } from "ethers";
+import { Contract, JsonRpcProvider, verifyMessage } from "ethers";
 import { SignJWT, jwtVerify } from "jose";
 import type { Env } from "../types/env";
 import { extractAndVerifyAuth } from "./auth";
@@ -6,22 +6,19 @@ import { unauthorized } from "./response";
 
 const OWNER_JWT_TTL_SECONDS = 2 * 60 * 60; // 2h
 const OWNER_JWT_ISS = "coinplanet-owner";
-const OWNER_FALLBACK_ALLOWLIST = [
-  // Ops/admin fallback: keep backend access available even when env vars are
-  // missing in Pages/Workers deployment config.
-  "0xca949919f03e3e52949d1436442312d8a023fe41",
-];
+const DEFAULT_ADMIN_WALLET = "0xca949919f03e3e52949d1436442312d8a023fe41";
+const ADMIN_ABI = ["function isAdmin(address) view returns (bool)"];
 
 function secretKey(env: Env): Uint8Array {
   const raw = env.JWT_SECRET;
   return new TextEncoder().encode(raw);
 }
 
-export function isOwnerWallet(env: Env, wallet: string | null | undefined): boolean {
+function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): boolean {
   if (!wallet) return false;
   const w = wallet.toLowerCase();
   if (env.OWNER_ADDRESS && w === env.OWNER_ADDRESS.toLowerCase()) return true;
-  if (OWNER_FALLBACK_ALLOWLIST.includes(w)) return true;
+  if (w === DEFAULT_ADMIN_WALLET) return true;
   if (env.ADMIN_ADDRESSES) {
     for (const entry of env.ADMIN_ADDRESSES.split(",")) {
       const a = entry.trim().toLowerCase();
@@ -29,6 +26,20 @@ export function isOwnerWallet(env: Env, wallet: string | null | undefined): bool
     }
   }
   return false;
+}
+
+export async function isOwnerWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
+  if (!wallet) return false;
+  if (isConfiguredAdminWallet(env, wallet)) return true;
+  if (!env.RPC_URL || !env.MINING_POOL_ADDRESS) return false;
+
+  try {
+    const provider = new JsonRpcProvider(env.RPC_URL);
+    const contract = new Contract(env.MINING_POOL_ADDRESS, ADMIN_ABI, provider);
+    return Boolean(await contract.isAdmin(wallet));
+  } catch {
+    return false;
+  }
 }
 
 export async function issueOwnerJwt(env: Env, wallet: string): Promise<{ token: string; expiresAt: string }> {
@@ -47,7 +58,7 @@ export async function verifyOwnerJwt(env: Env, token: string): Promise<{ valid: 
   try {
     const { payload } = await jwtVerify(token, secretKey(env), { issuer: OWNER_JWT_ISS });
     const wallet = typeof payload.wallet === "string" ? payload.wallet : null;
-    if (!isOwnerWallet(env, wallet)) return { valid: false, error: "Not owner" };
+    if (!(await isOwnerWallet(env, wallet))) return { valid: false, error: "Not owner" };
     return { valid: true, wallet: wallet as string };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "invalid token";
@@ -103,7 +114,7 @@ export async function requireOwnerAuth(
   if (opts.sensitive || !bearer) {
     const sig = await extractAndVerifyAuth(request, env);
     if (!sig.valid) return { ok: false, response: unauthorized(sig.error || "Signature verification failed") };
-    if (!isOwnerWallet(env, sig.wallet ?? null)) return { ok: false, response: unauthorized("Owner wallet required") };
+    if (!(await isOwnerWallet(env, sig.wallet ?? null))) return { ok: false, response: unauthorized("Owner wallet required") };
     if (walletFromJwt && walletFromJwt.toLowerCase() !== (sig.wallet || "").toLowerCase()) {
       return { ok: false, response: unauthorized("JWT/wallet mismatch") };
     }
