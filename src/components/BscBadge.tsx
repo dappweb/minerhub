@@ -12,7 +12,7 @@ interface BscBadgeProps {
 /**
  * "Built on BNB Smart Chain" badge.
  * When a wallet is connected it also surfaces a live status dot:
- *   green  = connected to the expected chain (BSC Testnet, id 97)
+ *   green  = connected to the expected chain (BSC Mainnet, id 56)
  *   amber  = connected but on a different chain (user needs to switch)
  *   gray   = not connected
  */
@@ -32,7 +32,7 @@ export default function BscBadge({ className = '', showChainId = true, compact =
         'inline-flex items-center gap-2 rounded-full border border-[#F0B90B]/40 bg-gradient-to-r from-[#F0B90B]/15 to-[#22D3EE]/10 px-3 py-1 text-xs font-semibold text-[#F0B90B] backdrop-blur-sm ' +
         className
       }
-      title={wrongChain ? `当前链: ${chainId}，点击切换到 BSC Testnet` : undefined}
+      title={wrongChain ? `当前链: ${chainId}，请切换到 BNB Smart Chain` : undefined}
     >
       {/* BNB diamond */}
       <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
@@ -56,7 +56,7 @@ export default function BscBadge({ className = '', showChainId = true, compact =
           Built on BNB Smart Chain
           {showChainId && (
             <span className="ml-1 text-[10px] uppercase tracking-wider text-[#22D3EE]">
-              · Chain {expected} Testnet
+              · {expected} Mainnet
             </span>
           )}
         </span>

@@ -87,7 +87,7 @@ async function main() {
 	console.log("Liquidity initialized");
 
 	const deploymentInfo = {
-		network: "bscTestnet",
+		network: "bsc",
 		timestamp: new Date().toISOString(),
 		deployer: deployer.address,
 		contracts: {

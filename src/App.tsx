@@ -50,7 +50,7 @@ export default function App() {
   const currentChainId = useChainId();
   const { switchChainAsync, switchChain } = useSwitchChain();
 
-  // Auto-switch / add BSC testnet whenever a wallet is connected on a
+  // Auto-switch / add BSC mainnet whenever a wallet is connected on a
   // different chain. wagmi's switchChain will call wallet_switchEthereumChain
   // and fall back to wallet_addEthereumChain automatically if the network is
   // not yet in the wallet (works for MetaMask, OneKey, OKX, TokenPocket...).
@@ -63,7 +63,7 @@ export default function App() {
       if (switchChainAsync) {
         void switchChainAsync({ chainId: coinPlanetChain.id }).catch((err) => {
           // eslint-disable-next-line no-console
-          console.warn('[wallet] failed to switch to BSC testnet:', err);
+          console.warn('[wallet] failed to switch to BSC mainnet:', err);
         });
       } else {
         switchChain({ chainId: coinPlanetChain.id });
@@ -468,7 +468,7 @@ export default function App() {
           <p>Coin Planet · SUPER (BEP-20) 手机挖矿系统 v1.0</p>
           <p className="text-slate-500">Built on BNB Smart Chain · 将手机从"消费电子产品"升级为"生产力工具"</p>
           <a
-            href="https://testnet.bscscan.com/"
+            href="https://bscscan.com/"
             target="_blank"
             rel="noreferrer"
             className="text-[#F0B90B] hover:text-[#FCD535] text-xs"

@@ -19,6 +19,11 @@ const config: HardhatUserConfig = {
     }
   },
   networks: {
+    bsc: {
+      url: process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org/",
+      accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
+      chainId: 56
+    },
     bscTestnet: {
       url: process.env.BSC_TESTNET_RPC_URL || "https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq",
       accounts: process.env.DEPLOYER_PRIVATE_KEY
@@ -40,9 +45,18 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
+      bsc: process.env.BSCSCAN_API_KEY || "",
       bscTestnet: process.env.BSCSCAN_API_KEY || ""
     },
     customChains: [
+      {
+        network: "bsc",
+        chainId: 56,
+        urls: {
+          apiURL: "https://api.bscscan.com/api",
+          browserURL: "https://bscscan.com"
+        }
+      },
       {
         network: "bscTestnet",
         chainId: 97,
