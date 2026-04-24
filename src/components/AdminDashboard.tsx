@@ -1032,41 +1032,53 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleToggleMaintenance = async () => {
+    if (!systemStatus) {
+      setBackendError('系统状态尚未同步，请稍后重试。');
+      return;
+    }
     await saveSystemSettings({
-      maintenanceEnabled: !systemStatus?.maintenanceEnabled,
+      maintenanceEnabled: !systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
       monthlyCardDays: Number(monthlyCardDays),
       contractTermDaysDefault: Number(contractTermDays),
       rewardRateUsdtPerHour: Number(rewardRatePerHour),
-      exchangeAutoEnabled: systemStatus?.exchangeAutoEnabled ?? true,
-      payoutWallets: systemStatus?.payoutWallets ?? [],
+      exchangeAutoEnabled: systemStatus.exchangeAutoEnabled,
+      payoutWallets: systemStatus.payoutWallets,
     });
   };
 
   const handleToggleExchange = async () => {
+    if (!systemStatus) {
+      setBackendError('系统状态尚未同步，请稍后重试。');
+      return;
+    }
     await saveSystemSettings({
-      maintenanceEnabled: systemStatus?.maintenanceEnabled ?? false,
+      maintenanceEnabled: systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
       monthlyCardDays: Number(monthlyCardDays),
       contractTermDaysDefault: Number(contractTermDays),
       rewardRateUsdtPerHour: Number(rewardRatePerHour),
-      exchangeAutoEnabled: !(systemStatus?.exchangeAutoEnabled ?? true),
-      payoutWallets: systemStatus?.payoutWallets ?? [],
+      exchangeAutoEnabled: !systemStatus.exchangeAutoEnabled,
+      payoutWallets: systemStatus.payoutWallets,
     });
   };
 
   const handleSaveSystemParameters = async () => {
+    if (!systemStatus) {
+      setBackendError('系统状态尚未同步，请稍后重试。');
+      return;
+    }
     await saveSystemSettings({
-      maintenanceEnabled: systemStatus?.maintenanceEnabled ?? false,
+      maintenanceEnabled: systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
       monthlyCardDays: Number(monthlyCardDays),
       contractTermDaysDefault: Number(contractTermDays),
       rewardRateUsdtPerHour: Number(rewardRatePerHour),
-      exchangeAutoEnabled: systemStatus?.exchangeAutoEnabled ?? true,
-      payoutWallets: systemStatus?.payoutWallets ?? [],
+      exchangeAutoEnabled: systemStatus.exchangeAutoEnabled,
+      payoutWallets: systemStatus.payoutWallets,
     });
   };
 
@@ -1720,11 +1732,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="grid grid-cols-2 gap-3 text-xs mb-4">
                   <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
                     <div className="text-slate-400">维护状态</div>
-                    <div className="text-slate-100 mt-1">{systemStatus?.maintenanceEnabled ? '开启' : '关闭'}</div>
+                    <div className="text-slate-100 mt-1">{
+                      !systemStatus ? '未同步' : (systemStatus.maintenanceEnabled ? '开启' : '关闭')
+                    }</div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
                     <div className="text-slate-400">自动兑换</div>
-                    <div className="text-slate-100 mt-1">{systemStatus?.exchangeAutoEnabled ? '开启' : '关闭'}</div>
+                    <div className="text-slate-100 mt-1">{
+                      !systemStatus ? '未同步' : (systemStatus.exchangeAutoEnabled ? '开启' : '关闭')
+                    }</div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
                     <div className="text-slate-400">月卡天数</div>
@@ -1748,15 +1764,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input value={rewardRatePerHour} onChange={(event) => setRewardRatePerHour(event.target.value)} inputMode="decimal" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="每小时收益 USDT" />
                   <div className="flex gap-2">
-                    <button onClick={handleToggleMaintenance} disabled={adminActionLoading === 'systemSettings'} className="flex-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium text-slate-950">
+                    <button onClick={handleToggleMaintenance} disabled={adminActionLoading === 'systemSettings' || !systemStatus} className="flex-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium text-slate-950">
                       {adminActionLoading === 'systemSettings' ? '保存中...' : '切换维护'}
                     </button>
-                    <button onClick={handleToggleExchange} disabled={adminActionLoading === 'systemSettings'} className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700">
+                    <button onClick={handleToggleExchange} disabled={adminActionLoading === 'systemSettings' || !systemStatus} className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700">
                       切换自动兑换
                     </button>
                   </div>
                 </div>
-                <button onClick={handleSaveSystemParameters} disabled={adminActionLoading === 'systemSettings'} className="mt-3 w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700">
+                <button onClick={handleSaveSystemParameters} disabled={adminActionLoading === 'systemSettings' || !systemStatus} className="mt-3 w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700">
                   保存系统参数
                 </button>
               </div>
