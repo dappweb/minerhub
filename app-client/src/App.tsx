@@ -3,6 +3,7 @@ import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    AppState,
     Modal,
     Pressable,
     SafeAreaView,
@@ -232,6 +233,7 @@ const translations = {
     gasFailed: 'Gas purchase failed: ',
     gasIntentPhase2: 'Phase-2 relay intent registered.',
     priceUnavailable: 'Pool price unavailable',
+    swapBlockedNoPrice: 'Swap is unavailable: pool price is not ready (liquidity may be uninitialized or backend price not configured).',
     priceFetchFailed: 'Failed to fetch pool price',
     priceFormat: (val: string) => `1 USDT ~= ${val} SUPER`,
     langToggle: '中文',
@@ -443,6 +445,7 @@ const translations = {
     gasFailed: 'Gas 兑换失败：',
     gasIntentPhase2: '二期 Relay 意图已登记。',
     priceUnavailable: '池子价格不可用',
+    swapBlockedNoPrice: '兑换不可用：池子价格未就绪（可能未初始化流动性或后台未配置价格）。',
     priceFetchFailed: '获取池子价格失败',
     priceFormat: (val: string) => `1 USDT ≈ ${val} SUPER`,
     langToggle: 'English',
@@ -653,6 +656,7 @@ export default function App() {
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const [exchangeOrders, setExchangeOrders] = useState<ExchangeRequestDto[]>([]);
   const [exchangeOrdersLoading, setExchangeOrdersLoading] = useState(false);
+  const [appState, setAppState] = useState(AppState.currentState);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -661,6 +665,18 @@ export default function App() {
   const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
   const identityReady = Boolean(walletAddress && userId && deviceId);
+  const serverWalletAddress = (typeof userDetails?.wallet === 'string' && userDetails.wallet.trim())
+    ? userDetails.wallet.trim()
+    : walletAddress;
+  const serverUserId = (typeof userDetails?.id === 'string' && userDetails.id.trim())
+    ? userDetails.id.trim()
+    : userId;
+  const serverDeviceId = (typeof userDetails?.devices?.[0]?.device_id === 'string' && userDetails.devices[0].device_id.trim())
+    ? userDetails.devices[0].device_id.trim()
+    : deviceId;
+  const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
+    ? userDetails.inviterWallet.trim()
+    : null;
   const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
   const contractExpired = Boolean(userDetails?.contractEndAt && new Date(userDetails.contractEndAt).getTime() < Date.now());
   const actionsBlocked = maintenanceEnabled || contractExpired;
@@ -739,9 +755,9 @@ export default function App() {
   };
 
   const shortAddress = useMemo(() => {
-    if (!walletAddress) return t.notInit;
-    return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-  }, [walletAddress, t.notInit]);
+    if (!serverWalletAddress) return t.notInit;
+    return `${serverWalletAddress.slice(0, 6)}...${serverWalletAddress.slice(-4)}`;
+  }, [serverWalletAddress, t.notInit]);
 
   const handleCopyAddress = async () => {
     if (!walletAddress) return;
@@ -758,9 +774,9 @@ export default function App() {
   }, [identityReady, minerReady, t.flow1, t.flow2, t.flow3]);
 
   const displayId = useMemo(() => {
-    if (!userId) return '----';
-    return userId.replace(/[^0-9]/g, '').slice(0, 4).padEnd(4, '0');
-  }, [userId]);
+    if (!serverUserId) return '----';
+    return serverUserId.replace(/[^0-9]/g, '').slice(0, 4).padEnd(4, '0');
+  }, [serverUserId]);
 
   const machineCode = useMemo(() => {
     const fromServer = (userDetails as { machineCode?: string | null } | null)?.machineCode;
@@ -792,18 +808,9 @@ export default function App() {
     return Math.max(1, Math.floor(parsed));
   }, [userDetails?.devices]);
 
-  const monthProgressMinutes = useMemo(() => {
-    if (!Number.isFinite(deviceHashrate) || deviceHashrate <= 0) {
-      return 443;
-    }
-    return Math.min(24 * 60 * 30, Math.floor(deviceHashrate * 0.42));
-  }, [deviceHashrate]);
-
-  const totalOnlineMinutes = useMemo(() => monthProgressMinutes + 11053, [monthProgressMinutes]);
-  const onlineState = identityReady ? t.online : t.offline;
-
   const swapInputNumber = Number(swapAmount);
   const hasValidSwapInput = Number.isFinite(swapInputNumber) && swapInputNumber > 0;
+  const isSwapPriceReady = Boolean(swapPriceValue && swapPriceValue > 0);
 
   const estimatedUsdt = useMemo(() => {
     if (!hasValidSwapInput || !swapPriceValue || swapPriceValue <= 0) {
@@ -821,6 +828,15 @@ export default function App() {
     if (estimatedUsdt <= 0) return 0;
     return estimatedUsdt * (1 - SWAP_SLIPPAGE_RATE);
   }, [estimatedUsdt]);
+
+  const swapBlockedReason = useMemo(() => {
+    if (!identityReady) return t.identityNotReady;
+    if (!hasValidSwapInput) return t.invalidSwapAmount;
+    if (!isSwapPriceReady || estimatedUsdt <= 0) return t.swapBlockedNoPrice;
+    return '';
+  }, [estimatedUsdt, hasValidSwapInput, identityReady, isSwapPriceReady, t.identityNotReady, t.invalidSwapAmount, t.swapBlockedNoPrice]);
+
+  const swapSubmitDisabled = isBusy || !identityReady || !hasValidSwapInput || !isSwapPriceReady || estimatedUsdt <= 0;
 
   const swapPriceText = useMemo(() => {
     if (!swapPriceValue || swapPriceValue <= 0) {
@@ -842,9 +858,47 @@ export default function App() {
   const rewardRows = useMemo(() => {
     return (userDetails?.rewards ?? []).map((item) => ({
       rewardUsdt: parseFiniteNumber(item.reward_usdt),
+      rateUsdtPerHour: parseFiniteNumber(item.rate_usdt_per_hour),
       createdAt: item.created_at,
     }));
   }, [userDetails?.rewards]);
+
+  const monthProgressMinutes = useMemo(() => {
+    const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
+    const systemRate = Number(systemStatus?.rewardRateUsdtPerHour ?? 0);
+    const defaultRate = profileRate > 0 ? profileRate : Number.isFinite(systemRate) && systemRate > 0 ? systemRate : 0.084;
+
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthStartMs = monthStart.getTime();
+
+    let minutes = 0;
+    for (const row of rewardRows) {
+      const ts = new Date(row.createdAt).getTime();
+      if (Number.isNaN(ts) || ts < monthStartMs) continue;
+      const rate = row.rateUsdtPerHour > 0 ? row.rateUsdtPerHour : defaultRate;
+      if (rate <= 0) continue;
+      minutes += (row.rewardUsdt / rate) * 60;
+    }
+    return Math.max(0, Math.floor(minutes));
+  }, [rewardRows, systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
+
+  const totalOnlineMinutes = useMemo(() => {
+    const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
+    const systemRate = Number(systemStatus?.rewardRateUsdtPerHour ?? 0);
+    const defaultRate = profileRate > 0 ? profileRate : Number.isFinite(systemRate) && systemRate > 0 ? systemRate : 0.084;
+
+    let minutes = 0;
+    for (const row of rewardRows) {
+      const rate = row.rateUsdtPerHour > 0 ? row.rateUsdtPerHour : defaultRate;
+      if (rate <= 0) continue;
+      minutes += (row.rewardUsdt / rate) * 60;
+    }
+    return Math.max(0, Math.floor(minutes));
+  }, [rewardRows, systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
+
+  const onlineState = identityReady && (userDetails?.onlineStatus ?? 'offline') === 'online' ? t.online : t.offline;
 
   const chartValues = useMemo(() => {
     const totalDays = 7;
@@ -866,28 +920,14 @@ export default function App() {
       values[bucketIndex] += row.rewardUsdt;
     });
 
-    const hasRealData = values.some((value) => value > 0);
-    if (hasRealData) {
-      return values.map((value) => Number(value.toFixed(3)));
-    }
-
-    const base = Math.max(80, Math.floor(monthProgressMinutes * 0.18));
-    return [
-      Number((base * 0.46).toFixed(3)),
-      Number((base * 0.62).toFixed(3)),
-      Number((base * 0.51).toFixed(3)),
-      Number((base * 0.75).toFixed(3)),
-      Number((base * 0.68).toFixed(3)),
-      Number((base * 0.89).toFixed(3)),
-      Number((base * 0.84).toFixed(3)),
-    ];
-  }, [rewardRows, monthProgressMinutes]);
+    return values.map((value) => Number(value.toFixed(3)));
+  }, [rewardRows]);
 
   const chartMax = Math.max(...chartValues, 1);
   const totalRewardUsdt = parseFiniteNumber(userDetails?.totalRewardUsdt);
   const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
   const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
-  const claimableRewardUsdt = Math.max(0, Math.min(totalRewardUsdt, todayRewardUsdt));
+  const claimableRewardUsdt = Math.max(0, totalRewardUsdt);
   const configuredRewardRateUsdtPerHour = useMemo(() => {
     const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
     if (profileRate > 0) {
@@ -1264,34 +1304,34 @@ export default function App() {
   ]);
 
   const refreshSwapPrice = async (preferredStatus?: Awaited<ReturnType<typeof getSystemStatus>> | null) => {
+    try {
+      const price = await getSwapPriceOnChain();
+      const parsed = Number(price) / 1e18;
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setSwapPriceValue(parsed);
+        return;
+      }
+    } catch {
+      // Fallback to configured backend price below.
+    }
+
     const configuredPrice = Number(preferredStatus?.swapPriceSuperPerUsdt ?? systemStatus?.swapPriceSuperPerUsdt ?? 0);
     if (Number.isFinite(configuredPrice) && configuredPrice > 0) {
       setSwapPriceValue(configuredPrice);
       return;
     }
 
-    try {
-      const latestStatus = await getSystemStatus().catch(() => null);
-      if (latestStatus) {
-        setSystemStatus(latestStatus);
-        const latestConfiguredPrice = Number(latestStatus.swapPriceSuperPerUsdt ?? 0);
-        if (Number.isFinite(latestConfiguredPrice) && latestConfiguredPrice > 0) {
-          setSwapPriceValue(latestConfiguredPrice);
-          return;
-        }
+    const latestStatus = await getSystemStatus().catch(() => null);
+    if (latestStatus) {
+      setSystemStatus(latestStatus);
+      const latestConfiguredPrice = Number(latestStatus.swapPriceSuperPerUsdt ?? 0);
+      if (Number.isFinite(latestConfiguredPrice) && latestConfiguredPrice > 0) {
+        setSwapPriceValue(latestConfiguredPrice);
+        return;
       }
-
-      const price = await getSwapPriceOnChain();
-      const parsed = Number(price) / 1e18;
-      if (Number.isFinite(parsed) && parsed > 0) {
-        setSwapPriceValue(parsed);
-      } else {
-        setSwapPriceValue(null);
-      }
-    } catch {
-      setSwapPriceValue(null);
-      setStatus(t.priceFetchFailed);
     }
+
+    setSwapPriceValue(null);
   };
 
   const refreshReferralSummary = async (nextUserId: string) => {
@@ -1472,6 +1512,15 @@ export default function App() {
   }, [walletAddress]);
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      setAppState(nextState);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!walletAddress || !userId || !deviceId) return;
 
     const sendHeartbeat = async () => {
@@ -1495,6 +1544,56 @@ export default function App() {
       clearInterval(timer);
     };
   }, [walletAddress, userId, deviceId, deviceHashrate]);
+
+  useEffect(() => {
+    if (!identityReady || !userId || !walletAddress) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const syncRealtime = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const [status, details, balances] = await Promise.all([
+          getSystemStatus().catch(() => null),
+          getUserDetails(userId).catch(() => null),
+          getWalletBalances().catch(() => null),
+        ]);
+
+        if (cancelled) return;
+        if (status) setSystemStatus(status);
+        if (details) setUserDetails(details);
+        if (balances) {
+          setBnbBalance(balances.bnb);
+          setSuperBalance(balances.super);
+          setUsdtBalance(balances.usdt);
+        }
+
+        await refreshSwapPrice(status);
+        await refreshGasFundedBalance(walletAddress);
+
+        if (activeTab === 'exchange') {
+          const items = await getExchangeRequests({ userId, wallet: walletAddress, limit: 10 }).catch(() => []);
+          if (!cancelled) setExchangeOrders(items);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const pollMs = appState === 'active' ? (activeTab === 'exchange' ? 10_000 : 15_000) : 60_000;
+
+    void syncRealtime();
+    const timer = setInterval(() => {
+      void syncRealtime();
+    }, pollMs);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeTab, appState, identityReady, userId, walletAddress]);
 
   useEffect(() => {
     if (!userId) {
@@ -1590,8 +1689,16 @@ export default function App() {
       await markMinerReady();
       setLastTxHash(txHash);
       setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
-      const details = await getUserDetails(userId);
+      const [details, balances] = await Promise.all([
+        getUserDetails(userId),
+        getWalletBalances().catch(() => null),
+      ]);
       setUserDetails(details);
+      if (balances) {
+        setBnbBalance(balances.bnb);
+        setSuperBalance(balances.super);
+        setUsdtBalance(balances.usdt);
+      }
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : '';
       const message = toFriendlyErrorMessage(error);
@@ -1649,8 +1756,16 @@ export default function App() {
       const txHash = await claimRewardOnChain();
       setLastTxHash(txHash);
       setStatus(`${t.claimSuccess}${shortHash(txHash)}`);
-      const details = await getUserDetails(userId);
+      const [details, balances] = await Promise.all([
+        getUserDetails(userId),
+        getWalletBalances().catch(() => null),
+      ]);
       setUserDetails(details);
+      if (balances) {
+        setBnbBalance(balances.bnb);
+        setSuperBalance(balances.super);
+        setUsdtBalance(balances.usdt);
+      }
     } catch (error) {
       const message = toFriendlyErrorMessage(error);
       if (isInsufficientBnbError(message)) {
@@ -1671,6 +1786,11 @@ export default function App() {
 
     if (!hasValidSwapInput) {
       setStatus(t.invalidSwapAmount);
+      return;
+    }
+
+    if (!isSwapPriceReady || estimatedUsdt <= 0) {
+      setStatus(t.swapBlockedNoPrice);
       return;
     }
 
@@ -1705,7 +1825,15 @@ export default function App() {
         ? (lang === 'zh' ? '自动处理' : 'auto')
         : (lang === 'zh' ? '人工审核' : 'manual');
       setStatus(`${t.swapSuccess}${order.id} (${modeHint})`);
-      await refreshExchangeOrders();
+      await Promise.all([
+        refreshExchangeOrders(),
+        getUserDetails(userId).then(setUserDetails).catch(() => null),
+        getWalletBalances().then((balances) => {
+          setBnbBalance(balances.bnb);
+          setSuperBalance(balances.super);
+          setUsdtBalance(balances.usdt);
+        }).catch(() => null),
+      ]);
     } catch (error) {
       clearSwapConfirmTimer();
       const message = toFriendlyErrorMessage(error);
@@ -1745,6 +1873,12 @@ export default function App() {
       const txHash = await sendNativeTokenOnChain(transferTo.trim() as Address, transferAmount);
       setLastTxHash(txHash);
       setStatus(`${t.transferSuccess}${shortHash(txHash)}`);
+      const balances = await getWalletBalances().catch(() => null);
+      if (balances) {
+        setBnbBalance(balances.bnb);
+        setSuperBalance(balances.super);
+        setUsdtBalance(balances.usdt);
+      }
     } catch (error) {
       const message = toFriendlyErrorMessage(error);
       if (isInsufficientBnbError(message)) {
@@ -1993,7 +2127,7 @@ export default function App() {
             <HomeTab
               displayId={displayId}
               expireDate={expireDate}
-              walletAddress={walletAddress}
+              walletAddress={serverWalletAddress}
               shortAddress={shortAddress}
               onlineState={onlineState}
               identityReady={identityReady}
@@ -2045,6 +2179,8 @@ export default function App() {
               swapAmount={swapAmount}
               setSwapAmount={setSwapAmount}
               swapPriceText={swapPriceText}
+              swapSubmitDisabled={swapSubmitDisabled}
+              swapBlockedReason={swapBlockedReason}
               estimatedUsdt={estimatedUsdt}
               feeUsdt={feeUsdt}
               minReceiveUsdt={minReceiveUsdt}
@@ -2067,7 +2203,7 @@ export default function App() {
           {activeTab === 'device' && (
             <DeviceTab
               onlineState={onlineState}
-              deviceId={deviceId}
+              deviceId={serverDeviceId}
               hashrateDisplay={`${deviceHashrate} H/s`}
               isBusy={isBusy}
               identityReady={identityReady}
@@ -2082,7 +2218,7 @@ export default function App() {
 
           {activeTab === 'profile' && (
             <ProfileTab
-              walletAddress={walletAddress}
+              walletAddress={serverWalletAddress}
               expireDate={expireDate}
               contractExpired={contractExpired}
               transferTo={transferTo}
@@ -2104,7 +2240,7 @@ export default function App() {
               appVersion={APP_VERSION}
               inviterInfo={userDetails?.parentUserId ? {
                 userId: userDetails.parentUserId,
-                wallet: inviterUser?.wallet ?? null,
+                wallet: inviterWalletFromServer ?? inviterUser?.wallet ?? null,
               } : null}
               referralSummary={referralSummary}
               referralMembers={referralMembers}

@@ -407,14 +407,14 @@ const chain = defineChain({
 const minerContractAddress =
   (import.meta.env.VITE_MINING_POOL_ADDRESS as Address | undefined) ??
   (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined) ??
-  ('0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1' as Address);
+  ('0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54' as Address);
 const swapContractAddress =
   (import.meta.env.VITE_SWAP_ROUTER_ADDRESS as Address | undefined) ??
   (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined) ??
-  ('0x1C094012b17461C26938752549E367011443592f' as Address);
+  ('0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B' as Address);
 const superTokenAddress =
   (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined) ??
-  ('0x24cd69bd4C0137aA836dB9935D37EAe701C81139' as Address);
+  ('0x427cf0ddFA97cf7a10F009810e07D8F935e5ec4e' as Address);
 
 function getWalletClient() {
   if (!window.ethereum) {

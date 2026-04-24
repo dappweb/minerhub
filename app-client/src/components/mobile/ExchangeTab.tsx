@@ -10,6 +10,7 @@ type ExchangeItem = {
   amountUsdt: string;
   mode: string;
   status: string;
+  txHash?: string | null;
   createdAt: string;
 };
 
@@ -17,6 +18,8 @@ export interface ExchangeTabProps {
   swapAmount: string;
   setSwapAmount: (v: string) => void;
   swapPriceText: string;
+  swapSubmitDisabled: boolean;
+  swapBlockedReason: string;
   estimatedUsdt: number;
   feeUsdt: number;
   minReceiveUsdt: number;
@@ -63,6 +66,8 @@ export default function ExchangeTab({
   swapAmount,
   setSwapAmount,
   swapPriceText,
+  swapSubmitDisabled,
+  swapBlockedReason,
   estimatedUsdt,
   feeUsdt,
   minReceiveUsdt,
@@ -120,12 +125,16 @@ export default function ExchangeTab({
         </View>
 
         <TouchableOpacity
-          style={[styles.primarySwapBtn, (isBusy || !identityReady) && s.disabledBtn]}
+          style={[styles.primarySwapBtn, (isBusy || !identityReady || swapSubmitDisabled) && s.disabledBtn]}
           onPress={openSwapConfirm}
-          disabled={isBusy || !identityReady}
+          disabled={isBusy || !identityReady || swapSubmitDisabled}
         >
           <Text style={styles.primarySwapBtnText}>{t.swapButton}</Text>
         </TouchableOpacity>
+
+        {!!swapBlockedReason && (
+          <Text style={styles.swapBlockedReason}>{swapBlockedReason}</Text>
+        )}
 
         {swapTxStage !== 'idle' && (
           <View style={styles.txStageCard}>
@@ -181,6 +190,7 @@ export default function ExchangeTab({
               <Text style={styles.historyItemMeta}>{item.amountSuper} SUPER {'->'} {item.amountUsdt} USDT</Text>
               <Text style={styles.historyItemMeta}>{t.exchangeOrderMode}: {item.mode}</Text>
               <Text style={styles.historyItemMeta}>{t.exchangeOrderStatus}: {item.status}</Text>
+              {!!item.txHash && <Text style={styles.historyItemMeta}>Tx: {item.txHash}</Text>}
               <Text style={styles.historyItemTime}>{t.exchangeOrderCreatedAt}: {item.createdAt}</Text>
             </View>
           ))
@@ -256,6 +266,11 @@ const styles = StyleSheet.create({
     color: '#083344',
     fontSize: 16,
     fontWeight: '800',
+  },
+  swapBlockedReason: {
+    color: '#ffd58a',
+    fontSize: 12,
+    lineHeight: 18,
   },
   txStageCard: {
     marginTop: 6,

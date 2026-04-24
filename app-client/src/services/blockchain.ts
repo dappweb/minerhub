@@ -2,8 +2,8 @@ import type { Address, Hex } from 'viem';
 import { createPublicClient, createWalletClient, defineChain, formatUnits, http, parseUnits } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
-const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '97');
-const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq';
+const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '56');
+const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://bsc-dataseed.binance.org/';
 
 const chain = defineChain({
   id: chainId,
@@ -21,10 +21,10 @@ const chain = defineChain({
 
 const miningPoolAddress =
   (process.env.EXPO_PUBLIC_MINING_POOL_ADDRESS as Address | undefined) ??
-  ('0xd666868D6305978E04a0B3a6bFfB63A5BBcFD8F1' as Address);
+  ('0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54' as Address);
 const swapRouterAddress =
   (process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  ('0x1C094012b17461C26938752549E367011443592f' as Address);
+  ('0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B' as Address);
 const GAS_BUFFER_NUMERATOR = 12n;
 const GAS_BUFFER_DENOMINATOR = 10n;
 
@@ -417,8 +417,10 @@ export async function getBNBBalance(): Promise<string> {
  * Returns balance as a decimal string (e.g., "100.5").
  */
 export async function getSUPERBalance(): Promise<string> {
-  const superTokenAddress = (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined) ??
-    ('0x24cd69bd4C0137aA836dB9935D37EAe701C81139' as Address);
+  const superTokenAddress =
+    (process.env.EXPO_PUBLIC_SUPER_ADDRESS as Address | undefined) ??
+    (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined) ??
+    ('0x427cf0ddFA97cf7a10F009810e07D8F935e5ec4e' as Address);
 
   try {
     const address = await getWalletAddress();
@@ -441,8 +443,10 @@ export async function getSUPERBalance(): Promise<string> {
  * Returns balance as a decimal string (e.g., "50.25").
  */
 export async function getUSDTBalance(): Promise<string> {
-  const usdtTokenAddress = (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined) ??
-    ('0x5f6E59185Fe6b60d9E24c11425920E68805E518C' as Address);
+  const usdtTokenAddress =
+    (process.env.EXPO_PUBLIC_USDT_ADDRESS as Address | undefined) ??
+    (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined) ??
+    ('0x55d398326f99059fF775485246999027B3197955' as Address);
 
   try {
     const address = await getWalletAddress();

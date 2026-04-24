@@ -251,6 +251,7 @@ export type UserDetailsDto = UserDto & {
   nickname?: string | null;
   machineCode?: string | null;
   parentUserId?: string | null;
+  inviterWallet?: string | null;
   contractStartAt?: string | null;
   contractEndAt?: string | null;
   contractTermDays?: number;

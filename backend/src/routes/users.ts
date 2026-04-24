@@ -178,7 +178,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     const user = await env.DB.prepare(
       `SELECT
         u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
-        cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+        cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
         COALESCE(cp.contract_term_days, 1095) AS contract_term_days,
         COALESCE(cp.monthly_card_days, 30) AS monthly_card_days,
         COALESCE(cp.contract_active, 0) AS contract_active,
@@ -191,6 +191,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
         cp.agreement_accepted_at, cp.offline_alerted_at, cp.notes
       FROM users u
       LEFT JOIN customer_profiles cp ON cp.user_id = u.id
+      LEFT JOIN referral_edges re ON re.invitee_user_id = u.id AND re.status = 'active'
       WHERE u.id = ?`
     )
       .bind(userId)

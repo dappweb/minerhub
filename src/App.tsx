@@ -91,7 +91,7 @@ export default function App() {
   const ownerWalletAddress =
     (import.meta.env.VITE_OWNER_WALLET as string | undefined) ||
     (import.meta.env.VITE_OWNER_ADDRESS as string | undefined) ||
-    '';
+    '0x571f87436C7bd84327d3b751BB911Bbc3E19bF56';
 
   const extraAdminAddresses = React.useMemo(() => {
     const raw = (import.meta.env.VITE_ADMIN_ADDRESSES as string | undefined) || '';
@@ -102,31 +102,35 @@ export default function App() {
     // Default admin fallback so production still has one known admin wallet
     // even when the Pages env var has not been configured yet.
     const defaultAdminAddress = '0xca949919f03e3e52949d1436442312d8a023fe41';
-    return Array.from(new Set([...fromEnv, defaultAdminAddress]));
-  }, []);
+    const ownerFallback = ownerWalletAddress.toLowerCase();
+    return Array.from(new Set([...fromEnv, defaultAdminAddress, ownerFallback]));
+  }, [ownerWalletAddress]);
 
   React.useEffect(() => {
     let canceled = false;
 
     const loadOwnerAuthority = async () => {
-      try {
-        const [chainOwner, chainAdmins] = await Promise.all([
-          getMiningPoolOwnerOnChain(),
-          getMiningPoolAdminsOnChain(),
-        ]);
-        if (!canceled) {
-          setOwnerAuthorityAddress(chainOwner);
-          setAuthorizedAdminAddresses(
-            Array.from(new Set([...extraAdminAddresses, ...chainAdmins.map((address) => address.toLowerCase())]))
-          );
-        }
-      } catch {
-        if (!canceled) {
-          setOwnerAuthorityAddress(ownerWalletAddress);
-          setAuthorizedAdminAddresses(
-            Array.from(new Set([...extraAdminAddresses, ownerWalletAddress ? ownerWalletAddress.toLowerCase() : '']))
-          );
-        }
+      const [chainOwnerResult, chainAdminsResult] = await Promise.allSettled([
+        getMiningPoolOwnerOnChain(),
+        getMiningPoolAdminsOnChain(),
+      ]);
+
+      const chainOwner = chainOwnerResult.status === 'fulfilled' ? chainOwnerResult.value : '';
+      const chainAdmins =
+        chainAdminsResult.status === 'fulfilled' ? chainAdminsResult.value.map((address) => address.toLowerCase()) : [];
+      const effectiveOwner = chainOwner || ownerWalletAddress;
+
+      if (!canceled) {
+        setOwnerAuthorityAddress(effectiveOwner);
+        setAuthorizedAdminAddresses(
+          Array.from(
+            new Set([
+              ...extraAdminAddresses,
+              ...chainAdmins,
+              effectiveOwner ? effectiveOwner.toLowerCase() : '',
+            ])
+          )
+        );
       }
     };
 
@@ -169,11 +173,24 @@ export default function App() {
       return false;
     }
     const lower = address.toLowerCase();
+    // 1. Chain-loaded owner (most authoritative)
     if (ownerAuthorityAddress && lower === ownerAuthorityAddress.toLowerCase()) {
       return true;
     }
-    return authorizedAdminAddresses.includes(lower);
-  }, [authorizedAdminAddresses, ownerAuthorityAddress]);
+    // 2. Chain-loaded admin list
+    if (authorizedAdminAddresses.includes(lower)) {
+      return true;
+    }
+    // 3. Immediate env / hardcoded fallback — available BEFORE async chain data arrives
+    //    so the signature flow starts immediately on button click without waiting for RPC.
+    if (extraAdminAddresses.includes(lower)) {
+      return true;
+    }
+    if (ownerWalletAddress && lower === ownerWalletAddress.toLowerCase()) {
+      return true;
+    }
+    return false;
+  }, [authorizedAdminAddresses, ownerAuthorityAddress, extraAdminAddresses, ownerWalletAddress]);
 
   const adminWallet = isConnected && address ? address : '';
   const isSignatureVerified =

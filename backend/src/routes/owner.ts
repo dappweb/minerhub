@@ -1,7 +1,7 @@
 import { getAddress, isAddress } from "ethers";
 import { writeOwnerAudit } from "../lib/audit";
 import { createId, nowIso } from "../lib/id";
-import { isOwnerWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
+import { getPrimaryOwnerWallet, isOwnerWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json, notFound, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
@@ -485,6 +485,50 @@ function safeParse(x: string): unknown {
   try { return JSON.parse(x); } catch { return x; }
 }
 
+// ---- Ownership ----
+
+async function handleOwnershipTransfer(request: Request, env: Env, actorWallet: string): Promise<Response> {
+  const body = await parseJson<{ newOwnerWallet?: string; note?: string }>(request);
+  if (!body?.newOwnerWallet) return badRequest("newOwnerWallet required");
+
+  const nextOwner = normalizeAddr(body.newOwnerWallet);
+  if (!nextOwner) return badRequest("Invalid newOwnerWallet");
+
+  const currentOwner = await getPrimaryOwnerWallet(env);
+  if (!currentOwner) return internalError("Primary owner not configured");
+  if (actorWallet.toLowerCase() !== currentOwner.toLowerCase()) {
+    return unauthorized("Only primary owner can transfer ownership");
+  }
+  if (nextOwner === currentOwner.toLowerCase()) {
+    return badRequest("newOwnerWallet must be different from current owner");
+  }
+
+  const now = nowIso();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO system_settings (key, value, updated_at)
+       VALUES ('owner_address', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`
+    ).bind(nextOwner, now),
+    env.DB.prepare(
+      `INSERT INTO system_settings (key, value, updated_at)
+       VALUES ('owner_address_updated_at', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`
+    ).bind(now, now),
+    env.DB.prepare("UPDATE owner_sessions SET revoked=1 WHERE wallet = ? AND revoked = 0").bind(currentOwner.toLowerCase()),
+  ]);
+
+  await writeOwnerAudit(env, {
+    action: "owner.transfer",
+    actorWallet,
+    targetWallet: nextOwner,
+    payload: { previousOwner: currentOwner.toLowerCase(), note: body.note ?? null },
+    request,
+  });
+
+  return json({ ok: true, previousOwner: currentOwner.toLowerCase(), newOwnerWallet: nextOwner, updatedAt: now });
+}
+
 // ---- Router ----
 
 export async function handleOwner(request: Request, env: Env, pathParts: string[]): Promise<Response> {
@@ -533,6 +577,10 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
 
   if (pathParts[0] === "payouts" && pathParts[1] === "batch" && request.method === "POST") {
     return handlePayoutBatch(request, env, actor);
+  }
+
+  if (pathParts[0] === "ownership" && pathParts[1] === "transfer" && request.method === "POST") {
+    return handleOwnershipTransfer(request, env, actor);
   }
 
   if (pathParts[0] === "audit" && request.method === "GET") return handleAuditList(request, env);

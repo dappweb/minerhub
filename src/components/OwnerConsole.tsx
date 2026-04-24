@@ -135,6 +135,10 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   const [nextAdminAddress, setNextAdminAddress] = useState('');
   const [adminManagerLoading, setAdminManagerLoading] = useState(false);
   const [adminManagerMsg, setAdminManagerMsg] = useState('');
+  const [transferOwnerWallet, setTransferOwnerWallet] = useState('');
+  const [transferOwnerNote, setTransferOwnerNote] = useState('');
+  const [transferOwnerLoading, setTransferOwnerLoading] = useState(false);
+  const [transferOwnerMsg, setTransferOwnerMsg] = useState('');
   const loadOverview = useCallback(async () => {
     try { setLoadingOverview(true); setOverview(await authedFetch<OverviewData>('/api/owner/overview')); }
     catch (e) { console.error(e); }
@@ -188,6 +192,33 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       setAdminManagerLoading(false);
     }
   }, [loadAdminAccess]);
+
+  const runTransferOwner = useCallback(async () => {
+    const candidate = transferOwnerWallet.trim();
+    if (!isAddress(candidate)) {
+      setTransferOwnerMsg('请输入有效的新 owner 钱包地址');
+      return;
+    }
+
+    setTransferOwnerLoading(true);
+    setTransferOwnerMsg('');
+    try {
+      const result = await authedFetch<{ previousOwner: string; newOwnerWallet: string }>(
+        '/api/owner/ownership/transfer',
+        {
+          method: 'POST',
+          body: JSON.stringify({ newOwnerWallet: candidate, note: transferOwnerNote.trim() || undefined }),
+        },
+        true
+      );
+      setTransferOwnerMsg(`owner 已转让: ${result.previousOwner} -> ${result.newOwnerWallet}，当前会话将退出`);
+      logout();
+    } catch (e) {
+      setTransferOwnerMsg(e instanceof Error ? e.message : 'owner 转让失败');
+    } finally {
+      setTransferOwnerLoading(false);
+    }
+  }, [authedFetch, logout, transferOwnerNote, transferOwnerWallet]);
 
   // --- Token ops ---
   const [mintTo, setMintTo] = useState('');
@@ -490,6 +521,32 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
               </table>
             </div>
             <p className="mt-3 text-xs text-slate-500">链上管理员会同步写入 MiningPool、SUPER、SwapRouter。Owner 账户保留为永久管理员，不能移除。</p>
+          </Card>
+
+          <Card title="Owner 转让">
+            <p className="text-xs text-slate-400">仅当前主 owner 可转让。转让成功后，旧 owner 会话会自动失效，需要新 owner 重新登录。</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                className={inputCls}
+                placeholder="新 owner 钱包地址 0x..."
+                value={transferOwnerWallet}
+                onChange={(e) => setTransferOwnerWallet(e.target.value)}
+              />
+              <input
+                className={inputCls}
+                placeholder="备注（可选）"
+                value={transferOwnerNote}
+                onChange={(e) => setTransferOwnerNote(e.target.value)}
+              />
+              <button
+                onClick={runTransferOwner}
+                disabled={transferOwnerLoading || !transferOwnerWallet.trim()}
+                className={btnCls}
+              >
+                {transferOwnerLoading ? '处理中...' : '确认转让 Owner'}
+              </button>
+            </div>
+            {transferOwnerMsg && <p className="mt-3 text-xs text-amber-300 break-all">{transferOwnerMsg}</p>}
           </Card>
         </div>
       )}

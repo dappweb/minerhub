@@ -17,7 +17,6 @@ function secretKey(env: Env): Uint8Array {
 function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): boolean {
   if (!wallet) return false;
   const w = wallet.toLowerCase();
-  if (env.OWNER_ADDRESS && w === env.OWNER_ADDRESS.toLowerCase()) return true;
   if (w === DEFAULT_ADMIN_WALLET) return true;
   if (env.ADMIN_ADDRESSES) {
     for (const entry of env.ADMIN_ADDRESSES.split(",")) {
@@ -28,9 +27,23 @@ function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): b
   return false;
 }
 
+export async function getPrimaryOwnerWallet(env: Env): Promise<string | null> {
+  const fallback = env.OWNER_ADDRESS ? env.OWNER_ADDRESS.toLowerCase() : null;
+  try {
+    const row = await env.DB.prepare("SELECT value FROM system_settings WHERE key='owner_address' LIMIT 1").first<{ value: string }>();
+    const value = row?.value?.trim().toLowerCase();
+    return value || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function isOwnerWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
   if (!wallet) return false;
-  if (isConfiguredAdminWallet(env, wallet)) return true;
+  const w = wallet.toLowerCase();
+  const primaryOwner = await getPrimaryOwnerWallet(env);
+  if (primaryOwner && w === primaryOwner) return true;
+  if (isConfiguredAdminWallet(env, w)) return true;
   if (!env.RPC_URL || !env.MINING_POOL_ADDRESS) return false;
 
   try {
