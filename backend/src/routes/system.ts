@@ -222,24 +222,40 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     }
   }
 
-  const stringFields: Array<[string, string]> = [
-    ["maintenanceMessageZh", "maintenance_message_zh"],
-    ["maintenanceMessageEn", "maintenance_message_en"],
+  // Fields that must always carry a non-empty value (numeric-as-string etc.).
+  const nonEmptyStringFields: Array<[string, string]> = [
     ["rewardRateUsdtPerHour", "reward_rate_usdt_per_hour"],
     ["swapPriceSuperPerUsdt", "swap_price_super_per_usdt"],
     ["userAgreementVersion", "user_agreement_version"],
-    ["userAgreementTitleZh", "user_agreement_title_zh"],
-    ["userAgreementTitleEn", "user_agreement_title_en"],
-    ["userAgreementContentZh", "user_agreement_content_zh"],
-    ["userAgreementContentEn", "user_agreement_content_en"],
   ];
-  for (const [sourceKey, targetKey] of stringFields) {
+  for (const [sourceKey, targetKey] of nonEmptyStringFields) {
+    if (!(sourceKey in body)) continue;
     const value = body[sourceKey];
     if (typeof value === "string" && value.trim()) {
       updates.push([targetKey, value.trim()]);
     } else if (typeof value === "number" && Number.isFinite(value)) {
       updates.push([targetKey, String(value)]);
+    } else {
+      return badRequest(`Field ${sourceKey} must be a non-empty string or finite number`);
     }
+  }
+
+  // Fields that may be cleared by the admin (set to empty string).
+  const textFields: Array<[string, string]> = [
+    ["maintenanceMessageZh", "maintenance_message_zh"],
+    ["maintenanceMessageEn", "maintenance_message_en"],
+    ["userAgreementTitleZh", "user_agreement_title_zh"],
+    ["userAgreementTitleEn", "user_agreement_title_en"],
+    ["userAgreementContentZh", "user_agreement_content_zh"],
+    ["userAgreementContentEn", "user_agreement_content_en"],
+  ];
+  for (const [sourceKey, targetKey] of textFields) {
+    if (!(sourceKey in body)) continue;
+    const value = body[sourceKey];
+    if (typeof value !== "string") {
+      return badRequest(`Field ${sourceKey} must be a string`);
+    }
+    updates.push([targetKey, value.trim()]);
   }
 
   const numericFields: Array<[string, string, number]> = [

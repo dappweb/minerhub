@@ -136,8 +136,11 @@ async function ensureAnnouncementsSchema(env: Env): Promise<void> {
 }
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
-  const wallet = request.headers.get("x-wallet");
-  if (!(await isOwnerWallet(env, wallet))) {
+  const auth = await extractAndVerifyAuth(request, env);
+  if (!auth.valid) {
+    return unauthorized(auth.error || "Signature verification failed");
+  }
+  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
     return unauthorized("Owner wallet required");
   }
   return null;

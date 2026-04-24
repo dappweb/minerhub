@@ -1,6 +1,6 @@
 import { Activity, CheckCircle2, Eye, EyeOff, LayoutDashboard, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
   addSwapLiquidityOnChain,
@@ -411,6 +411,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [devices, setDevices] = useState<AdminDeviceItem[]>([]);
   const [devicesLoading, setDevicesLoading] = useState<boolean>(false);
   const [deviceSearch, setDeviceSearch] = useState<string>('');
+  const deviceSearchRef = useRef<string>('');
+  useEffect(() => {
+    deviceSearchRef.current = deviceSearch;
+  }, [deviceSearch]);
   const [deviceStatusFilter, setDeviceStatusFilter] = useState<'all' | 'online' | 'offline' | 'active' | 'inactive' | 'contract_active' | 'contract_expired'>('all');
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(() => new Set());
   const [bulkDeviceRate, setBulkDeviceRate] = useState<string>('0.084');
@@ -482,14 +486,29 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendLoading(true);
 
       const announcementsPath = `/api/announcements/admin${announcementFilter === 'all' ? '' : `?status=${announcementFilter}`}`;
+      const warnings: string[] = [];
       const announcementsPromise = ownerReadRequest<{ items: AnnouncementItem[] }>(announcementsPath)
-        .catch(() => ({ items: [] }));
+        .catch((err: unknown) => {
+          warnings.push(`公告列表同步失败: ${err instanceof Error ? err.message : String(err)}`);
+          return { items: [] as AnnouncementItem[] };
+        });
+
+      const statusPromise = fetch(`${apiBaseUrl}/api/system/status`)
+        .then(async (response) => {
+          if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            warnings.push(`系统状态同步失败(${response.status}) ${text || ''}`.trim());
+            return null;
+          }
+          return (await response.json()) as SystemStatus;
+        })
+        .catch((err: unknown) => {
+          warnings.push(`系统状态同步失败: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        });
 
       const [statusResponse, customersResponse, announcementsResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/system/status`).then(async (response) => {
-          if (!response.ok) return null;
-          return (await response.json()) as SystemStatus;
-        }).catch(() => null),
+        statusPromise,
         ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>('/api/admin/customers'),
         announcementsPromise,
       ]);
@@ -498,6 +517,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setCustomers(customersResponse.items ?? []);
       setAdminSummary(customersResponse.admin ?? null);
       setAnnouncements(announcementsResponse.items ?? []);
+      if (warnings.length > 0) {
+        setBackendError(warnings.join('；'));
+      }
     } catch (loadError) {
       setBackendError(loadError instanceof Error ? loadError.message : '读取后台数据失败');
     } finally {
@@ -530,7 +552,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     try {
       setDevicesLoading(true);
       const query = new URLSearchParams();
-      if (deviceSearch.trim()) query.set('search', deviceSearch.trim());
+      const searchValue = deviceSearchRef.current.trim();
+      if (searchValue) query.set('search', searchValue);
       if (deviceStatusFilter !== 'all') query.set('status', deviceStatusFilter);
       query.set('limit', '200');
       const path = `/api/admin/devices${query.toString() ? `?${query.toString()}` : ''}`;
@@ -549,7 +572,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setDevicesLoading(false);
     }
-  }, [adminWallet, deviceSearch, deviceStatusFilter, ownerReadRequest]);
+  }, [adminWallet, deviceStatusFilter, ownerReadRequest]);
 
   const toggleDeviceSelection = useCallback((deviceId: string) => {
     setSelectedDeviceIds((prev) => {
@@ -617,6 +640,17 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       };
       const updated = await signedRequest<AdminDeviceDetail>(`/api/admin/devices/${deviceDetail.id}`, 'PATCH', payload);
       setDeviceDetail(updated);
+      setDeviceDetailForm({
+        hashrate: String(updated.hashrate ?? 0),
+        deviceStatus: updated.deviceStatus ?? 'active',
+        nickname: updated.nickname ?? '',
+        machineCode: updated.machineCode ?? '',
+        notes: updated.notes ?? '',
+        monthlyCardDays: String(updated.monthlyCardDays ?? 30),
+        rewardRateUsdtPerHour: updated.rewardRateUsdtPerHour ?? '0.084',
+        contractActive: updated.contractActive === 1,
+        contractEndAt: formatDateTimeLocalInput(updated.contractEndAt),
+      });
       await loadDevices();
       await loadBackendData();
     } catch (saveError) {
@@ -2410,7 +2444,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     <input
                       value={deviceSearch}
                       onChange={(e) => setDeviceSearch(e.target.value)}
-                      placeholder="搜索设备ID / 钱包 / 昵称"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void loadDevices();
+                      }}
+                      placeholder="搜索设备ID / 钱包 / 昵称（回车或点应用筛选）"
                       className="h-9 rounded border border-slate-700 bg-slate-900 px-3 text-slate-100 outline-none focus:border-sky-400"
                     />
                     <select
