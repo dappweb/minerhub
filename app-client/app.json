@@ -3,7 +3,7 @@
     "name": "Coin Planet — SUPER on BSC",
     "slug": "-coin-planet",
     "scheme": "coinplanet",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "platforms": [

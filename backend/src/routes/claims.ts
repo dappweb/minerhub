@@ -272,59 +272,13 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
   }
 
   if (request.method === "POST" && pathParts.length === 0) {
-    if (await isMaintenanceEnabled(env)) {
-      return json({ error: "System is under maintenance" }, 503);
-    }
-
-    // 验证签名
-    const authResult = await extractAndVerifyAuth(request, env);
-    if (!authResult.valid) {
-      return unauthorized(authResult.error || "Signature verification failed");
-    }
-
-    const body = (await request.json().catch(() => null)) as { userId?: string; amount?: string; wallet?: string } | null;
-    if (!body?.userId || !body.amount) return badRequest("userId and amount are required");
-
-    // 验证用户钱包一致性
-    if (body.wallet && body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
-      return badRequest("Wallet mismatch");
-    }
-
-    await ensureCustomerProfile(env, body.userId);
-    const profile = await env.DB.prepare(
-      "SELECT contract_active, contract_end_at, total_reward_usdt, total_reward_super FROM customer_profiles WHERE user_id = ?"
-    )
-      .bind(body.userId)
-      .first<{ contract_active: number; contract_end_at: string | null; total_reward_usdt: string; total_reward_super: string }>();
-
-    if (!profile || Number(profile.contract_active ?? 0) !== 1) {
-      return badRequest("Contract is not active");
-    }
-
-    if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < Date.now()) {
-      return badRequest("Contract has expired");
-    }
-
-    const claimAmount = Number(body.amount);
-    if (!Number.isFinite(claimAmount) || claimAmount <= 0) {
-      return badRequest("amount must be a positive number");
-    }
-
-    const id = createId("clm");
-    const now = nowIso();
-
-    await env.DB.prepare(
-      "INSERT INTO claims (id, user_id, amount, status, tx_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    )
-      .bind(id, body.userId, body.amount, "pending", null, now, now)
-      .run();
-
-    const nextTotal = (Number(profile.total_reward_usdt ?? "0") + claimAmount).toFixed(6);
-    await env.DB.prepare("UPDATE customer_profiles SET total_reward_usdt = ?, updated_at = ? WHERE user_id = ?")
-      .bind(nextTotal, now, body.userId)
-      .run();
-
-    return json({ id, userId: body.userId, amount: body.amount, status: "pending", createdAt: now }, 201);
+    // 已废弃：旧版 /api/claims 会错误地把 amount 累加到 total_reward_usdt，
+    // 现行流程请使用 /api/claims/reward-withdraw（SUPER 提现）或
+    // /api/claims/exchange-request（SUPER→USDT 兑换）。
+    return json({
+      error: "Deprecated endpoint. Use /api/claims/reward-withdraw or /api/claims/exchange-request instead.",
+      code: "CLAIMS_LEGACY_DEPRECATED",
+    }, 410);
   }
 
   if (request.method === "GET" && pathParts.length === 1) {

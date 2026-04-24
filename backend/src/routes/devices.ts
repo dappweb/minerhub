@@ -1,6 +1,5 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
-import { hasActiveLock } from "../lib/locks";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { getRewardRateUsdtPerHour, isMaintenanceEnabled, readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
@@ -41,9 +40,11 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
     .bind(userId)
     .first<{ contract_active: number; contract_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
 
+  // 收益累计仅依赖"合约态"：contract_active=1 且未到期。
+  // token_locks 只管 SUPER 代币锁仓/释放，不再作为心跳收益的前置条件，
+  // 以避免后台手动激活（未下发 SUPER）的客户静默失败。
   if (!profile || Number(profile.contract_active ?? 0) !== 1) return;
   if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < Date.now()) return;
-  if (!(await hasActiveLock(env, userId))) return;
 
   const lastAt = new Date(device.updated_at).getTime();
   const now = Date.now();
