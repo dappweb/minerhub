@@ -416,8 +416,11 @@ async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDevic
   const params: Array<string | number> = [];
 
   if (search) {
-    clauses.push("(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ?)");
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    clauses.push(
+      "(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ? OR LOWER(COALESCE(cp.machine_code, '')) LIKE ? OR LOWER(d.id) LIKE ?)"
+    );
+    const like = `%${search}%`;
+    params.push(like, like, like, like, like);
   }
 
   if (status === "online") {
