@@ -235,6 +235,39 @@ type AdminWalletSummary = {
   superBalance: string | null;
 };
 
+type AdminAlertItem = {
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  machineCode: string | null;
+  contractActive: number;
+  contractEndAt: string | null;
+  lastSeenAt: string | null;
+  onlineStatus: 'offline' | 'stale';
+  offlineSeconds: number;
+  offlineAlertedAt: string | null;
+  deviceCount: number;
+  activeDeviceCount: number;
+};
+
+type AdminAlertResponse = {
+  items: AdminAlertItem[];
+  counts: { total: number; stale: number; offline: number };
+  thresholds: { onlineMs: number; staleMs: number };
+  generatedAt: string;
+};
+
+function formatOfflineDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '未知';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}时${minutes % 60}分`;
+  const days = Math.floor(hours / 24);
+  return `${days}天${hours % 24}时`;
+}
+
 type RechargeRecord = {
   id: string;
   userId: string | null;
@@ -362,6 +395,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [adminSummary, setAdminSummary] = useState<AdminWalletSummary | null>(null);
+  const [adminAlerts, setAdminAlerts] = useState<AdminAlertResponse | null>(null);
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [withdrawalRecords, setWithdrawalRecords] = useState<WithdrawalRecord[]>([]);
   const [exchangeRecords, setExchangeRecords] = useState<ExchangeRecord[]>([]);
@@ -507,16 +541,21 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           return null;
         });
 
-      const [statusResponse, customersResponse, announcementsResponse] = await Promise.all([
+      const [statusResponse, customersResponse, announcementsResponse, alertsResponse] = await Promise.all([
         statusPromise,
         ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>('/api/admin/customers'),
         announcementsPromise,
+        ownerReadRequest<AdminAlertResponse>('/api/admin/alerts').catch((err: unknown) => {
+          warnings.push(`掉线告警同步失败: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        }),
       ]);
 
       setSystemStatus(statusResponse);
       setCustomers(customersResponse.items ?? []);
       setAdminSummary(customersResponse.admin ?? null);
       setAnnouncements(announcementsResponse.items ?? []);
+      setAdminAlerts(alertsResponse);
       if (warnings.length > 0) {
         setBackendError(warnings.join('；'));
       }
@@ -800,9 +839,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   useEffect(() => {
     void loadBackendData();
+    // Refresh backend snapshot + offline alerts frequently so admins see
+    // device dropout within ~1 heartbeat interval.
     const timer = window.setInterval(() => {
       void loadBackendData();
-    }, 30000);
+    }, 15000);
 
     return () => {
       window.clearInterval(timer);
@@ -1777,6 +1818,70 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </div>
             )}
 
+            {adminAlerts && adminAlerts.items.length > 0 && (
+              <div className="mb-6 rounded-2xl border border-red-500/60 bg-red-500/10 p-4 animate-pulse-slow">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2 text-red-200 font-semibold">
+                    <AlertTriangle size={18} className="text-red-400" />
+                    设备掉线告警（{adminAlerts.counts.total}）
+                    <span className="text-xs font-normal text-red-300/80">
+                      离线 {adminAlerts.counts.offline} · 延迟 {adminAlerts.counts.stale}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSection('customers')}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/40 text-xs text-red-100 hover:bg-red-500/30"
+                    >
+                      前往客户列表处理
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void loadBackendData()}
+                      className="px-3 py-1.5 rounded-lg border border-red-500/40 text-xs text-red-200 hover:bg-red-500/20"
+                    >
+                      立即刷新
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {adminAlerts.items.slice(0, 10).map((alert) => (
+                    <div
+                      key={alert.userId}
+                      className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${
+                        alert.onlineStatus === 'offline'
+                          ? 'border-red-500/50 bg-red-500/15 text-red-100'
+                          : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`inline-block h-2 w-2 rounded-full ${alert.onlineStatus === 'offline' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                        <span className="font-mono truncate">
+                          {alert.nickname ? `${alert.nickname} · ` : ''}{shortWallet(alert.wallet)}
+                        </span>
+                        {alert.machineCode && <span className="text-slate-300/70 truncate">[{alert.machineCode}]</span>}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px]">
+                        <span>
+                          {alert.onlineStatus === 'offline' ? '已离线' : '心跳延迟'} {alert.lastSeenAt ? formatOfflineDuration(alert.offlineSeconds) : '未上报'}
+                        </span>
+                        <span className="text-slate-300/70">设备 {alert.activeDeviceCount}/{alert.deviceCount}</span>
+                        <span className="text-slate-300/70">
+                          {alert.lastSeenAt ? `最后心跳 ${new Date(alert.lastSeenAt).toLocaleTimeString('zh-CN')}` : '无心跳'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {adminAlerts.items.length > 10 && (
+                    <div className="text-[11px] text-red-200/80 text-center pt-1">
+                      还有 {adminAlerts.items.length - 10} 条告警，点击「前往客户列表处理」查看全部
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {section === 'system' && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
               <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
@@ -2363,8 +2468,12 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       {visibleCustomers.map((entry) => {
                         const { customer, remainDays, expiring, expired, priority, actionLabel, reasons, score } = entry;
                         const checked = selectedCustomerIds.has(customer.id);
+                        const isOfflineAlert = customer.contractActive === 1 && customer.onlineStatus !== 'online';
+                        const rowClass = isOfflineAlert
+                          ? 'bg-red-500/10 hover:bg-red-500/20 border-l-2 border-red-500'
+                          : 'hover:bg-slate-800/40';
                         return (
-                          <tr key={customer.id} className="hover:bg-slate-800/40">
+                          <tr key={customer.id} className={rowClass}>
                             <td className="px-2 py-2">
                               <input
                                 type="checkbox"
@@ -2384,7 +2493,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                 : '未激活'}
                             </td>
                             <td className="px-3 py-2 text-slate-300">{customer.contractActive ? '有效' : '停用'}</td>
-                            <td className="px-3 py-2 text-slate-300">{customer.onlineStatus}</td>
+                            <td className={`px-3 py-2 font-medium ${customer.onlineStatus === 'online' ? 'text-emerald-300' : customer.onlineStatus === 'stale' ? 'text-amber-300' : 'text-red-300'}`}>
+                              {customer.onlineStatus === 'online' ? '在线' : customer.onlineStatus === 'stale' ? '延迟' : '离线'}
+                            </td>
                             <td className="px-3 py-2 text-slate-300">{customer.activeDeviceCount}/{customer.deviceCount}</td>
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.bnbBalance, 6)}</td>
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.usdtBalance, 4)}</td>
@@ -2563,8 +2674,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                           <tr>
                             <td colSpan={10} className="px-3 py-4 text-slate-500">暂无设备数据</td>
                           </tr>
-                        ) : devices.map((device) => (
-                          <tr key={device.id} className="hover:bg-slate-800/40">
+                        ) : devices.map((device) => {
+                          const deviceOfflineAlert = device.contractActive === 1 && device.onlineStatus !== 'online';
+                          const deviceRowClass = deviceOfflineAlert
+                            ? 'bg-red-500/10 hover:bg-red-500/20 border-l-2 border-red-500'
+                            : 'hover:bg-slate-800/40';
+                          return (
+                          <tr key={device.id} className={deviceRowClass}>
                             <td className="px-2 py-2">
                               <input
                                 type="checkbox"
@@ -2575,7 +2691,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             </td>
                             <td className="px-3 py-2 font-mono text-slate-200">{device.deviceId}</td>
                             <td className="px-3 py-2 font-mono text-slate-300">{device.wallet.slice(0, 10)}...{device.wallet.slice(-6)}</td>
-                            <td className={`px-3 py-2 ${device.onlineStatus === 'online' ? 'text-emerald-300' : 'text-slate-400'}`}>{device.onlineStatus}</td>
+                            <td className={`px-3 py-2 font-medium ${device.onlineStatus === 'online' ? 'text-emerald-300' : device.onlineStatus === 'stale' ? 'text-amber-300' : 'text-red-300'}`}>
+                              {device.onlineStatus === 'online' ? '在线' : device.onlineStatus === 'stale' ? '延迟' : '离线'}
+                            </td>
                             <td className="px-3 py-2 text-slate-300">{device.hashrate}</td>
                             <td className="px-3 py-2 text-slate-300">{device.deviceStatus}</td>
                             <td className="px-3 py-2 text-slate-400">{device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('zh-CN') : '--'}</td>
@@ -2591,7 +2709,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

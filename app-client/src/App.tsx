@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    AppState,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  AppState,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -25,40 +25,40 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-    acceptUserAgreement,
-    bindReferral,
-    createExchangeRequest,
-    createUser,
-    getAnnouncements,
-    getExchangeRequests,
-    getGasWalletBalance,
-    getReferralMembers,
-    getReferralSummary,
-    getSystemStatus,
-    getUser,
-    getUserByWallet,
-    getUserDetails,
-    isExchangeOrderPendingStatus,
-    markAnnouncementRead as markAnnouncementReadApi,
-    registerDevice,
-    reportDeviceHeartbeat,
-    type AnnouncementDto,
-    type ExchangeRequestDto,
-    type ReferralMemberDto,
-    type ReferralSummaryDto
+  acceptUserAgreement,
+  bindReferral,
+  createExchangeRequest,
+  createUser,
+  getAnnouncements,
+  getExchangeRequests,
+  getGasWalletBalance,
+  getReferralMembers,
+  getReferralSummary,
+  getSystemStatus,
+  getUser,
+  getUserByWallet,
+  getUserDetails,
+  isExchangeOrderPendingStatus,
+  markAnnouncementRead as markAnnouncementReadApi,
+  registerDevice,
+  reportDeviceHeartbeat,
+  type AnnouncementDto,
+  type ExchangeRequestDto,
+  type ReferralMemberDto,
+  type ReferralSummaryDto
 } from './services/api';
 import {
-    claimRewardOnChain,
-    getSwapPriceOnChain,
-    getWalletAddress,
-    getWalletBalances,
-    registerMinerOnChain,
-    sendNativeTokenOnChain,
+  claimRewardOnChain,
+  getSwapPriceOnChain,
+  getWalletAddress,
+  getWalletBalances,
+  registerMinerOnChain,
+  sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-    exportWalletPrivateKey,
-    importWalletPrivateKey
+  exportWalletPrivateKey,
+  importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -1538,25 +1538,43 @@ export default function App() {
   useEffect(() => {
     if (!walletAddress || !userId || !deviceId) return;
 
+    let active = true;
     const sendHeartbeat = async () => {
-      await reportDeviceHeartbeat({
-        deviceId,
-        userId,
-        wallet: walletAddress,
-        status: 'active',
-        hashrate: deviceHashrate,
-      });
-      const details = await getUserDetails(userId);
-      setUserDetails(details);
+      if (!active) return;
+      try {
+        await reportDeviceHeartbeat({
+          deviceId,
+          userId,
+          wallet: walletAddress,
+          status: 'active',
+          hashrate: deviceHashrate,
+        });
+        const details = await getUserDetails(userId);
+        if (!active) return;
+        setUserDetails(details);
+      } catch {
+        // Heartbeat failures are surfaced via server offline detection; swallow here.
+      }
     };
 
     void sendHeartbeat();
+    // Shorten heartbeat to 30s so the admin dashboard detects offline devices promptly.
     const timer = setInterval(() => {
       void sendHeartbeat();
-    }, 60_000);
+    }, 30_000);
+
+    // Re-send immediately when the app returns to the foreground so a
+    // sleeping device is flagged online without waiting a full interval.
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void sendHeartbeat();
+      }
+    });
 
     return () => {
+      active = false;
       clearInterval(timer);
+      appStateSub.remove();
     };
   }, [walletAddress, userId, deviceId, deviceHashrate]);
 

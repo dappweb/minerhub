@@ -120,6 +120,22 @@ type AdminDeviceDetail = AdminDeviceItem & {
   }>;
 };
 
+// Heartbeat-driven live status. The `online_status` column is only refreshed by
+// scheduled tasks / heartbeat handlers; to react immediately we derive it from
+// the freshness of `last_seen_at` on every admin read.
+const HEARTBEAT_ONLINE_MS = 90_000; // within 1.5× the client heartbeat (30s)
+const HEARTBEAT_STALE_MS = 5 * 60_000;
+
+export function deriveLiveOnlineStatus(lastSeenAt: string | null | undefined): "online" | "stale" | "offline" {
+  if (!lastSeenAt) return "offline";
+  const ts = new Date(lastSeenAt).getTime();
+  if (Number.isNaN(ts)) return "offline";
+  const diff = Date.now() - ts;
+  if (diff <= HEARTBEAT_ONLINE_MS) return "online";
+  if (diff <= HEARTBEAT_STALE_MS) return "stale";
+  return "offline";
+}
+
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
   const auth = await extractAndVerifyAuth(request, env);
   if (!auth.valid) {
@@ -210,6 +226,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     deviceCount: Number((row as { deviceCount?: number }).deviceCount ?? 0),
     activeDeviceCount: Number((row as { activeDeviceCount?: number }).activeDeviceCount ?? 0),
     subAccountCount: Number((row as { subAccountCount?: number }).subAccountCount ?? 0),
+    onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
     bnbBalance: null,
     usdtBalance: null,
     superBalance: null,
@@ -338,9 +355,7 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
     .first<{ device_count: number; active_device_count: number }>();
 
   const lastSeenRaw = (customer as { lastSeenAt?: string | null }).lastSeenAt ?? null;
-  const lastSeenAt = lastSeenRaw ? new Date(lastSeenRaw) : null;
-  const offlineThresholdMs = 15 * 60 * 1000;
-  const isOffline = !lastSeenAt || Number.isNaN(lastSeenAt.getTime()) || Date.now() - lastSeenAt.getTime() > offlineThresholdMs;
+  const liveStatus = deriveLiveOnlineStatus(lastSeenRaw);
 
   return {
     ...customer,
@@ -375,7 +390,7 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
       updatedAt: row.updated_at,
     })),
     lastSeenAt: lastSeenRaw,
-    onlineStatus: isOffline ? "offline" : "online",
+    onlineStatus: liveStatus,
   } as CustomerDetail;
 }
 
@@ -476,6 +491,7 @@ async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDevic
     hashrate: Number((row as { hashrate?: number }).hashrate ?? 0),
     contractActive: Number((row as { contractActive?: number }).contractActive ?? 0),
     monthlyCardDays: Number((row as { monthlyCardDays?: number }).monthlyCardDays ?? 30),
+    onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
     bnbBalance: null,
     usdtBalance: null,
     superBalance: null,
@@ -578,6 +594,7 @@ async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<A
     hashrate: Number((item as { hashrate?: number }).hashrate ?? 0),
     contractActive: Number((item as { contractActive?: number }).contractActive ?? 0),
     monthlyCardDays: Number((item as { monthlyCardDays?: number }).monthlyCardDays ?? 30),
+    onlineStatus: deriveLiveOnlineStatus((item as { lastSeenAt?: string | null }).lastSeenAt ?? null),
     bnbBalance: balances.bnb,
     usdtBalance: balances.usdt,
     superBalance: balances.super,
@@ -1285,6 +1302,102 @@ async function handleContractExtend(request: Request, env: Env, userId: string):
   return json({ ok: true, contractEndAt: newEnd, extendedDays: days, mode: body?.mode ?? "custom" });
 }
 
+type AdminAlertItem = {
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  machineCode: string | null;
+  contractActive: number;
+  contractEndAt: string | null;
+  lastSeenAt: string | null;
+  onlineStatus: "offline" | "stale";
+  offlineSeconds: number;
+  offlineAlertedAt: string | null;
+  deviceCount: number;
+  activeDeviceCount: number;
+};
+
+async function handleAdminAlerts(env: Env): Promise<Response> {
+  // Return customers whose heartbeat stopped while their contract is still active.
+  // Uses a broad SQL pre-filter (older than online threshold) and then classifies
+  // offline vs stale via the shared derivation to keep a single source of truth.
+  const onlineCutoff = new Date(Date.now() - HEARTBEAT_ONLINE_MS).toISOString();
+
+  const { results } = await env.DB.prepare(
+    `SELECT
+      u.id AS userId,
+      u.wallet AS wallet,
+      cp.nickname AS nickname,
+      cp.machine_code AS machineCode,
+      COALESCE(cp.contract_active, 0) AS contractActive,
+      cp.contract_end_at AS contractEndAt,
+      cp.last_seen_at AS lastSeenAt,
+      cp.offline_alerted_at AS offlineAlertedAt,
+      COUNT(DISTINCT d.id) AS deviceCount,
+      SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount
+    FROM users u
+    INNER JOIN customer_profiles cp ON cp.user_id = u.id
+    LEFT JOIN devices d ON d.user_id = u.id
+    WHERE COALESCE(cp.contract_active, 0) = 1
+      AND (cp.last_seen_at IS NULL OR cp.last_seen_at < ?)
+    GROUP BY u.id, u.wallet, cp.nickname, cp.machine_code, cp.contract_active,
+             cp.contract_end_at, cp.last_seen_at, cp.offline_alerted_at
+    ORDER BY (CASE WHEN cp.last_seen_at IS NULL THEN 0 ELSE 1 END) ASC, cp.last_seen_at ASC`
+  )
+    .bind(onlineCutoff)
+    .all<{
+      userId: string;
+      wallet: string;
+      nickname: string | null;
+      machineCode: string | null;
+      contractActive: number;
+      contractEndAt: string | null;
+      lastSeenAt: string | null;
+      offlineAlertedAt: string | null;
+      deviceCount: number;
+      activeDeviceCount: number;
+    }>();
+
+  const now = Date.now();
+  const items: AdminAlertItem[] = [];
+  for (const row of results ?? []) {
+    const status = deriveLiveOnlineStatus(row.lastSeenAt);
+    if (status === "online") continue;
+    const seenMs = row.lastSeenAt ? new Date(row.lastSeenAt).getTime() : 0;
+    const offlineSeconds = row.lastSeenAt && !Number.isNaN(seenMs)
+      ? Math.max(0, Math.floor((now - seenMs) / 1000))
+      : -1;
+    items.push({
+      userId: row.userId,
+      wallet: row.wallet,
+      nickname: row.nickname,
+      machineCode: row.machineCode,
+      contractActive: Number(row.contractActive ?? 0),
+      contractEndAt: row.contractEndAt,
+      lastSeenAt: row.lastSeenAt,
+      onlineStatus: status,
+      offlineSeconds,
+      offlineAlertedAt: row.offlineAlertedAt,
+      deviceCount: Number(row.deviceCount ?? 0),
+      activeDeviceCount: Number(row.activeDeviceCount ?? 0),
+    });
+  }
+
+  return json({
+    items,
+    counts: {
+      total: items.length,
+      stale: items.filter((item) => item.onlineStatus === "stale").length,
+      offline: items.filter((item) => item.onlineStatus === "offline").length,
+    },
+    thresholds: {
+      onlineMs: HEARTBEAT_ONLINE_MS,
+      staleMs: HEARTBEAT_STALE_MS,
+    },
+    generatedAt: nowIso(),
+  });
+}
+
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   const ownerCheck = request.method === "GET"
     ? await requireOwnerRead(request, env)
@@ -1293,6 +1406,10 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
     return handleCustomerList(request, env);
+  }
+
+  if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "alerts") {
+    return handleAdminAlerts(env);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
