@@ -1031,6 +1031,17 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const buildSystemNumericFields = (): Record<string, number> => {
+    const fields: Record<string, number> = {};
+    const monthly = Number(monthlyCardDays);
+    if (Number.isFinite(monthly) && monthly >= 1) fields.monthlyCardDays = Math.floor(monthly);
+    const termDays = Number(contractTermDays);
+    if (Number.isFinite(termDays) && termDays >= 1) fields.contractTermDaysDefault = Math.floor(termDays);
+    const rate = Number(rewardRatePerHour);
+    if (Number.isFinite(rate) && rate > 0) fields.rewardRateUsdtPerHour = rate;
+    return fields;
+  };
+
   const handleToggleMaintenance = async () => {
     if (!systemStatus) {
       setBackendError('系统状态尚未同步，请稍后重试。');
@@ -1040,9 +1051,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       maintenanceEnabled: !systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
-      monthlyCardDays: Number(monthlyCardDays),
-      contractTermDaysDefault: Number(contractTermDays),
-      rewardRateUsdtPerHour: Number(rewardRatePerHour),
+      ...buildSystemNumericFields(),
       exchangeAutoEnabled: systemStatus.exchangeAutoEnabled,
       payoutWallets: systemStatus.payoutWallets,
     });
@@ -1057,9 +1066,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       maintenanceEnabled: systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
-      monthlyCardDays: Number(monthlyCardDays),
-      contractTermDaysDefault: Number(contractTermDays),
-      rewardRateUsdtPerHour: Number(rewardRatePerHour),
+      ...buildSystemNumericFields(),
       exchangeAutoEnabled: !systemStatus.exchangeAutoEnabled,
       payoutWallets: systemStatus.payoutWallets,
     });
@@ -1070,13 +1077,20 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('系统状态尚未同步，请稍后重试。');
       return;
     }
+    const numericFields = buildSystemNumericFields();
+    if (
+      numericFields.monthlyCardDays === undefined ||
+      numericFields.contractTermDaysDefault === undefined ||
+      numericFields.rewardRateUsdtPerHour === undefined
+    ) {
+      setBackendError('月卡天数 / 合同默认天数 / 小时收益单价 必须为有效数值。');
+      return;
+    }
     await saveSystemSettings({
       maintenanceEnabled: systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
       maintenanceMessageEn,
-      monthlyCardDays: Number(monthlyCardDays),
-      contractTermDaysDefault: Number(contractTermDays),
-      rewardRateUsdtPerHour: Number(rewardRatePerHour),
+      ...numericFields,
       exchangeAutoEnabled: systemStatus.exchangeAutoEnabled,
       payoutWallets: systemStatus.payoutWallets,
     });

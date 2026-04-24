@@ -210,8 +210,15 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     ["userAgreementRequired", "user_agreement_required"],
   ];
   for (const [sourceKey, targetKey] of booleanFields) {
-    if (sourceKey in body) {
-      updates.push([targetKey, body[sourceKey] ? "1" : "0"]);
+    if (!(sourceKey in body)) continue;
+    const raw = body[sourceKey];
+    // Strictly require a real boolean so values like string "false" cannot be coerced to true.
+    if (typeof raw === "boolean") {
+      updates.push([targetKey, raw ? "1" : "0"]);
+    } else if (typeof raw === "number" && (raw === 0 || raw === 1)) {
+      updates.push([targetKey, raw === 1 ? "1" : "0"]);
+    } else {
+      return badRequest(`Field ${sourceKey} must be a boolean`);
     }
   }
 
@@ -235,16 +242,22 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     }
   }
 
-  const numericFields: Array<[string, string]> = [
-    ["monthlyCardDays", "monthly_card_days"],
-    ["contractTermYearsDefault", "contract_term_years_default"],
-    ["contractTermDaysDefault", "contract_term_days_default"],
+  const numericFields: Array<[string, string, number]> = [
+    ["monthlyCardDays", "monthly_card_days", 1],
+    ["contractTermYearsDefault", "contract_term_years_default", 1],
+    ["contractTermDaysDefault", "contract_term_days_default", 1],
   ];
-  for (const [sourceKey, targetKey] of numericFields) {
+  for (const [sourceKey, targetKey, minValue] of numericFields) {
+    if (!(sourceKey in body)) continue;
     const value = body[sourceKey];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      updates.push([targetKey, String(Math.floor(value))]);
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return badRequest(`Field ${sourceKey} must be a finite number`);
     }
+    const intValue = Math.floor(value);
+    if (intValue < minValue) {
+      return badRequest(`Field ${sourceKey} must be >= ${minValue}`);
+    }
+    updates.push([targetKey, String(intValue)]);
   }
 
   if (Array.isArray(body.payoutWallets)) {

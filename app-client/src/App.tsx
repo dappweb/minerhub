@@ -678,7 +678,7 @@ export default function App() {
   const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
     ? userDetails.inviterWallet.trim()
     : null;
-  const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
+  const maintenanceEnabled = systemStatus?.maintenanceEnabled === true;
   const contractExpired = Boolean(userDetails?.contractEndAt && new Date(userDetails.contractEndAt).getTime() < Date.now());
   const actionsBlocked = maintenanceEnabled || contractExpired;
 

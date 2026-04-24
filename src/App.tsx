@@ -150,7 +150,7 @@ export default function App() {
         const data = (await response.json()) as { maintenanceEnabled?: boolean; maintenanceMessageZh?: string; maintenanceMessageEn?: string };
         if (!canceled) {
           setSystemStatus({
-            maintenanceEnabled: Boolean(data.maintenanceEnabled),
+            maintenanceEnabled: data.maintenanceEnabled === true,
             maintenanceMessageZh: data.maintenanceMessageZh ?? '系统维护中，请稍后再试。',
             maintenanceMessageEn: data.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.',
           });
@@ -199,7 +199,7 @@ export default function App() {
     adminWallet.toLowerCase() === verifiedOwnerWallet.toLowerCase();
   const isOwnerLoggedIn = Boolean(adminWallet) && isOwnerAddress(adminWallet) && isSignatureVerified;
   const isAdminView = viewMode === 'admin';
-  const maintenanceEnabled = Boolean(systemStatus?.maintenanceEnabled);
+  const maintenanceEnabled = systemStatus?.maintenanceEnabled === true;
 
   React.useEffect(() => {
     if (!adminWallet) {
