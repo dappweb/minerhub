@@ -9,6 +9,7 @@ import { handleGas } from "./routes/gas";
 import { handleOperations } from "./routes/operations";
 import { handleOwner } from "./routes/owner";
 import { handleReferrals } from "./routes/referrals";
+import { handleRpc } from "./routes/rpc";
 import { handleSystem } from "./routes/system";
 import { handleUsers } from "./routes/users";
 import type { Env } from "./types/env";
@@ -51,6 +52,7 @@ export default {
       if (scope === "downloads") return await handleDownloads(request, env, pathParts);
       if (scope === "gas") return await handleGas(request, env, pathParts);
       if (scope === "operations") return await handleOperations(request, env, pathParts);
+      if (scope === "rpc") return await handleRpc(request, env, pathParts);
 
       return notFound("API route not found");
     } catch (error) {

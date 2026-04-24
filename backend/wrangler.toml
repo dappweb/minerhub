@@ -27,6 +27,7 @@ OWNER_ADDRESS = "0x571f87436C7bd84327d3b751BB911Bbc3E19bF56"
 ADMIN_ADDRESSES = "0xca949919f03E3e52949d1436442312D8A023fE41"
 USDT_TOKEN_ADDRESS = "0x55d398326f99059fF775485246999027B3197955"
 OWNER_MINT_DAILY_CAP = "5000000"
+BSC_RPC_UPSTREAMS = "https://bsc-dataseed.binance.org/,https://bsc-dataseed1.defibit.io/,https://bsc-dataseed1.ninicoin.io/,https://bsc.publicnode.com,https://rpc.ankr.com/bsc"
 
 [[r2_buckets]]
 binding = "APP_BUCKET"

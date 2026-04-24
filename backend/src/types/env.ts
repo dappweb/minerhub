@@ -31,5 +31,8 @@
 
   /** Optional webhook invoked by scheduled task when a customer goes offline */
   ALERT_WEBHOOK_URL?: string;
+
+  /** Comma-separated BSC JSON-RPC upstream URLs for /api/rpc/bsc failover proxy */
+  BSC_RPC_UPSTREAMS?: string;
 }
 

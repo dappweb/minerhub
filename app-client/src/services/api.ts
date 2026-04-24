@@ -2,13 +2,19 @@ import { getAuthHeaders } from './signature';
 
 const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
-// 可通过 EXPO_PUBLIC_API_BASE_URL 配置多个地址（逗号分隔）实现可控回退。
+// 可通过 EXPO_PUBLIC_API_BASE_URL 配置多个地址（逗号分隔）实现可控回退（如备用域名）。
 const FALLBACK_API_BASE_URLS = [
   DEFAULT_API_BASE_URL,
 ];
-const REQUEST_TIMEOUT_MS = 25_000;
+// 中国大陆网络下 CF 握手偶发 5-10s，设 12s 让慢链路能完成一次重试，又不至于让 UI 永远卡住。
+const REQUEST_TIMEOUT_MS = 12_000;
 const REQUEST_RETRY_COUNT = 3;
 const RETRY_BACKOFF_MS = 800;
+
+function generateRequestId(): string {
+  // 轻量 reqId，用于请求幂等与服务端日志追踪。不依赖 crypto.randomUUID（老 RN 环境兼容）。
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 let activeApiBaseUrl: string | null = null;
 
@@ -67,6 +73,8 @@ async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Resp
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrls = getApiBaseUrls();
+  // 单次请求生命周期内复用同一个 reqId：跨重试/跨 baseUrl 都带上，便于服务端幂等与日志串联。
+  const requestId = generateRequestId();
   let lastError: unknown = null;
 
   for (const baseUrl of baseUrls) {
@@ -75,6 +83,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         const response = await fetchWithTimeout(`${baseUrl}${path}`, {
           headers: {
             'content-type': 'application/json',
+            'x-request-id': requestId,
             ...(init?.headers ?? {}),
           },
           ...init,

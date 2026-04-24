@@ -1,9 +1,23 @@
 import type { Address, Hex } from 'viem';
-import { createPublicClient, createWalletClient, defineChain, formatUnits, http, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, fallback, formatUnits, http, parseUnits } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
 const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '56');
 const rpcUrl = process.env.EXPO_PUBLIC_RPC_URL ?? 'https://bsc-dataseed.binance.org/';
+// 自有 Worker 代理 RPC，优先走自有域名（Cloudflare 边缘）在中国大陆链路上更稳定
+const proxyRpcUrl = process.env.EXPO_PUBLIC_RPC_PROXY_URL ?? 'https://api.coinplanets.net/api/rpc/bsc';
+const rpcFallbacks = Array.from(
+  new Set(
+    [
+      proxyRpcUrl,
+      rpcUrl,
+      'https://bsc-dataseed1.defibit.io/',
+      'https://bsc-dataseed1.ninicoin.io/',
+      'https://bsc.publicnode.com',
+      'https://rpc.ankr.com/bsc',
+    ].filter((u): u is string => Boolean(u && u.trim())),
+  ),
+);
 
 const chain = defineChain({
   id: chainId,
@@ -14,8 +28,8 @@ const chain = defineChain({
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: [rpcUrl] },
-    public: { http: [rpcUrl] },
+    default: { http: rpcFallbacks },
+    public: { http: rpcFallbacks },
   },
 });
 
@@ -143,15 +157,20 @@ async function assertSufficientBalanceForTransfer(params: {
 async function getWalletClients() {
   const account = await getWalletAccount();
 
+  const transport = fallback(
+    rpcFallbacks.map((url) => http(url, { timeout: 8_000, retryCount: 1 })),
+    { rank: false, retryCount: 1 },
+  );
+
   const walletClient = createWalletClient({
     account,
     chain,
-    transport: http(rpcUrl),
+    transport,
   });
 
   const publicClient = createPublicClient({
     chain,
-    transport: http(rpcUrl),
+    transport,
   });
 
   return { account, walletClient, publicClient };

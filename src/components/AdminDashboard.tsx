@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, Eye, EyeOff, LayoutDashboard, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Eye, EyeOff, LayoutDashboard, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';

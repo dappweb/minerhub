@@ -11,13 +11,17 @@ import { createConfig } from 'wagmi';
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 56);
 const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://bsc-dataseed.binance.org/';
+// 自有 Worker 代理 RPC，优先走自有域名（Cloudflare 边缘），对中国大陆链路更稳定。
+const proxyRpcUrl = (import.meta.env.VITE_RPC_PROXY_URL as string | undefined) ?? 'https://api.coinplanets.net/api/rpc/bsc';
 const rpcHttpUrls = Array.from(
   new Set(
     [
+      proxyRpcUrl,
       rpcUrl,
       'https://bsc-dataseed1.defibit.io/',
       'https://bsc-dataseed1.ninicoin.io/',
       'https://bsc.publicnode.com',
+      'https://rpc.ankr.com/bsc',
     ].filter((u): u is string => Boolean(u && u.trim()))
   )
 );

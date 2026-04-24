@@ -4,7 +4,7 @@ export function json(data: unknown, status = 200): Response {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
-      "access-control-allow-headers": "authorization,content-type,x-signature,x-nonce,x-wallet",
+      "access-control-allow-headers": "authorization,content-type,x-signature,x-nonce,x-wallet,x-request-id",
       "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS"
     }
   });
