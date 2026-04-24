@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { isExchangeAutoEnabled, isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
@@ -18,7 +19,98 @@ async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
     .run();
 }
 
+async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND wallet = ?")
+    .bind(userId, wallet.toLowerCase())
+    .first<{ id: string }>();
+  return Boolean(row?.id);
+}
+
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "reward-withdraw") {
+    if (await isMaintenanceEnabled(env)) {
+      return json({ error: "System is under maintenance" }, 503);
+    }
+
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      userId?: string;
+      wallet?: string;
+      amountSuper?: string | number;
+      note?: string;
+    } | null;
+
+    if (!body?.userId || !body.wallet || body.amountSuper === undefined) {
+      return badRequest("userId, wallet, amountSuper are required");
+    }
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch");
+    }
+    if (!(await assertUserOwnedByWallet(env, body.userId, body.wallet))) {
+      return unauthorized("User does not belong to signed wallet");
+    }
+
+    const amount = Number(body.amountSuper);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return badRequest("amountSuper must be a positive number");
+    }
+
+    await ensureCustomerProfile(env, body.userId);
+    const profile = await env.DB.prepare(
+      "SELECT total_reward_super FROM customer_profiles WHERE user_id = ?"
+    )
+      .bind(body.userId)
+      .first<{ total_reward_super: string }>();
+
+    const available = Number(profile?.total_reward_super ?? "0");
+    if (!Number.isFinite(available) || available < amount) {
+      return badRequest("Insufficient reward SUPER balance");
+    }
+
+    const relayer = tryCreateRelayer(env);
+    if (!relayer) return json({ error: "OWNER_PRIVATE_KEY not configured" }, 500);
+
+    const now = nowIso();
+    const withdrawalId = createId("rwdw");
+    try {
+      const { txHash } = await relayer.transferSuper(body.wallet.toLowerCase(), amount.toString());
+
+      await env.DB.prepare(
+        `INSERT INTO reward_withdrawals (
+          id, user_id, wallet, amount_super, tx_hash, status, note, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?, ?)`
+      )
+        .bind(withdrawalId, body.userId, body.wallet.toLowerCase(), amount, txHash, body.note?.trim() || null, now, now)
+        .run();
+
+      await env.DB.prepare(
+        `UPDATE customer_profiles
+         SET total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) - ?, 6) AS TEXT),
+             updated_at = ?
+         WHERE user_id = ?`
+      )
+        .bind(amount, now, body.userId)
+        .run();
+
+      return json({ ok: true, id: withdrawalId, amountSuper: amount.toString(), txHash, status: "confirmed", createdAt: now }, 201);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "withdraw failed";
+      await env.DB.prepare(
+        `INSERT INTO reward_withdrawals (
+          id, user_id, wallet, amount_super, status, note, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'failed', ?, ?, ?)`
+      )
+        .bind(withdrawalId, body.userId, body.wallet.toLowerCase(), amount, msg, now, now)
+        .run();
+
+      return json({ error: msg }, 500);
+    }
+  }
+
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "exchange-request" && pathParts[1] === "list") {
     const authResult = await extractAndVerifyAuth(request, env);
     if (!authResult.valid) {

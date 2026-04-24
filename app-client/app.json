@@ -15,7 +15,8 @@
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
-      "checkAutomatically": "ON_LOAD"
+      "checkAutomatically": "ON_LOAD",
+      "url": "https://u.expo.dev/7d714fe7-9efe-4073-913b-6a3b5e7e1c36"
     },
     "ios": {
       "bundleIdentifier": "com.coinplanet.mobile",

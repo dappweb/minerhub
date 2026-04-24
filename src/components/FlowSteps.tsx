@@ -4,23 +4,23 @@ import { motion } from 'motion/react';
 const steps = [
   {
     icon: Link2,
-    title: '身份同步与推荐人绑定',
-    desc: '首次进入 App 先完成身份同步，并绑定推荐人钱包地址，确保账户可正常初始化。',
+    title: '完成注册与推荐人绑定',
+    desc: '首次打开 App 先完成身份同步，并填写推荐人钱包，系统会为你建立账户身份。',
   },
   {
     icon: BadgeCheck,
-    title: '机器码开通月卡',
-    desc: '在首页查看机器码并提交给客服/管理员，完成月卡开通后再继续矿机激活。',
+    title: '提交机器码开通服务',
+    desc: '在首页复制机器码并提交开通申请，开通成功后就能进入设备激活阶段。',
   },
   {
     icon: Cpu,
-    title: '矿机设置与 Gas 准备',
-    desc: '点击矿机设置完成链上注册；若提示 BNB 不足，请联系管理员充值 Gas。',
+    title: '激活设备开始运行',
+    desc: '点击矿机设置完成激活；如果网络费不足，系统会提示你申请支持。',
   },
   {
     icon: BarChart3,
-    title: '保持在线开始累计收益',
-    desc: '设备保持在线后，系统按在线时长累计收益，可在 App 内执行领取与兑换。',
+    title: '保持在线并领取收益',
+    desc: '设备在线后会持续累计收益，你可以在 App 内查看进度、领取并发起兑换。',
   },
 ];
 
@@ -29,8 +29,8 @@ export default function FlowSteps() {
     <section className="py-18 bg-slate-950 border-y border-slate-800/40">
       <div className="max-w-7xl mx-auto px-6">
         <div className="mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold">4 步完成挖矿准备</h2>
-          <p className="mt-3 text-slate-400 max-w-2xl">将“注册-开通-激活-在线”流程可视化，用户按步骤即可快速开始挖矿。</p>
+          <h2 className="text-3xl md:text-4xl font-bold">4 步完成开通并开始收益</h2>
+          <p className="mt-3 text-slate-400 max-w-2xl">把“注册、开通、激活、收益”做成一条清晰路径，让用户从下载到开始累计收益更顺滑。</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">

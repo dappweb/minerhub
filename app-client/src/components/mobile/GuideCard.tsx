@@ -26,20 +26,38 @@ export default function GuideCard({
   steps,
   onPress,
 }: GuideCardProps) {
+  const activeStep = steps.find((step) => step.active) ?? steps.find((step) => !step.complete) ?? steps[steps.length - 1];
+
   return (
     <View style={styles.guideCard}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerMain}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.body}>{description}</Text>
-        </View>
-        <TouchableOpacity style={[styles.primaryBtn, disabled && styles.disabledBtn]} onPress={onPress} disabled={disabled}>
-          <Text style={styles.primaryBtnText}>{buttonLabel}</Text>
-        </TouchableOpacity>
+      <View style={styles.headerMain}>
+        <Text style={styles.eyebrow}>当前任务</Text>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.body}>{description}</Text>
       </View>
+
+      {activeStep ? (
+        <View style={styles.focusCard}>
+          <Text style={styles.focusLabel}>现在最值得先完成</Text>
+          <View style={styles.focusRow}>
+            <View style={[styles.focusBadge, activeStep.complete && styles.focusBadgeDone]}>
+              <Text style={styles.focusBadgeText}>{activeStep.complete ? 'DONE' : 'NEXT'}</Text>
+            </View>
+            <View style={styles.focusContent}>
+              <Text style={styles.focusTitle}>{activeStep.label}</Text>
+              <Text style={styles.focusStatus}>{activeStep.status}</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      <TouchableOpacity style={[styles.primaryBtn, disabled && styles.disabledBtn]} onPress={onPress} disabled={disabled}>
+        <Text style={styles.primaryBtnText}>{buttonLabel}</Text>
+      </TouchableOpacity>
+
       <View style={styles.stepsRow}>
         {steps.map((step, index) => (
-          <View key={step.key} style={styles.stepItem}>
+          <View key={step.key} style={[styles.stepItem, step.active && styles.stepItemActive]}>
             <View
               style={[
                 styles.stepBadge,
@@ -50,7 +68,7 @@ export default function GuideCard({
               <Text style={styles.stepBadgeText}>{`0${index + 1}`}</Text>
             </View>
             <Text style={styles.stepLabel}>{step.label}</Text>
-            <Text style={styles.stepStatus}>{step.status}</Text>
+            <Text style={[styles.stepStatus, step.active && styles.stepStatusActive]}>{step.status}</Text>
           </View>
         ))}
       </View>
@@ -67,15 +85,15 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 14,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
   headerMain: {
-    flex: 1,
     gap: 6,
-    paddingRight: 12,
+  },
+  eyebrow: {
+    color: '#67e8f9',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   title: {
     color: '#ecfeff',
@@ -87,16 +105,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  focusCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#225b98',
+    backgroundColor: '#082754',
+    padding: 12,
+    gap: 8,
+  },
+  focusLabel: {
+    color: '#67e8f9',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  focusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  focusBadge: {
+    borderRadius: 999,
+    backgroundColor: '#0f766e',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  focusBadgeDone: {
+    backgroundColor: '#166534',
+  },
+  focusBadgeText: {
+    color: '#dffaff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  focusContent: {
+    flex: 1,
+    gap: 2,
+  },
+  focusTitle: {
+    color: '#effbff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  focusStatus: {
+    color: '#90c8ff',
+    fontSize: 12,
+  },
   primaryBtn: {
-    alignSelf: 'flex-start',
     borderRadius: 14,
     backgroundColor: '#22d3ee',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
   primaryBtnText: {
     color: '#083344',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   disabledBtn: {
@@ -114,6 +177,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#082754',
     padding: 10,
     gap: 6,
+  },
+  stepItemActive: {
+    borderColor: '#22d3ee',
+    backgroundColor: '#0a315f',
   },
   stepBadge: {
     alignSelf: 'flex-start',
@@ -141,5 +208,8 @@ const styles = StyleSheet.create({
   stepStatus: {
     color: '#90c8ff',
     fontSize: 11,
+  },
+  stepStatusActive: {
+    color: '#d8f9ff',
   },
 });

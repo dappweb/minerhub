@@ -15,6 +15,7 @@ type ExchangeItem = {
 };
 
 export interface ExchangeTabProps {
+  lang: 'zh' | 'en';
   swapAmount: string;
   setSwapAmount: (v: string) => void;
   swapPriceText: string;
@@ -27,6 +28,7 @@ export interface ExchangeTabProps {
   identityReady: boolean;
   swapTxStage: SwapTxStage;
   gasFundedBnbTotal: string;
+  showGasAssist: boolean;
   refreshSwapPrice: () => void;
   openSwapConfirm: () => void;
   requestAdminGasTopup: () => void;
@@ -63,6 +65,7 @@ export interface ExchangeTabProps {
 }
 
 export default function ExchangeTab({
+  lang,
   swapAmount,
   setSwapAmount,
   swapPriceText,
@@ -75,6 +78,7 @@ export default function ExchangeTab({
   identityReady,
   swapTxStage,
   gasFundedBnbTotal,
+  showGasAssist,
   refreshSwapPrice,
   openSwapConfirm,
   requestAdminGasTopup,
@@ -85,6 +89,39 @@ export default function ExchangeTab({
   txStageLabels,
   t,
 }: ExchangeTabProps) {
+  const isZh = lang === 'zh';
+
+  const formatMode = (mode: string) => {
+    if (mode === 'auto') return isZh ? '自动处理' : 'Auto';
+    if (mode === 'manual') return isZh ? '人工审核' : 'Manual';
+    return mode;
+  };
+
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case 'manual_pending':
+        return isZh ? '待处理' : 'Pending';
+      case 'auto_processing':
+        return isZh ? '处理中' : 'Processing';
+      case 'approved':
+        return isZh ? '已审核' : 'Approved';
+      case 'submitted':
+        return isZh ? '已提交链上' : 'Submitted';
+      case 'completed':
+        return isZh ? '已完成' : 'Completed';
+      case 'cancelled':
+        return isZh ? '已取消' : 'Cancelled';
+      case 'failed':
+        return isZh ? '失败' : 'Failed';
+      default:
+        return status;
+    }
+  };
+
+  const modeDetail = exchangeModeLabel.includes('自动')
+    ? (isZh ? '预计 1-5 分钟完成，结果会进入订单列表。' : 'Usually completes in 1-5 minutes and then appears in your orders.')
+    : (isZh ? '需等待人工审核，请留意订单状态更新。' : 'Manual review is required. Please follow the order status updates.');
+
   return (
     <>
       <View style={styles.swapCard}>
@@ -109,7 +146,9 @@ export default function ExchangeTab({
         <Text style={styles.hint}>{swapPriceText}</Text>
 
         <View style={styles.previewBox}>
+          <Text style={styles.quoteTitle}>确认到账信息</Text>
           <Text style={styles.modeHint}>{exchangeModeLabel}</Text>
+          <Text style={styles.modeDetail}>{modeDetail}</Text>
           <View style={s.rowBetween}>
             <Text style={styles.previewLabel}>{t.quote}</Text>
             <Text style={styles.previewValue}>{estimatedUsdt.toFixed(6)} USDT</Text>
@@ -171,6 +210,28 @@ export default function ExchangeTab({
         )}
       </View>
 
+      {!!swapBlockedReason && (
+        <View style={styles.noticeCard}>
+          <Text style={styles.noticeTitle}>{isZh ? '当前还不能提交兑换' : 'Swap is not ready yet'}</Text>
+          <Text style={styles.swapBlockedReason}>{swapBlockedReason}</Text>
+        </View>
+      )}
+
+      {showGasAssist ? (
+        <View style={styles.supportCard}>
+          <Text style={styles.supportTitle}>{t.gasAssistTitle}</Text>
+          <Text style={styles.supportHint}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
+          <Text style={styles.supportHint}>{t.gasAdminHint}</Text>
+          <TouchableOpacity
+            style={[styles.supportBtn, !identityReady && s.disabledBtn]}
+            onPress={requestAdminGasTopup}
+            disabled={!identityReady || isBusy}
+          >
+            <Text style={styles.supportBtnText}>{t.gasRequestTopup}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <View style={styles.historyCard}>
         <View style={s.rowBetween}>
           <Text style={styles.historyTitle}>{t.exchangeOrderHistoryTitle}</Text>
@@ -188,28 +249,13 @@ export default function ExchangeTab({
             <View key={item.id} style={styles.historyItem}>
               <Text style={styles.historyItemId}>{item.id}</Text>
               <Text style={styles.historyItemMeta}>{item.amountSuper} SUPER {'->'} {item.amountUsdt} USDT</Text>
-              <Text style={styles.historyItemMeta}>{t.exchangeOrderMode}: {item.mode}</Text>
-              <Text style={styles.historyItemMeta}>{t.exchangeOrderStatus}: {item.status}</Text>
+              <Text style={styles.historyItemMeta}>{t.exchangeOrderMode}: {formatMode(item.mode)}</Text>
+              <Text style={styles.historyItemMeta}>{t.exchangeOrderStatus}: {formatStatus(item.status)}</Text>
               {!!item.txHash && <Text style={styles.historyItemMeta}>Tx: {item.txHash}</Text>}
               <Text style={styles.historyItemTime}>{t.exchangeOrderCreatedAt}: {item.createdAt}</Text>
             </View>
           ))
         )}
-      </View>
-
-      <View style={s.actionCard}>
-        <Text style={s.sectionTitle}>{t.gasAssistTitle}</Text>
-        <View style={styles.gasInfoBox}>
-          <Text style={styles.gasInfoText}>{t.gasBalanceLabel}: {gasFundedBnbTotal} BNB</Text>
-          <Text style={styles.gasInfoHint}>{t.gasAdminHint}</Text>
-          <TouchableOpacity
-            style={[s.secondaryBtn, !identityReady && s.disabledBtn]}
-            onPress={requestAdminGasTopup}
-            disabled={!identityReady || isBusy}
-          >
-            <Text style={s.secondaryBtnText}>{t.gasRequestTopup}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </>
   );
@@ -241,10 +287,20 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
   },
+  quoteTitle: {
+    color: '#effbff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   modeHint: {
     color: '#8dd3ff',
     fontSize: 11,
     marginBottom: 2,
+  },
+  modeDetail: {
+    color: '#b7dbff',
+    fontSize: 11,
+    lineHeight: 16,
   },
   previewLabel: {
     color: '#b7dbff',
@@ -266,11 +322,6 @@ const styles = StyleSheet.create({
     color: '#083344',
     fontSize: 16,
     fontWeight: '800',
-  },
-  swapBlockedReason: {
-    color: '#ffd58a',
-    fontSize: 12,
-    lineHeight: 18,
   },
   txStageCard: {
     marginTop: 6,
@@ -363,22 +414,53 @@ const styles = StyleSheet.create({
     color: '#8dc6ff',
     fontSize: 10,
   },
-  gasInfoBox: {
-    borderRadius: 10,
+  noticeCard: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#315d95',
-    backgroundColor: '#0b2d60',
-    padding: 10,
-    gap: 8,
+    borderColor: '#7c5e24',
+    backgroundColor: '#3b2a08',
+    padding: 12,
+    gap: 4,
   },
-  gasInfoText: {
-    color: '#cde8ff',
+  noticeTitle: {
+    color: '#fde68a',
     fontSize: 12,
     fontWeight: '700',
   },
-  gasInfoHint: {
+  swapBlockedReason: {
+    color: '#ffd58a',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  supportCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#21486e',
+    backgroundColor: '#082443',
+    padding: 12,
+    gap: 8,
+  },
+  supportTitle: {
+    color: '#d7f3ff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  supportHint: {
     color: '#8dc6ff',
     fontSize: 11,
     lineHeight: 17,
+  },
+  supportBtn: {
+    borderRadius: 10,
+    backgroundColor: '#184680',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  supportBtnText: {
+    color: '#cde8ff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

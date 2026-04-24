@@ -1,7 +1,8 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { hasActiveLock } from "../lib/locks";
 import { badRequest, json, unauthorized } from "../lib/response";
-import { getRewardRateUsdtPerHour, isMaintenanceEnabled } from "../lib/system";
+import { getRewardRateUsdtPerHour, isMaintenanceEnabled, readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
 
 async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
@@ -42,6 +43,7 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
 
   if (!profile || Number(profile.contract_active ?? 0) !== 1) return;
   if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < Date.now()) return;
+  if (!(await hasActiveLock(env, userId))) return;
 
   const lastAt = new Date(device.updated_at).getTime();
   const now = Date.now();
@@ -53,22 +55,27 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   const rewardUsdt = elapsedHours * rate * hashrateFactor;
   if (!Number.isFinite(rewardUsdt) || rewardUsdt <= 0) return;
 
+  const systemStatus = await readSystemStatus(env);
+  const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+  const rewardSuper = rewardUsdt * superPerUsdt;
+
   const nowIsoValue = new Date(now).toISOString();
   await env.DB.prepare(
     `INSERT INTO reward_ledger (
       id, user_id, device_id, reward_usdt, reward_super, rate_usdt_per_hour,
       accrued_from, accrued_to, source, note, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, '0', ?, ?, ?, 'heartbeat', ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'heartbeat', ?, ?, ?)`
   )
     .bind(
       createId("rwd"),
       userId,
       deviceId,
       rewardUsdt.toFixed(6),
+      rewardSuper.toFixed(6),
       String(rate),
       device.updated_at,
       nowIsoValue,
-      `hourly reward from device heartbeat (hashrate=${device.hashrate})`,
+      `hourly reward from device heartbeat (hashrate=${device.hashrate}, price=${superPerUsdt})`,
       nowIsoValue,
       nowIsoValue,
     )
@@ -77,12 +84,13 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   await env.DB.prepare(
     `UPDATE customer_profiles
      SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
+         total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) + ?, 6) AS TEXT),
          last_seen_at = ?,
          online_status = 'online',
          updated_at = ?
      WHERE user_id = ?`
   )
-    .bind(rewardUsdt, nowIsoValue, nowIsoValue, userId)
+    .bind(rewardUsdt, rewardSuper, nowIsoValue, nowIsoValue, userId)
     .run();
 
   await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")

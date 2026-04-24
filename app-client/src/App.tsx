@@ -38,6 +38,7 @@ import {
     getUser,
     getUserByWallet,
     getUserDetails,
+    isExchangeOrderPendingStatus,
     markAnnouncementRead as markAnnouncementReadApi,
     registerDevice,
     reportDeviceHeartbeat,
@@ -859,9 +860,22 @@ export default function App() {
     return (userDetails?.rewards ?? []).map((item) => ({
       rewardUsdt: parseFiniteNumber(item.reward_usdt),
       rateUsdtPerHour: parseFiniteNumber(item.rate_usdt_per_hour),
+      source: item.source,
       createdAt: item.created_at,
     }));
   }, [userDetails?.rewards]);
+  const recentRewardItems = useMemo(
+    () =>
+      [...rewardRows]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 3)
+        .map((item) => ({
+          rewardUsdt: item.rewardUsdt,
+          source: item.source,
+          createdAt: item.createdAt,
+        })),
+    [rewardRows],
+  );
 
   const monthProgressMinutes = useMemo(() => {
     const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
@@ -927,6 +941,7 @@ export default function App() {
   const totalRewardUsdt = parseFiniteNumber(userDetails?.totalRewardUsdt);
   const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
   const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
+  const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
   const claimableRewardUsdt = Math.max(0, totalRewardUsdt);
   const configuredRewardRateUsdtPerHour = useMemo(() => {
     const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
@@ -955,6 +970,7 @@ export default function App() {
     }
     return isAuto ? 'Current mode: auto' : 'Current mode: manual';
   }, [lang, systemStatus?.exchangeAutoEnabled, userDetails?.exchangeAutoEnabled]);
+  const showGasAssist = useMemo(() => parseFiniteNumber(bnbBalance) < 0.0005, [bnbBalance]);
 
   const lockCycleDays = useMemo(() => {
     const startMs = userDetails?.contractStartAt ? new Date(userDetails.contractStartAt).getTime() : NaN;
@@ -999,7 +1015,6 @@ export default function App() {
     return lang === 'zh' ? '合同已到期，请续期' : 'Expired, renewal required';
   }, [lang, lockRemainingDays, userDetails?.contractEndAt, userDetails?.contractStartAt]);
 
-  const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
   const rewardRateDailyChange = yesterdayRewardUsdt > 0
     ? ((todayRewardUsdt - yesterdayRewardUsdt) / yesterdayRewardUsdt) * 100
     : todayRewardUsdt > 0 ? 100 : 0;
@@ -1628,27 +1643,50 @@ export default function App() {
     };
   }, [userDetails?.parentUserId]);
 
-  const refreshExchangeOrders = async () => {
+  const refreshExchangeOrders = async (silent = false) => {
     if (!userId || !walletAddress) {
       setExchangeOrders([]);
       return;
     }
-    setExchangeOrdersLoading(true);
+    if (!silent) {
+      setExchangeOrdersLoading(true);
+    }
     try {
       const items = await getExchangeRequests({ userId, wallet: walletAddress, limit: 10 });
       setExchangeOrders(items);
     } catch {
       setExchangeOrders([]);
     } finally {
-      setExchangeOrdersLoading(false);
+      if (!silent) {
+        setExchangeOrdersLoading(false);
+      }
     }
   };
+
+  const hasPendingExchangeOrder = useMemo(
+    () => exchangeOrders.some((item) => isExchangeOrderPendingStatus(item.status)),
+    [exchangeOrders]
+  );
 
   useEffect(() => {
     if (!userId || !walletAddress) return;
     if (activeTab !== 'exchange') return;
     void refreshExchangeOrders();
   }, [activeTab, userId, walletAddress]);
+
+  useEffect(() => {
+    if (!userId || !walletAddress) return;
+    if (activeTab !== 'exchange') return;
+    if (!hasPendingExchangeOrder) return;
+
+    const timer = setInterval(() => {
+      void refreshExchangeOrders(true);
+    }, 12000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [activeTab, hasPendingExchangeOrder, userId, walletAddress]);
 
   useEffect(() => {
     if (!userId) return;
@@ -2135,8 +2173,10 @@ export default function App() {
               contractExpired={contractExpired}
               totalOnlineMinutes={totalOnlineMinutes}
               monthProgressMinutes={monthProgressMinutes}
+              estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
               lang={lang}
               guideCtaLabel={guideCtaLabel}
+              guideDescription={guideDescription}
               guideAction={guideAction}
               setActiveTab={setActiveTab}
               onCopyAddress={handleCopyAddress}
@@ -2160,15 +2200,19 @@ export default function App() {
               totalRewardUsdt={totalRewardUsdt}
               totalRewardSuper={totalRewardSuper}
               todayRewardUsdt={todayRewardUsdt}
+              yesterdayRewardUsdt={yesterdayRewardUsdt}
               claimableRewardUsdt={claimableRewardUsdt}
               rewardTokenSymbol="SUPER"
               lockCycleDays={lockCycleDays}
               lockRemainingDays={lockRemainingDays}
               lockStatusText={lockStatusText}
+              totalOnlineMinutes={totalOnlineMinutes}
+              monthProgressMinutes={monthProgressMinutes}
               isBusy={isBusy}
               identityReady={identityReady}
               chartValues={chartValues}
               chartMax={chartMax}
+              recentRewards={recentRewardItems}
               claimReward={claimReward}
               t={t}
             />
@@ -2176,6 +2220,7 @@ export default function App() {
 
           {activeTab === 'exchange' && (
             <ExchangeTab
+              lang={lang}
               swapAmount={swapAmount}
               setSwapAmount={setSwapAmount}
               swapPriceText={swapPriceText}
@@ -2188,6 +2233,7 @@ export default function App() {
               identityReady={identityReady}
               swapTxStage={swapTxStage}
               gasFundedBnbTotal={gasFundedBnbTotal}
+              showGasAssist={showGasAssist}
               refreshSwapPrice={refreshSwapPrice}
               openSwapConfirm={openSwapConfirm}
               requestAdminGasTopup={() => requestAdminGasTopup('swap')}
@@ -2205,13 +2251,13 @@ export default function App() {
               onlineState={onlineState}
               deviceId={serverDeviceId}
               hashrateDisplay={`${deviceHashrate} H/s`}
+              totalOnlineMinutes={totalOnlineMinutes}
+              monthProgressMinutes={monthProgressMinutes}
+              lastSeenAt={userDetails?.lastSeenAt ?? null}
               isBusy={isBusy}
               identityReady={identityReady}
               startMining={startMining}
               initializeAccount={initializeAccount}
-              exchangeOrders={exchangeOrders}
-              exchangeOrdersLoading={exchangeOrdersLoading}
-              onRefreshExchangeOrders={refreshExchangeOrders}
               t={t}
             />
           )}
@@ -2221,6 +2267,7 @@ export default function App() {
               walletAddress={serverWalletAddress}
               expireDate={expireDate}
               contractExpired={contractExpired}
+              machineCode={machineCode}
               transferTo={transferTo}
               setTransferTo={setTransferTo}
               transferAmount={transferAmount}

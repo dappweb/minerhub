@@ -16,16 +16,18 @@ export interface HomeTabProps {
   contractExpired: boolean;
   totalOnlineMinutes: number;
   monthProgressMinutes: number;
+  estimatedRewardUsdtPerDay: number;
   lang: Lang;
   guideCtaLabel: string;
+  guideDescription: string;
   guideAction: () => void;
   setActiveTab: (tab: BottomTab) => void;
   onCopyAddress: () => void;
   copyState: 'idle' | 'copied' | 'failed';
   machineCode: string;
-    bnbBalance: string;
-    superBalance: string;
-    usdtBalance: string;
+  bnbBalance: string;
+  superBalance: string;
+  usdtBalance: string;
   t: {
     profileId: string;
     profileVip: string;
@@ -68,8 +70,10 @@ export default function HomeTab({
   contractExpired,
   totalOnlineMinutes,
   monthProgressMinutes,
+  estimatedRewardUsdtPerDay,
   lang,
   guideCtaLabel,
+  guideDescription,
   guideAction,
   setActiveTab,
   onCopyAddress,
@@ -82,8 +86,81 @@ export default function HomeTab({
 }: HomeTabProps) {
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
+  const stageText = !identityReady
+    ? (lang === 'zh' ? '待完成身份同步' : 'Identity sync required')
+    : contractExpired
+      ? (lang === 'zh' ? '合同已到期，待续期' : 'Contract expired')
+      : onlineState === (lang === 'zh' ? '在线' : 'Online')
+        ? (lang === 'zh' ? '设备在线，正在累计收益' : 'Device online and earning')
+        : (lang === 'zh' ? '设备待激活或暂时离线' : 'Device inactive or offline');
+  const stageHint = !identityReady
+    ? guideDescription
+    : contractExpired
+      ? (lang === 'zh' ? '续期后即可恢复收益累计与兑换操作。' : 'Renew to restore rewards and swaps.')
+      : onlineState === (lang === 'zh' ? '在线' : 'Online')
+        ? (lang === 'zh' ? '保持手机在线，收益会按在线时长累计。' : 'Keep the device online to continue accruing rewards.')
+        : (lang === 'zh' ? '完成激活并保持设备在线，今日收益会开始增长。' : 'Activate and keep the device online to grow today\'s rewards.');
+
   return (
     <>
+      <View style={styles.stageCard}>
+        <View style={s.rowBetween}>
+          <Text style={styles.stageLabel}>{lang === 'zh' ? '当前状态' : 'Current status'}</Text>
+          <View style={[styles.dotPill, identityReady && !contractExpired ? styles.dotOnline : styles.dotOffline]}>
+            <Text style={styles.dotPillText}>{onlineState}</Text>
+          </View>
+        </View>
+        <Text style={styles.stageTitle}>{stageText}</Text>
+        <Text style={styles.stageHint}>{stageHint}</Text>
+        <View style={s.rowBetween}>
+          <View style={styles.stageMetric}>
+            <Text style={styles.stageMetricValue}>{estimatedRewardUsdtPerDay.toFixed(3)} USDT</Text>
+            <Text style={styles.stageMetricLabel}>{lang === 'zh' ? '今日预计收益' : 'Estimated today'}</Text>
+          </View>
+          <View style={styles.stageMetric}>
+            <Text style={styles.stageMetricValue}>{expireDate}</Text>
+            <Text style={styles.stageMetricLabel}>{t.profileExpire}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.primaryActionCard}>
+        <View style={s.rowBetween}>
+          <View style={styles.primaryActionContent}>
+            <Text style={styles.primaryActionLabel}>{t.homePrimaryAction}</Text>
+            <Text style={styles.primaryActionTitle}>{guideCtaLabel}</Text>
+            <Text style={styles.primaryActionHint}>{guideDescription}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.primaryActionBtn, (isBusy || contractExpired) && s.disabledBtn]}
+            onPress={guideAction}
+            disabled={isBusy || contractExpired}
+          >
+            <Text style={styles.primaryActionBtnText}>{guideCtaLabel}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.secondaryActionsRow}>
+          <TouchableOpacity style={styles.secondaryActionBtn} onPress={() => setActiveTab('earnings')}>
+            <Text style={styles.secondaryActionText}>{t.tabEarnings}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryActionBtn} onPress={() => setActiveTab('exchange')}>
+            <Text style={styles.secondaryActionText}>{t.tabExchange}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={s.metricsRow}>
+        <View style={s.metricCard}>
+          <Text style={s.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
+          <Text style={s.metricLabel}>{t.totalOnline}</Text>
+        </View>
+        <View style={s.metricCard}>
+          <Text style={s.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
+          <Text style={s.metricLabel}>{t.monthOnline}</Text>
+        </View>
+      </View>
+
       <View style={styles.profileCard}>
         <View style={s.rowBetween}>
           <View style={s.rowInline}>
@@ -92,7 +169,6 @@ export default function HomeTab({
           </View>
           <Text style={styles.unbindText}>{t.homeOverview}</Text>
         </View>
-        <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
         <Text style={s.walletText}>{walletAddress || t.notInit}</Text>
         <View style={s.rowBetween}>
           <Text style={s.walletHint}>{t.short}{shortAddress}</Text>
@@ -107,68 +183,130 @@ export default function HomeTab({
       </View>
 
       <View style={styles.machineCard}>
-              {/* Wallet Balances */}
-              {walletAddress && (
-                <View style={styles.balanceCard}>
-                  <View style={styles.balanceRow}>
-                    <Text style={styles.balanceLabel}>BNB</Text>
-                    <Text style={styles.balanceValue}>{bnbBalance}</Text>
-                  </View>
-                  <View style={styles.balanceRow}>
-                    <Text style={styles.balanceLabel}>SUPER</Text>
-                    <Text style={styles.balanceValue}>{superBalance}</Text>
-                  </View>
-                  <View style={styles.balanceRow}>
-                    <Text style={styles.balanceLabel}>USDT</Text>
-                    <Text style={styles.balanceValue}>{usdtBalance}</Text>
-                  </View>
-                </View>
-              )}
+        {walletAddress ? (
+          <View style={styles.balanceCard}>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>BNB</Text>
+              <Text style={styles.balanceValue}>{bnbBalance}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>SUPER</Text>
+              <Text style={styles.balanceValue}>{superBalance}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>USDT</Text>
+              <Text style={styles.balanceValue}>{usdtBalance}</Text>
+            </View>
+          </View>
+        ) : null}
         <Text style={styles.machineLabel}>{t.machineCodeTitle}</Text>
         <Text style={styles.machineValue}>{machineCode}</Text>
         <Text style={styles.machineHint}>{t.machineCodeHint}</Text>
-      </View>
-
-      <View style={styles.statusCard}>
-        <View style={s.rowBetween}>
-          <Text style={styles.statusTitle}>{t.phoneStatus}</Text>
-          <View style={[styles.dotPill, identityReady ? styles.dotOnline : styles.dotOffline]}>
-            <Text style={styles.dotPillText}>{onlineState}</Text>
-          </View>
-        </View>
-        <Text style={styles.hashingText}>{t.hashing}</Text>
-      </View>
-
-      <View style={s.metricsRow}>
-        <View style={s.metricCard}>
-          <Text style={s.metricValue}>{formatDuration(totalOnlineMinutes, lang)}</Text>
-          <Text style={s.metricLabel}>{t.totalOnline}</Text>
-        </View>
-        <View style={s.metricCard}>
-          <Text style={s.metricValue}>{formatDuration(monthProgressMinutes, lang)}</Text>
-          <Text style={s.metricLabel}>{t.monthOnline}</Text>
-        </View>
-      </View>
-
-      <View style={s.actionCard}>
-        <Text style={s.sectionTitle}>{t.homePrimaryAction}</Text>
-        <View style={s.quickRow}>
-          <TouchableOpacity style={s.quickBtn} onPress={guideAction} disabled={isBusy || contractExpired}>
-            <Text style={s.quickBtnText}>{guideCtaLabel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={() => setActiveTab('earnings')}>
-            <Text style={s.quickBtnText}>{t.tabEarnings}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={() => setActiveTab('exchange')}>
-            <Text style={s.quickBtnText}>{t.tabExchange}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  stageCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2f93db',
+    backgroundColor: '#072a59',
+    padding: 14,
+    gap: 10,
+  },
+  stageLabel: {
+    color: '#8fdcff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stageTitle: {
+    color: '#f0fbff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  stageHint: {
+    color: '#b9e4ff',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  stageMetric: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#225b98',
+    backgroundColor: '#0a376f',
+    padding: 10,
+    gap: 4,
+  },
+  stageMetricValue: {
+    color: '#ecfeff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  stageMetricLabel: {
+    color: '#9dd4ff',
+    fontSize: 11,
+  },
+  primaryActionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1f7fb2',
+    backgroundColor: '#083f63',
+    padding: 14,
+    gap: 12,
+  },
+  primaryActionContent: {
+    flex: 1,
+    gap: 5,
+    paddingRight: 12,
+  },
+  primaryActionLabel: {
+    color: '#7dd3fc',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  primaryActionTitle: {
+    color: '#f0fbff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  primaryActionHint: {
+    color: '#c0ecff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  primaryActionBtn: {
+    alignSelf: 'center',
+    borderRadius: 14,
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  primaryActionBtnText: {
+    color: '#083344',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+    backgroundColor: '#0a315f',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  secondaryActionText: {
+    color: '#dbf4ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   profileCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -219,19 +357,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  statusCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f4f96',
-    backgroundColor: '#08306f',
-    padding: 14,
-    gap: 8,
-  },
-  statusTitle: {
-    color: '#e6f4ff',
-    fontSize: 19,
-    fontWeight: '700',
-  },
   dotPill: {
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -247,13 +372,6 @@ const styles = StyleSheet.create({
     color: '#ecfeff',
     fontSize: 12,
     fontWeight: '700',
-  },
-  hashingText: {
-    color: '#b8ecff',
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    paddingVertical: 8,
   },
   copyBtn: {
     borderRadius: 8,

@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { activatePendingLocksOnAgreement } from "../lib/locks";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
@@ -223,6 +224,17 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .bind(userId)
       .first<{ version: string; accepted_at: string }>();
 
+    const lockSummary = await env.DB.prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN status = 'pending_agreement' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+         SUM(CASE WHEN status IN ('released','admin_released') THEN 1 ELSE 0 END) AS released
+       FROM token_locks WHERE user_id = ?`
+    )
+      .bind(userId)
+      .first<{ total: number; pending: number; active: number; released: number }>();
+
     return json({
       ...user,
       devices: devices.results ?? [],
@@ -230,6 +242,12 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       payoutWallets: wallets.results ?? [],
       agreementAcceptedVersion: acceptance?.version ?? null,
       agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreement_accepted_at?: string | null }).agreement_accepted_at ?? null,
+      lockSummary: {
+        total: Number(lockSummary?.total ?? 0),
+        pending: Number(lockSummary?.pending ?? 0),
+        active: Number(lockSummary?.active ?? 0),
+        released: Number(lockSummary?.released ?? 0),
+      },
     });
   }
 
@@ -274,7 +292,9 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .bind(now, now, userId)
       .run();
 
-    return json({ ok: true, version, acceptedAt: now });
+    const activated = await activatePendingLocksOnAgreement(env, userId, version, now);
+
+    return json({ ok: true, version, acceptedAt: now, activatedLocks: activated.activated });
   }
 
   // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)

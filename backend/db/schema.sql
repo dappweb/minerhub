@@ -307,11 +307,63 @@ CREATE TABLE IF NOT EXISTS swap_trade_logs (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS super_distributions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  wallet TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('mint','transfer')),
+  usdt_amount REAL NOT NULL,
+  super_amount REAL NOT NULL,
+  swap_price_super_per_usdt REAL NOT NULL,
+  tx_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'success' CHECK (status IN ('pending','success','failed')),
+  lock_term_days INTEGER NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS token_locks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  wallet TEXT NOT NULL,
+  source_distribution_id TEXT,
+  locked_super REAL NOT NULL,
+  released_super REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending_agreement' CHECK (status IN ('pending_agreement','active','released','admin_released','cancelled')),
+  lock_term_days INTEGER NOT NULL,
+  agreement_version TEXT,
+  start_at TEXT,
+  end_at TEXT,
+  released_at TEXT,
+  release_note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (source_distribution_id) REFERENCES super_distributions(id)
+);
+
+CREATE TABLE IF NOT EXISTS reward_withdrawals (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  wallet TEXT NOT NULL,
+  amount_super REAL NOT NULL,
+  tx_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted','confirmed','failed')),
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_user_id ON exchange_orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status);
 CREATE INDEX IF NOT EXISTS idx_payout_batches_status ON payout_batches(status);
 CREATE INDEX IF NOT EXISTS idx_payout_batch_items_batch_id ON payout_batch_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_swap_trade_logs_user_id ON swap_trade_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_super_distributions_user_time ON super_distributions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_token_locks_user_status ON token_locks(user_id, status, end_at);
+CREATE INDEX IF NOT EXISTS idx_reward_withdrawals_user_time ON reward_withdrawals(user_id, created_at DESC);
 
 -- === Owner admin system (P0) ===
 CREATE TABLE IF NOT EXISTS owner_sessions (

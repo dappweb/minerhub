@@ -155,6 +155,20 @@ export default function DownloadSection() {
 
   const selectedMeta = platformMeta[selectedPlatform];
   const SelectedIcon = selectedMeta.icon;
+  const faqs = [
+    {
+      q: '推荐人钱包有什么用？',
+      a: '首次注册需要绑定推荐人钱包，用于完成账户关系建立和团队统计。',
+    },
+    {
+      q: '机器码是什么？',
+      a: '机器码用于把你的手机设备和开通服务关联起来，提交给客服后即可进入激活流程。',
+    },
+    {
+      q: '为什么会提示 Gas？',
+      a: '链上激活和提现需要少量网络费，余额不足时 App 会引导你申请支持。',
+    },
+  ];
 
   return (
     <section id="download" className="relative overflow-hidden border-b border-slate-800/70 bg-[#020b22] py-24">
@@ -172,7 +186,7 @@ export default function DownloadSection() {
           </div>
           <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">下载 Coin Planet App</h2>
           <p className="mx-auto max-w-2xl text-lg text-slate-300/90">
-            {loading ? '正在读取最新发布版本...' : '下载最新版 APP，按“身份同步 → 月卡开通 → 矿机设置 → 保持在线”完成挖矿准备。'}
+            {loading ? '正在读取最新发布版本...' : '下载最新版 App，按“身份同步 → 提交机器码开通 → 激活设备 → 保持在线”完成准备并开始累计收益。'}
           </p>
         </motion.div>
 
@@ -386,6 +400,26 @@ export default function DownloadSection() {
           <div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 text-center text-sm text-slate-300">
             <p className="mb-1 text-xs uppercase tracking-wide text-cyan-300">Experience</p>
             <p>手机端收益与团队实时同步</p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mt-10 rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 backdrop-blur-sm"
+        >
+          <div className="mb-5">
+            <h3 className="text-2xl font-bold text-white">下载前常见问题</h3>
+            <p className="mt-2 text-sm text-slate-400">把新用户最常问的几个问题前置，减少下载后反复找客服确认。</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {faqs.map((item) => (
+              <div key={item.q} className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4">
+                <p className="mb-2 text-sm font-semibold text-slate-100">{item.q}</p>
+                <p className="text-sm leading-6 text-slate-400">{item.a}</p>
+              </div>
+            ))}
           </div>
         </motion.div>
       </div>

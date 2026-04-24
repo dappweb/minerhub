@@ -317,20 +317,35 @@ export type ReferralMembersPageDto = {
   total: number;
 };
 
+export type ExchangeOrderMode = 'auto' | 'manual' | string;
+export type ExchangeOrderStatus =
+  | 'manual_pending'
+  | 'auto_processing'
+  | 'approved'
+  | 'submitted'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | string;
+
 export type ExchangeRequestDto = {
   id: string;
   userId: string;
   wallet: string;
   amountSuper: string;
   amountUsdt: string;
-  mode: 'auto' | 'manual' | string;
-  status: string;
+  mode: ExchangeOrderMode;
+  status: ExchangeOrderStatus;
   note: string | null;
   txHash: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
 };
+
+export function isExchangeOrderPendingStatus(status: string): boolean {
+  return status === 'manual_pending' || status === 'auto_processing' || status === 'approved' || status === 'submitted';
+}
 
 export type BindReferralResultDto = {
   ok: boolean;

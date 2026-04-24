@@ -16,6 +16,7 @@ export interface ProfileTabProps {
   walletAddress: string;
   expireDate: string;
   contractExpired: boolean;
+  machineCode: string;
   transferTo: string;
   setTransferTo: (v: string) => void;
   transferAmount: string;
@@ -158,6 +159,7 @@ export default function ProfileTab({
   walletAddress,
   expireDate,
   contractExpired,
+  machineCode,
   transferTo,
   setTransferTo,
   transferAmount,
@@ -188,6 +190,7 @@ export default function ProfileTab({
   onReferralModeChange,
   onReferralPageChange,
 }: ProfileTabProps) {
+  const isZh = t.sendTransfer !== 'Send Transfer';
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
   const contacts = (supportContacts ?? []).filter((item) => item.value && item.value.trim().length > 0);
@@ -199,6 +202,7 @@ export default function ProfileTab({
   const [exportError, setExportError] = React.useState('');
   const members = referralMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
+  const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet' | 'machine'>('idle');
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -236,6 +240,24 @@ export default function ProfileTab({
     const ok = await copyToClipboard(exportedKey);
     setExportCopied(ok);
     setTimeout(() => setExportCopied(false), 1800);
+  };
+
+  const handleCopyInviteWallet = async () => {
+    if (!walletAddress) return;
+    const ok = await copyToClipboard(walletAddress);
+    if (ok) {
+      setSupportCopied('wallet');
+      setTimeout(() => setSupportCopied('idle'), 1800);
+    }
+  };
+
+  const handleCopyMachineCode = async () => {
+    if (!machineCode) return;
+    const ok = await copyToClipboard(machineCode);
+    if (ok) {
+      setSupportCopied('machine');
+      setTimeout(() => setSupportCopied('idle'), 1800);
+    }
   };
   return (
     <>
@@ -287,6 +309,68 @@ export default function ProfileTab({
             <Text style={styles.expiredBannerTitle}>{t.contractExpiredTitle}</Text>
             <Text style={styles.expiredBannerBody}>{t.contractExpiredBody}</Text>
           </View>
+        )}
+      </View>
+
+      <View style={s.actionCard}>
+        <Text style={s.sectionTitle}>{t.supportContactsTitle}</Text>
+        <View style={styles.growthCard}>
+          <Text style={styles.growthTitle}>{isZh ? '邀请与开通怎么配合' : 'How invite and activation work together'}</Text>
+          <Text style={styles.growthText}>
+            {isZh
+              ? '复制你的邀请钱包给新用户，让对方注册时填写；设备开通前，再把机器码提交给客服完成绑定。'
+              : 'Share your invite wallet with new users during signup, then submit the device machine code to support for activation.'}
+          </Text>
+        </View>
+        <View style={styles.supportToolsGrid}>
+          <View style={styles.supportToolCard}>
+            <Text style={styles.supportToolLabel}>{isZh ? '我的邀请钱包' : 'My invite wallet'}</Text>
+            <Text style={styles.supportToolValue}>{walletAddress || t.notInit}</Text>
+            <TouchableOpacity style={styles.supportToolBtn} onPress={handleCopyInviteWallet} disabled={!walletAddress}>
+              <Text style={styles.supportToolBtnText}>
+                {supportCopied === 'wallet' ? t.copied : (t.copyAddress ?? 'Copy')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.supportToolCard}>
+            <Text style={styles.supportToolLabel}>{isZh ? '设备机器码' : 'Device machine code'}</Text>
+            <Text style={styles.supportToolValue}>{machineCode || '--'}</Text>
+            <TouchableOpacity style={styles.supportToolBtn} onPress={handleCopyMachineCode} disabled={!machineCode}>
+              <Text style={styles.supportToolBtnText}>
+                {supportCopied === 'machine' ? t.copied : (t.copyAddress ?? 'Copy')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {contacts.length === 0 ? (
+          <Text style={styles.contactEmpty}>{t.supportContactsEmpty}</Text>
+        ) : (
+          contacts.map((contact) => {
+            const link = getContactLink(contact.type, contact.value);
+            const title = contact.label?.trim() || getContactTypeLabel(contact.type);
+            const handlePress = () => {
+              if (link) {
+                Linking.openURL(link).catch(() => undefined);
+              }
+            };
+            return (
+              <TouchableOpacity
+                key={contact.id}
+                activeOpacity={link ? 0.7 : 1}
+                onPress={link ? handlePress : undefined}
+                style={styles.contactRow}
+              >
+                <View style={styles.contactTypeTag}>
+                  <Text style={styles.contactTypeTagText}>{getContactTypeLabel(contact.type)}</Text>
+                </View>
+                <View style={styles.contactBody}>
+                  <Text style={styles.contactTitle}>{title}</Text>
+                  <Text style={styles.contactValue}>{contact.value}</Text>
+                  {contact.note ? <Text style={styles.contactNote}>{contact.note}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })
         )}
       </View>
 
@@ -383,40 +467,6 @@ export default function ProfileTab({
             <Text style={styles.memberPagerText}>{t.referralMembersNext ?? 'Next'}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={s.actionCard}>
-        <Text style={s.sectionTitle}>{t.supportContactsTitle}</Text>
-        {contacts.length === 0 ? (
-          <Text style={styles.contactEmpty}>{t.supportContactsEmpty}</Text>
-        ) : (
-          contacts.map((contact) => {
-            const link = getContactLink(contact.type, contact.value);
-            const title = contact.label?.trim() || getContactTypeLabel(contact.type);
-            const handlePress = () => {
-              if (link) {
-                Linking.openURL(link).catch(() => undefined);
-              }
-            };
-            return (
-              <TouchableOpacity
-                key={contact.id}
-                activeOpacity={link ? 0.7 : 1}
-                onPress={link ? handlePress : undefined}
-                style={styles.contactRow}
-              >
-                <View style={styles.contactTypeTag}>
-                  <Text style={styles.contactTypeTagText}>{getContactTypeLabel(contact.type)}</Text>
-                </View>
-                <View style={styles.contactBody}>
-                  <Text style={styles.contactTitle}>{title}</Text>
-                  <Text style={styles.contactValue}>{contact.value}</Text>
-                  {contact.note ? <Text style={styles.contactNote}>{contact.note}</Text> : null}
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
       </View>
 
       <View style={s.actionCard}>
@@ -562,6 +612,61 @@ const styles = StyleSheet.create({
     color: '#93a9d1',
     fontSize: 12,
     lineHeight: 18,
+  },
+  growthCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#225b98',
+    backgroundColor: '#082754',
+    padding: 12,
+    gap: 6,
+  },
+  growthTitle: {
+    color: '#e8fbff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  growthText: {
+    color: '#b8dcff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  supportToolsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  supportToolCard: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    padding: 10,
+    gap: 6,
+  },
+  supportToolLabel: {
+    color: '#93a9d1',
+    fontSize: 11,
+  },
+  supportToolValue: {
+    color: '#e8fbff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  supportToolBtn: {
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#1f4f96',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+  },
+  supportToolBtnText: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   contactRow: {
     flexDirection: 'row',

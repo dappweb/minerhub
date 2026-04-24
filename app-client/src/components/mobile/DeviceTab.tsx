@@ -1,19 +1,18 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { ExchangeRequestDto } from '../../services/api';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import s from './sharedStyles';
 
 export interface DeviceTabProps {
   onlineState: string;
   deviceId: string;
   hashrateDisplay: string;
+  totalOnlineMinutes: number;
+  monthProgressMinutes: number;
+  lastSeenAt?: string | null;
   isBusy: boolean;
   identityReady: boolean;
   startMining: () => void;
   initializeAccount: () => void;
-  exchangeOrders?: ExchangeRequestDto[];
-  exchangeOrdersLoading?: boolean;
-  onRefreshExchangeOrders?: () => void;
   t: {
     deviceSummary: string;
     phoneStatus: string;
@@ -22,27 +21,11 @@ export interface DeviceTabProps {
     hashrateLockedHint: string;
     setupMiner: string;
     syncIdentity: string;
-    exchangeOrderHistoryTitle?: string;
-    exchangeOrderStatus?: string;
-    exchangeOrderCreatedAt?: string;
-    exchangeOrderEmpty?: string;
-    exchangeOrderMode?: string;
   };
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: '#f59e0b',
-  processing: '#38bdf8',
-  completed: '#4ade80',
-  failed: '#f87171',
-  cancelled: '#94a3b8',
-};
-
-function statusColor(status: string): string {
-  return STATUS_COLOR[status] ?? '#94a3b8';
-}
-
-function formatDate(iso: string): string {
+function formatDate(iso?: string | null): string {
+  if (!iso) return '--';
   try {
     const d = new Date(iso);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -56,15 +39,23 @@ export default function DeviceTab({
   onlineState,
   deviceId,
   hashrateDisplay,
+  totalOnlineMinutes,
+  monthProgressMinutes,
+  lastSeenAt,
   isBusy,
   identityReady,
   startMining,
   initializeAccount,
-  exchangeOrders = [],
-  exchangeOrdersLoading = false,
-  onRefreshExchangeOrders,
   t,
 }: DeviceTabProps) {
+  const isZh = t.syncIdentity !== 'Sync Identity';
+  const formatDuration = (minutes: number) => {
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    const mins = minutes % 60;
+    return isZh ? `${days}天${hours}小时${mins}分` : `${days}d ${hours}h ${mins}m`;
+  };
+
   return (
     <>
       <View style={s.actionCard}>
@@ -74,10 +65,33 @@ export default function DeviceTab({
           <Text style={s.metricValue}>{onlineState}</Text>
           <Text style={s.walletHint}>{deviceId || t.notInit}</Text>
         </View>
+        <View style={styles.summaryGrid}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{formatDuration(totalOnlineMinutes)}</Text>
+            <Text style={styles.summaryLabel}>{isZh ? '累计在线时长' : 'Total online time'}</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{formatDuration(monthProgressMinutes)}</Text>
+            <Text style={styles.summaryLabel}>{isZh ? '本月累计时长' : 'Current month time'}</Text>
+          </View>
+        </View>
         <Text style={s.label}>{t.hashrate}</Text>
         <View style={styles.readonlyHashrateBox}>
           <Text style={styles.readonlyHashrateValue}>{hashrateDisplay}</Text>
           <Text style={styles.readonlyHashrateHint}>{t.hashrateLockedHint}</Text>
+        </View>
+        <View style={styles.healthCard}>
+          <Text style={styles.healthTitle}>{isZh ? '运行提示' : 'Run status'}</Text>
+          <Text style={styles.healthText}>
+            {identityReady
+              ? (isZh ? `最近一次同步：${formatDate(lastSeenAt)}` : `Last sync: ${formatDate(lastSeenAt)}`)
+              : (isZh ? '请先完成身份同步，再进行激活与在线累计。' : 'Complete identity sync before activation and online accrual.')}
+          </Text>
+          <Text style={styles.healthText}>
+            {isZh
+              ? '如果设备离线，收益会暂停累计；重新上线后会继续统计。'
+              : 'If the device goes offline, rewards stop accruing until it reconnects.'}
+          </Text>
         </View>
         <View style={s.quickRow}>
           <TouchableOpacity style={s.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
@@ -87,51 +101,6 @@ export default function DeviceTab({
             <Text style={s.quickBtnText}>{t.syncIdentity}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* 兑换交易记录 */}
-      <View style={s.actionCard}>
-        <View style={styles.orderHeaderRow}>
-          <Text style={s.sectionTitle}>{t.exchangeOrderHistoryTitle ?? '兑换记录'}</Text>
-          {onRefreshExchangeOrders && (
-            <TouchableOpacity onPress={onRefreshExchangeOrders} style={styles.refreshBtn}>
-              <Text style={styles.refreshBtnText}>↻</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {exchangeOrdersLoading ? (
-          <Text style={styles.orderEmpty}>加载中…</Text>
-        ) : exchangeOrders.length === 0 ? (
-          <Text style={styles.orderEmpty}>{t.exchangeOrderEmpty ?? '暂无兑换记录'}</Text>
-        ) : (
-          <ScrollView style={styles.orderList} nestedScrollEnabled>
-            {exchangeOrders.map((item) => (
-              <View key={item.id} style={styles.orderItem}>
-                <View style={styles.orderTopRow}>
-                  <Text style={styles.orderAmount}>{item.amountSuper} SUPER → {item.amountUsdt} USDT</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + '33', borderColor: statusColor(item.status) }]}>
-                    <Text style={[styles.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
-                  </View>
-                </View>
-                <Text style={styles.orderMeta}>
-                  {t.exchangeOrderCreatedAt ?? '时间'}: {formatDate(item.createdAt)}
-                </Text>
-                {item.completedAt && (
-                  <Text style={styles.orderMeta}>完成: {formatDate(item.completedAt)}</Text>
-                )}
-                {item.txHash && (
-                  <Text style={styles.orderTxHash} numberOfLines={1} ellipsizeMode="middle">
-                    TxHash: {item.txHash}
-                  </Text>
-                )}
-                <Text style={styles.orderMeta}>
-                  {t.exchangeOrderMode ?? '模式'}: {item.mode}
-                  {item.note ? `  |  ${item.note}` : ''}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
       </View>
     </>
   );
@@ -145,6 +114,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b2d60',
     padding: 12,
     gap: 6,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  summaryItem: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#315d95',
+    backgroundColor: '#0a244f',
+    padding: 12,
+    gap: 4,
+  },
+  summaryValue: {
+    color: '#f0fdff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  summaryLabel: {
+    color: '#8ec4ff',
+    fontSize: 11,
   },
   readonlyHashrateBox: {
     borderRadius: 12,
@@ -164,68 +155,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  orderHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  refreshBtn: {
-    padding: 4,
-  },
-  refreshBtnText: {
-    color: '#38bdf8',
-    fontSize: 18,
-  },
-  orderList: {
-    maxHeight: 380,
-  },
-  orderEmpty: {
-    color: '#8ec4ff',
-    fontSize: 13,
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
-  orderItem: {
-    borderRadius: 10,
+  healthCard: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1e4070',
-    backgroundColor: '#0b2045',
-    padding: 10,
-    marginBottom: 8,
-    gap: 4,
+    borderColor: '#315d95',
+    backgroundColor: '#0b2d60',
+    padding: 12,
+    gap: 6,
   },
-  orderTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  orderAmount: {
-    color: '#e0f2fe',
-    fontSize: 13,
+  healthTitle: {
+    color: '#d7f3ff',
+    fontSize: 12,
     fontWeight: '700',
-    flex: 1,
   },
-  statusBadge: {
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  orderMeta: {
-    color: '#7dd3fc',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  orderTxHash: {
-    color: '#64748b',
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: 'monospace',
+  healthText: {
+    color: '#8ec4ff',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

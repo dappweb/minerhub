@@ -1,9 +1,11 @@
 import { getAddress, isAddress } from "ethers";
 import { writeOwnerAudit } from "../lib/audit";
 import { createId, nowIso } from "../lib/id";
+import { refreshUserContractStateFromLocks } from "../lib/locks";
 import { getPrimaryOwnerWallet, isOwnerWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json, notFound, unauthorized } from "../lib/response";
+import { readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
 
 type OwnerAuthResult = { ok: true; wallet: string } | { ok: false; response: Response };
@@ -265,6 +267,201 @@ async function handleSuperBurn(request: Request, env: Env, actorWallet: string):
     await writeOwnerAudit(env, { action: "super.burn", actorWallet, payload: { amount }, status: "failed", error: msg, request });
     return internalError(msg);
   }
+}
+
+async function handleSuperGrantPriced(request: Request, env: Env, actorWallet: string): Promise<Response> {
+  const relayer = tryCreateRelayer(env);
+  if (!relayer) return internalError("OWNER_PRIVATE_KEY not configured");
+
+  const body = await parseJson<{
+    userId?: string;
+    wallet?: string;
+    usdtAmount?: string | number;
+    mode?: "mint" | "transfer";
+    lockTermDays?: number;
+    note?: string;
+  }>(request);
+
+  if (body?.usdtAmount === undefined) return badRequest("usdtAmount required");
+  const usdtAmount = Number(body.usdtAmount);
+  if (!Number.isFinite(usdtAmount) || usdtAmount <= 0) return badRequest("usdtAmount must be > 0");
+
+  let userId = body.userId ?? null;
+  let targetWallet = body.wallet ? normalizeAddr(body.wallet) : null;
+  if (!userId && !targetWallet) return badRequest("userId or wallet required");
+
+  if (userId) {
+    const u = await env.DB.prepare("SELECT id, wallet FROM users WHERE id = ?").bind(userId).first<{ id: string; wallet: string }>();
+    if (!u) return notFound("User not found");
+    targetWallet = normalizeAddr(u.wallet);
+  } else if (targetWallet) {
+    const u = await env.DB.prepare("SELECT id, wallet FROM users WHERE wallet = ?").bind(targetWallet).first<{ id: string; wallet: string }>();
+    if (u) userId = u.id;
+  }
+
+  if (!targetWallet) return badRequest("Invalid target wallet");
+
+  const status = await readSystemStatus(env);
+  const price = Number(status.swapPriceSuperPerUsdt ?? "0");
+  if (!Number.isFinite(price) || price <= 0) return badRequest("swap_price_super_per_usdt must be configured and > 0");
+
+  const superAmountNum = Number((usdtAmount * price).toFixed(6));
+  if (!Number.isFinite(superAmountNum) || superAmountNum <= 0) return badRequest("Calculated SUPER amount invalid");
+
+  const mode = body.mode === "mint" ? "mint" : "transfer";
+  const superAmount = superAmountNum.toString();
+  if (mode === "mint") {
+    const cap = await enforceMintCap(env, superAmount);
+    if (!cap.ok) {
+      await writeOwnerAudit(env, {
+        action: "super.grantPriced",
+        actorWallet,
+        targetUserId: userId,
+        targetWallet,
+        payload: { usdtAmount, superAmount, price, mode },
+        status: "failed",
+        error: cap.error,
+        request,
+      });
+      return badRequest(cap.error);
+    }
+  }
+
+  const lockTermDays = Math.max(1, Number(body.lockTermDays ?? Number(status.contractTermDaysDefault ?? "1095")));
+  const now = nowIso();
+  try {
+    const tx = mode === "mint"
+      ? await relayer.mintSuper(targetWallet, superAmount)
+      : await relayer.transferSuper(targetWallet, superAmount);
+
+    const distId = createId("sdt");
+    const lockId = createId("lok");
+    if (userId) {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO customer_profiles (
+          user_id, contract_term_days, monthly_card_days, contract_active,
+          activation_status, exchange_auto_enabled, payout_wallets_json,
+          reward_rate_usdt_per_hour, total_reward_usdt, total_reward_super,
+          online_status, created_at, updated_at
+        ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 'offline', ?, ?)`
+      ).bind(userId, now, now).run();
+    }
+
+    await env.DB.prepare(
+      `INSERT INTO super_distributions (
+        id, user_id, wallet, mode, usdt_amount, super_amount, swap_price_super_per_usdt,
+        tx_hash, status, lock_term_days, note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', ?, ?, ?)`
+    )
+      .bind(distId, userId, targetWallet, mode, usdtAmount, superAmountNum, price, tx.txHash, lockTermDays, body.note ?? null, now)
+      .run();
+
+    if (userId) {
+      await env.DB.prepare(
+        `INSERT INTO token_locks (
+          id, user_id, wallet, source_distribution_id, locked_super, released_super, status,
+          lock_term_days, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, 'pending_agreement', ?, ?, ?)`
+      )
+        .bind(lockId, userId, targetWallet, distId, superAmountNum, lockTermDays, now, now)
+        .run();
+    }
+
+    await writeOwnerAudit(env, {
+      action: "super.grantPriced",
+      actorWallet,
+      targetUserId: userId,
+      targetWallet,
+      payload: { usdtAmount, superAmount: superAmountNum, price, mode, lockTermDays, distributionId: distId },
+      txHash: tx.txHash,
+      request,
+    });
+
+    return json({
+      ok: true,
+      txHash: tx.txHash,
+      userId,
+      wallet: targetWallet,
+      usdtAmount,
+      superAmount: superAmountNum,
+      swapPriceSuperPerUsdt: price,
+      mode,
+      lockTermDays,
+      distributionId: distId,
+      lockId: userId ? lockId : null,
+      lockStatus: userId ? "pending_agreement" : null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "grant failed";
+    await writeOwnerAudit(env, {
+      action: "super.grantPriced",
+      actorWallet,
+      targetUserId: userId,
+      targetWallet,
+      payload: { usdtAmount, superAmount: superAmountNum, price, mode },
+      status: "failed",
+      error: msg,
+      request,
+    });
+    return internalError(msg);
+  }
+}
+
+async function handleLocksList(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status");
+  const userId = url.searchParams.get("userId");
+  const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
+
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  if (status) { where.push("status = ?"); binds.push(status); }
+  if (userId) { where.push("user_id = ?"); binds.push(userId); }
+
+  const sql = `SELECT id, user_id, wallet, source_distribution_id, locked_super, released_super, status,
+                      lock_term_days, agreement_version, start_at, end_at, released_at, release_note, created_at, updated_at
+               FROM token_locks ${where.length ? "WHERE " + where.join(" AND ") : ""}
+               ORDER BY created_at DESC LIMIT ?`;
+  const { results } = await env.DB.prepare(sql).bind(...binds, limit).all();
+  return json({ items: results ?? [] });
+}
+
+async function handleLockManualUnlock(request: Request, env: Env, lockId: string, actorWallet: string): Promise<Response> {
+  const body = await parseJson<{ note?: string }>(request);
+  const row = await env.DB.prepare(
+    "SELECT id, user_id, wallet, status, locked_super, released_super FROM token_locks WHERE id = ?"
+  ).bind(lockId).first<{ id: string; user_id: string; wallet: string; status: string; locked_super: number; released_super: number }>();
+
+  if (!row) return notFound("Lock not found");
+  if (row.status === "released" || row.status === "admin_released") {
+    return badRequest("Lock already released");
+  }
+
+  const now = nowIso();
+  await env.DB.prepare(
+    `UPDATE token_locks
+     SET status = 'admin_released',
+         released_super = locked_super,
+         released_at = ?,
+         release_note = ?,
+         updated_at = ?
+     WHERE id = ?`
+  )
+    .bind(now, body?.note ?? "manual unlock by owner", now, lockId)
+    .run();
+
+  await refreshUserContractStateFromLocks(env, row.user_id, now);
+
+  await writeOwnerAudit(env, {
+    action: "locks.manualUnlock",
+    actorWallet,
+    targetUserId: row.user_id,
+    targetWallet: row.wallet,
+    payload: { lockId, note: body?.note ?? null },
+    request,
+  });
+
+  return json({ ok: true, lockId, status: "admin_released", releasedAt: now });
 }
 
 // ---- Earnings ----
@@ -561,11 +758,19 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
     if (pathParts[1] === "transfer" && request.method === "POST") return handleSuperTransfer(request, env, actor);
     if (pathParts[1] === "airdrop"  && request.method === "POST") return handleSuperAirdrop(request, env, actor);
     if (pathParts[1] === "burn"     && request.method === "POST") return handleSuperBurn(request, env, actor);
+    if (pathParts[1] === "grant-priced" && request.method === "POST") return handleSuperGrantPriced(request, env, actor);
     if (pathParts[1] === "supply"   && request.method === "GET") {
       const relayer = tryCreateRelayer(env);
       if (!relayer) return internalError("OWNER_PRIVATE_KEY not configured");
       const s = await relayer.totalSuperSupply();
       return json(s);
+    }
+  }
+
+  if (pathParts[0] === "locks") {
+    if (request.method === "GET") return handleLocksList(request, env);
+    if (request.method === "POST" && pathParts[1] && pathParts[2] === "unlock") {
+      return handleLockManualUnlock(request, env, pathParts[1], actor);
     }
   }
 

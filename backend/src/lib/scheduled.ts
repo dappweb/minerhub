@@ -1,5 +1,6 @@
 import type { Env } from "../types/env";
 import { nowIso } from "./id";
+import { autoReleaseMaturedLocks } from "./locks";
 
 type ExpiredRow = { user_id: string };
 type OfflineRow = {
@@ -111,10 +112,12 @@ export async function notifyOfflineCustomers(
 export async function runScheduledTasks(env: Env): Promise<{
   expired: number;
   notified: number;
+  releasedLocks: number;
 }> {
-  const [expired, notified] = await Promise.all([
+  const [expired, notified, released] = await Promise.all([
     expireOverdueContracts(env),
     notifyOfflineCustomers(env),
+    autoReleaseMaturedLocks(env),
   ]);
-  return { expired: expired.expired, notified: notified.notified };
+  return { expired: expired.expired, notified: notified.notified, releasedLocks: released.released };
 }
