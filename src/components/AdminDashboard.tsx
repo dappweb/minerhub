@@ -3,27 +3,27 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
-    addSwapLiquidityOnChain,
-    collectEcosystemFeeOnChain,
-    collectPlatformFeeOnChain,
-    getGlobalStatsOnChain,
-    getMinerInfoOnChain,
-    getMiningPoolAddress,
-    getMiningPoolAdminsOnChain,
-    getMiningPoolOwnerOnChain,
-    getSuperTokenAddress,
-    getSuperTokenStatsOnChain,
-    getSwapPoolStatsOnChain,
-    getSwapRouterAddress,
-    initializeSwapLiquidityOnChain,
-    mintSuperOnChain,
-    sendGasToAddressOnChain,
-    sendSuperToAddressOnChain,
-    startMiningOnChain,
-    type MiningPoolGlobalStats,
-    type MiningPoolMinerInfo,
-    type SuperTokenStats,
-    type SwapPoolStats
+  addSwapLiquidityOnChain,
+  collectEcosystemFeeOnChain,
+  collectPlatformFeeOnChain,
+  getGlobalStatsOnChain,
+  getMinerInfoOnChain,
+  getMiningPoolAddress,
+  getMiningPoolAdminsOnChain,
+  getMiningPoolOwnerOnChain,
+  getSuperTokenAddress,
+  getSuperTokenStatsOnChain,
+  getSwapPoolStatsOnChain,
+  getSwapRouterAddress,
+  initializeSwapLiquidityOnChain,
+  mintSuperOnChain,
+  sendGasToAddressOnChain,
+  sendSuperToAddressOnChain,
+  startMiningOnChain,
+  type MiningPoolGlobalStats,
+  type MiningPoolMinerInfo,
+  type SuperTokenStats,
+  type SwapPoolStats
 } from '../lib/blockchain';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import OwnerConsole from './OwnerConsole';
@@ -427,7 +427,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const buildSignedHeaders = useCallback(async (path: string, body: Record<string, unknown>) => {
     const nonce = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-    const message = `coinplanet|${nonce}|${path}|${JSON.stringify(body)}`;
+    // Backend verifies signature against URL pathname only (query string is stripped),
+    // so we must sign pathname only — otherwise GETs with query parameters fail.
+    const pathnameForSig = path.split('?')[0];
+    const message = `coinplanet|${nonce}|${pathnameForSig}|${JSON.stringify(body)}`;
     const signature = await signMessageAsync(adminWallet, message);
 
     return {
@@ -458,18 +461,19 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [apiBaseUrl, buildSignedHeaders]);
 
   const ownerReadRequest = useCallback(async <T,>(path: string): Promise<T> => {
+    // Backend requireOwnerRead enforces signature auth on all admin GETs, so we must sign the request.
+    // Body is empty for GET, and the server canonical message includes JSON.stringify({}) = "{}".
+    const headers = await buildSignedHeaders(path, {});
     const response = await fetch(`${apiBaseUrl}${path}`, {
       method: 'GET',
-      headers: {
-        'x-wallet': adminWallet,
-      },
+      headers,
     });
     if (!response.ok) {
       const text = await response.text();
       throw new Error(text || `Request failed: ${response.status}`);
     }
     return (await response.json()) as T;
-  }, [adminWallet, apiBaseUrl]);
+  }, [apiBaseUrl, buildSignedHeaders]);
 
   const loadBackendData = useCallback(async () => {
     if (!adminWallet) return;
