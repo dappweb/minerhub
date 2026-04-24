@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { exportWalletPrivateKey } from '../../services/wallet';
 import { copyToClipboard } from '../../utils/clipboard';
 import s from './sharedStyles';
@@ -84,6 +84,16 @@ export interface ProfileTabProps {
     referralMembersPage?: string;
     referralMembersPrev?: string;
     referralMembersNext?: string;
+    agreementSectionLabel?: string;
+    agreementStatusAccepted?: string;
+    agreementStatusPending?: string;
+    agreementViewButton?: string;
+    agreementTitleFallback?: string;
+    agreementIntro?: string;
+    agreementAccept?: string;
+    agreementSubmitting?: string;
+    agreementFailed?: string;
+    agreementCloseButton?: string;
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
@@ -114,6 +124,16 @@ export interface ProfileTabProps {
   referralMembersError?: string;
   onReferralModeChange?: (mode: 'direct' | 'team') => void;
   onReferralPageChange?: (page: number) => void;
+  agreement?: {
+    required: boolean;
+    accepted: boolean;
+    version: string | null;
+    title: string;
+    content: string;
+    submitting: boolean;
+    error: string;
+    onAccept: () => void;
+  } | null;
 }
 
 const CONTACT_TYPE_LABELS: Record<string, string> = {
@@ -189,6 +209,7 @@ export default function ProfileTab({
   referralMembersError = '',
   onReferralModeChange,
   onReferralPageChange,
+  agreement,
 }: ProfileTabProps) {
   const isZh = t.sendTransfer !== 'Send Transfer';
   const copyLabel =
@@ -203,6 +224,17 @@ export default function ProfileTab({
   const members = referralMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
   const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet' | 'machine'>('idle');
+  const [agreementVisible, setAgreementVisible] = React.useState(false);
+
+  const agreementSectionLabel = t.agreementSectionLabel ?? (isZh ? '用户协议' : 'User Agreement');
+  const agreementStatusAccepted = t.agreementStatusAccepted ?? (isZh ? '已同意' : 'Accepted');
+  const agreementStatusPending = t.agreementStatusPending ?? (isZh ? '待同意' : 'Pending');
+  const agreementViewButton = t.agreementViewButton ?? (isZh ? '查看 / 同意' : 'View / Accept');
+  const agreementTitleFallback = t.agreementTitleFallback ?? (isZh ? '用户协议' : 'User Agreement');
+  const agreementIntro = t.agreementIntro ?? (isZh ? '请阅读并同意以下协议。' : 'Please read and accept the agreement.');
+  const agreementAcceptLabel = t.agreementAccept ?? (isZh ? '我已阅读并同意' : 'I have read and agree');
+  const agreementSubmittingLabel = t.agreementSubmitting ?? (isZh ? '提交中...' : 'Submitting...');
+  const agreementCloseLabel = t.agreementCloseButton ?? (isZh ? '关闭' : 'Close');
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -273,6 +305,23 @@ export default function ProfileTab({
           <Text style={styles.copyBtnText}>{copyLabel}</Text>
         </TouchableOpacity>
         <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+
+        {agreement?.required && (
+          <View style={styles.agreementRow}>
+            <View style={styles.agreementRowText}>
+              <Text style={styles.agreementRowLabel}>{agreementSectionLabel}</Text>
+              <Text style={[styles.agreementRowStatus, agreement.accepted ? styles.agreementRowStatusOk : styles.agreementRowStatusPending]}>
+                {agreement.accepted ? `${agreementStatusAccepted}${agreement.version ? ` v${agreement.version}` : ''}` : agreementStatusPending}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.agreementRowBtn, agreement.accepted && styles.agreementRowBtnGhost]}
+              onPress={() => setAgreementVisible(true)}
+            >
+              <Text style={styles.agreementRowBtnText}>{agreementViewButton}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         
         {/* Wallet Balances */}
         {walletAddress && (
@@ -566,6 +615,49 @@ export default function ProfileTab({
           </Pressable>
         </Pressable>
       </Modal>
+
+      {agreement && (
+        <Modal
+          visible={agreementVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setAgreementVisible(false)}
+        >
+          <Pressable style={styles.modalMask} onPress={() => setAgreementVisible(false)}>
+            <Pressable style={styles.modalCardLarge}>
+              <Text style={styles.modalTitle}>
+                {agreement.title || agreementTitleFallback}
+                {agreement.version ? `  v${agreement.version}` : ''}
+              </Text>
+              <Text style={styles.modalWarn}>{agreementIntro}</Text>
+              <ScrollView style={styles.agreementScroll} contentContainerStyle={styles.agreementScrollContent}>
+                <Text style={styles.agreementBody}>{agreement.content}</Text>
+              </ScrollView>
+              {!!agreement.error && <Text style={styles.modalError}>{agreement.error}</Text>}
+              {agreement.accepted ? (
+                <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setAgreementVisible(false)}>
+                  <Text style={styles.modalGhostBtnText}>{agreementCloseLabel}</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.modalPrimaryBtn, agreement.submitting && styles.modalPrimaryBtnDisabled]}
+                    onPress={() => { agreement.onAccept(); }}
+                    disabled={agreement.submitting}
+                  >
+                    <Text style={styles.modalPrimaryBtnText}>
+                      {agreement.submitting ? agreementSubmittingLabel : agreementAcceptLabel}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setAgreementVisible(false)}>
+                    <Text style={styles.modalGhostBtnText}>{agreementCloseLabel}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </>
   );
 }
@@ -988,6 +1080,80 @@ const styles = StyleSheet.create({
   walletActionBtnText: {
     color: '#e8fbff',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  modalCardLarge: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '86%',
+    borderRadius: 16,
+    padding: 18,
+    backgroundColor: '#0b1a33',
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    gap: 10,
+  },
+  agreementScroll: {
+    maxHeight: 360,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+  },
+  agreementScrollContent: {
+    padding: 12,
+  },
+  agreementBody: {
+    color: '#d6e8ff',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  agreementRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  agreementRowText: {
+    flex: 1,
+    gap: 4,
+  },
+  agreementRowLabel: {
+    color: '#e8fbff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  agreementRowStatus: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  agreementRowStatusOk: {
+    color: '#5eead4',
+  },
+  agreementRowStatusPending: {
+    color: '#fbbf24',
+  },
+  agreementRowBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#1f4f96',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+  },
+  agreementRowBtnGhost: {
+    backgroundColor: '#0f213f',
+    borderColor: '#3f77bc',
+  },
+  agreementRowBtnText: {
+    color: '#e8fbff',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

@@ -2047,51 +2047,8 @@ export default function App() {
   }
 
   if (agreementNeedsAcceptance && userAgreement) {
-    const title = (lang === 'zh' ? userAgreement.titleZh : userAgreement.titleEn) || t.agreementTitleFallback;
-    const content = lang === 'zh' ? userAgreement.contentZh : userAgreement.contentEn;
-
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.agreementWrap}>
-          <View style={styles.agreementHeaderRow}>
-            <Text style={styles.agreementTitle}>{title}</Text>
-            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
-              <Text style={styles.langBtnText}>{t.langToggle}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.agreementIntro}>{t.agreementIntro}</Text>
-          <Text style={styles.agreementVersion}>v{userAgreement.version}</Text>
-          <ScrollView style={styles.agreementScroll} contentContainerStyle={styles.agreementScrollContent}>
-            <Text style={styles.agreementBody}>{content}</Text>
-          </ScrollView>
-          {agreementDeclined && (
-            <Text style={styles.agreementDeclined}>{t.agreementDeclinedHint}</Text>
-          )}
-          {!!agreementError && (
-            <Text style={styles.agreementError}>{agreementError}</Text>
-          )}
-          <View style={styles.agreementBtnRow}>
-            <TouchableOpacity
-              style={styles.agreementDeclineBtn}
-              onPress={handleDeclineAgreement}
-              disabled={agreementSubmitting}
-            >
-              <Text style={styles.agreementDeclineBtnText}>{t.agreementDecline}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.agreementAcceptBtn, agreementSubmitting && styles.agreementAcceptBtnDisabled]}
-              onPress={handleAcceptAgreement}
-              disabled={agreementSubmitting}
-            >
-              <Text style={styles.agreementAcceptBtnText}>
-                {agreementSubmitting ? t.agreementSubmitting : t.agreementAccept}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
+    // Agreement is required but not yet accepted. Do NOT block the whole app;
+    // surface manual acceptance via ProfileTab (wallet ID card) instead.
   }
 
   return (
@@ -2305,6 +2262,16 @@ export default function App() {
               onCheckUpdate={() => {
                 void manualCheckForUpdateFull(APP_VERSION, lang);
               }}
+              agreement={userAgreement && userAgreement.version ? {
+                required: Boolean(userAgreement.required),
+                accepted: acceptedAgreementVersion === userAgreement.version,
+                version: userAgreement.version,
+                title: (lang === 'zh' ? userAgreement.titleZh : userAgreement.titleEn) || t.agreementTitleFallback,
+                content: (lang === 'zh' ? userAgreement.contentZh : userAgreement.contentEn) || '',
+                submitting: agreementSubmitting,
+                error: agreementError,
+                onAccept: () => { void handleAcceptAgreement(); },
+              } : null}
             />
           )}
 
