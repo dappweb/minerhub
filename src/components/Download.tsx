@@ -1,4 +1,4 @@
-import { Apple, Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
+import { Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import React from 'react';
 
@@ -30,21 +30,17 @@ interface DownloadInfo {
 
 interface DownloadState {
   android: DownloadInfo;
-  ios: DownloadInfo;
 }
 
 function buildFallbackState(): DownloadState {
   const androidEnvUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL;
-  const iosEnvUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL;
 
   // Keep a deterministic local fallback so static Pages deployments can serve
   // APK directly without requiring backend upload metadata first.
   const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '/api/downloads/android';
-  const iosUrl = iosEnvUrl && iosEnvUrl !== '#' ? iosEnvUrl : '';
 
   return {
     android: androidUrl ? { available: true, downloadUrl: androidUrl } : { available: false },
-    ios: iosUrl ? { available: true, downloadUrl: iosUrl } : { available: false },
   };
 }
 
@@ -57,10 +53,6 @@ function mergeWithFallback(remote: DownloadState | null): DownloadState {
       remote.android?.available || remote.android?.downloadUrl
         ? remote.android
         : fallbackState.android,
-    ios:
-      remote.ios?.available || remote.ios?.downloadUrl
-        ? remote.ios
-        : fallbackState.ios,
   };
 }
 
@@ -70,27 +62,21 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getQrTitle(platform: 'android' | 'ios'): string {
-  return platform === 'android' ? '扫码下载' : '扫码打开';
+function getQrTitle(): string {
+  return '扫码下载';
 }
 
-function getQrHint(platform: 'android' | 'ios'): string {
-  return platform === 'android'
-    ? '使用手机扫码即可直接下载安装。'
-    : '使用 iPhone 扫码可直接打开 TestFlight 或 App Store 链接。';
+function getQrHint(): string {
+  return '使用手机扫码即可直接下载安装。';
 }
 
-function getInstallHint(platform: 'android' | 'ios'): string {
-  return platform === 'android'
-    ? '安装后请先完成身份同步，再用机器码联系管理员开通月卡，最后点击“矿机设置”开始累计收益。'
-    : 'iOS 需通过 TestFlight 或 App Store 安装，首次打开 TestFlight 时请先完成 Apple 登录。';
+function getInstallHint(): string {
+  return '安装后请先完成身份同步，再用机器码联系管理员开通月卡，最后点击“矿机设置”开始累计收益。';
 }
 
 export default function DownloadSection() {
-  const [selectedPlatform, setSelectedPlatform] = React.useState<'android' | 'ios'>('android');
   const [state, setState] = React.useState<DownloadState>({
     android: { available: false },
-    ios: { available: false },
   });
   const [loading, setLoading] = React.useState(true);
   const apiBase = React.useMemo(() => resolveApiBaseUrl(), []);
@@ -123,7 +109,7 @@ export default function DownloadSection() {
     return () => { canceled = true; };
   }, [apiBase]);
 
-  const current = selectedPlatform === 'android' ? state.android : state.ios;
+  const current = state.android;
 
   const resolveUrl = (url?: string) => {
     if (!url) return '';
@@ -144,16 +130,9 @@ export default function DownloadSection() {
       cta: '立即下载 APK',
       icon: Smartphone,
     },
-    ios: {
-      name: 'iOS',
-      subtitle: 'TestFlight 安装',
-      requirement: 'iOS 16.1+',
-      cta: '打开 TestFlight',
-      icon: Apple,
-    },
   } as const;
 
-  const selectedMeta = platformMeta[selectedPlatform];
+  const selectedMeta = platformMeta.android;
   const SelectedIcon = selectedMeta.icon;
   const faqs = [
     {
@@ -191,56 +170,7 @@ export default function DownloadSection() {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mb-8 grid grid-cols-2 gap-3 rounded-2xl border border-slate-700/70 bg-slate-900/65 p-2 backdrop-blur"
-        >
-          {(['android', 'ios'] as const).map((p) => {
-            const info = p === 'android' ? state.android : state.ios;
-            const active = selectedPlatform === p;
-            const meta = platformMeta[p];
-            const Icon = meta.icon;
-
-            return (
-              <button
-                key={p}
-                onClick={() => setSelectedPlatform(p)}
-                className={`group rounded-xl px-4 py-3 transition-all ${
-                  active
-                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_28px_-8px_rgba(6,182,212,0.65)]'
-                    : 'bg-slate-800/80 text-slate-100 hover:bg-slate-700/90'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-left">
-                    <Icon size={18} />
-                    <div>
-                      <p className="text-base font-semibold">{meta.name}</p>
-                      <p className={`text-xs ${active ? 'text-slate-900/80' : 'text-slate-300/80'}`}>{meta.subtitle}</p>
-                    </div>
-                  </div>
-                  <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                      info.available
-                        ? active
-                          ? 'bg-slate-950/20 text-slate-950'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                        : active
-                          ? 'bg-slate-950/20 text-slate-900'
-                          : 'bg-slate-600/30 text-slate-300'
-                    }`}
-                  >
-                    {info.available ? (info.version ? `v${info.version}` : 'ready') : 'pending'}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </motion.div>
-
-        <motion.div
-          key={selectedPlatform}
+          key="android"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -275,7 +205,7 @@ export default function DownloadSection() {
                   <HardDrive size={14} />
                   安装包大小
                 </p>
-                <p className="text-sm font-medium text-slate-100">{selectedPlatform === 'android' ? formatBytes(state.android.size) : '--'}</p>
+                <p className="text-sm font-medium text-slate-100">{formatBytes(state.android.size)}</p>
               </div>
             </div>
 
@@ -284,7 +214,7 @@ export default function DownloadSection() {
                   <div className="w-2 h-2 rounded-full bg-cyan-400 mt-2 shrink-0" />
                   <div>
                     <p className="font-semibold text-slate-100">发布通道</p>
-                    <p className="text-sm text-slate-400">{selectedPlatform === 'android' ? '线上 APK 直装包' : 'Apple TestFlight 渠道'}</p>
+                    <p className="text-sm text-slate-400">线上 APK 直装包</p>
                   </div>
                 </div>
                 {current.version && (
@@ -340,14 +270,14 @@ export default function DownloadSection() {
           <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 text-center backdrop-blur-sm">
             <div className="mb-4 flex items-center justify-center gap-2 text-cyan-300">
               <QrCode size={20} />
-              <span className="font-semibold">{getQrTitle(selectedPlatform)}</span>
+              <span className="font-semibold">{getQrTitle()}</span>
             </div>
 
             {current.available && current.downloadUrl ? (
               <div className="mx-auto mb-4 w-fit rounded-2xl border border-cyan-400/30 bg-white/95 p-3 shadow-[0_12px_45px_-25px_rgba(255,255,255,0.9)]">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(resolveUrl(current.downloadUrl))}`}
-                  alt={`${selectedPlatform} QR`}
+                  alt="android QR"
                   className="h-52 w-52 rounded-lg"
                 />
               </div>
@@ -360,19 +290,19 @@ export default function DownloadSection() {
               </div>
             )}
 
-            <p className="mb-3 text-sm text-slate-300">{getQrHint(selectedPlatform)}</p>
+            <p className="mb-3 text-sm text-slate-300">{getQrHint()}</p>
 
             <div className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-3 text-left">
               <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                 <Sparkles size={14} />
                 安装提示
               </p>
-              <p className="text-sm text-slate-300">{getInstallHint(selectedPlatform)}</p>
+              <p className="text-sm text-slate-300">{getInstallHint()}</p>
             </div>
           </div>
         </motion.div>
 
-        {!loading && !state.android.available && !state.ios.available && (
+        {!loading && !state.android.available && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
