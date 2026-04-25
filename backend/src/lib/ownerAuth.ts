@@ -55,10 +55,14 @@ export async function isOwnerWallet(env: Env, wallet: string | null | undefined)
   }
 }
 
-export async function issueOwnerJwt(env: Env, wallet: string): Promise<{ token: string; expiresAt: string }> {
+export async function issueOwnerJwt(
+  env: Env,
+  wallet: string,
+  sessionId: string
+): Promise<{ token: string; expiresAt: string }> {
   const nowSec = Math.floor(Date.now() / 1000);
   const expSec = nowSec + OWNER_JWT_TTL_SECONDS;
-  const token = await new SignJWT({ wallet: wallet.toLowerCase(), role: "owner" })
+  const token = await new SignJWT({ wallet: wallet.toLowerCase(), role: "owner", sid: sessionId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(OWNER_JWT_ISS)
     .setIssuedAt(nowSec)
@@ -71,7 +75,21 @@ export async function verifyOwnerJwt(env: Env, token: string): Promise<{ valid: 
   try {
     const { payload } = await jwtVerify(token, secretKey(env), { issuer: OWNER_JWT_ISS });
     const wallet = typeof payload.wallet === "string" ? payload.wallet : null;
+    const sessionId = typeof payload.sid === "string" ? payload.sid : null;
+    if (!wallet || !sessionId) return { valid: false, error: "Invalid owner session" };
     if (!(await isOwnerWallet(env, wallet))) return { valid: false, error: "Not owner" };
+    const session = await env.DB.prepare(
+      `SELECT id
+       FROM owner_sessions
+       WHERE id = ?
+         AND wallet = ?
+         AND revoked = 0
+         AND expires_at > ?
+       LIMIT 1`
+    )
+      .bind(sessionId, wallet.toLowerCase(), new Date().toISOString())
+      .first<{ id: string }>();
+    if (!session?.id) return { valid: false, error: "Owner session expired or revoked" };
     return { valid: true, wallet: wallet as string };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "invalid token";

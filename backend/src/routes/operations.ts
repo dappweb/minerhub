@@ -87,6 +87,9 @@ async function handleBatchRewards(request: Request, env: Env): Promise<Response>
     const rewardUsdt = Number(item.rewardUsdt ?? 0);
     const rewardSuper = Number(item.rewardSuper ?? 0);
     if (!Number.isFinite(rewardUsdt) && !Number.isFinite(rewardSuper)) continue;
+    if ((Number.isFinite(rewardUsdt) && rewardUsdt < 0) || (Number.isFinite(rewardSuper) && rewardSuper < 0)) {
+      return badRequest("Batch rewards do not allow negative amounts");
+    }
 
     await ensureCustomerProfile(env, item.userId);
 

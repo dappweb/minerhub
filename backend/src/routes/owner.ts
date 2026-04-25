@@ -31,6 +31,16 @@ function normalizeAddr(addr: string): string | null {
   }
 }
 
+function parsePositiveAmount(value: string | number | undefined, field = "amount"): { ok: true; amount: string } | { ok: false; response: Response } {
+  if (value === undefined) return { ok: false, response: badRequest(`${field} required`) };
+  const amount = String(value).trim();
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return { ok: false, response: badRequest(`${field} must be > 0`) };
+  }
+  return { ok: true, amount };
+}
+
 // ---- Auth: login / logout ----
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -49,13 +59,14 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
   await env.CACHE.put(kvKey, "1", { expirationTtl: 600 });
 
-  const { token, expiresAt } = await issueOwnerJwt(env, body.wallet);
+  const sessionId = createId("sess");
+  const { token, expiresAt } = await issueOwnerJwt(env, body.wallet, sessionId);
 
   await env.DB.prepare(
     `INSERT INTO owner_sessions (id, wallet, issued_at, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?)`
   )
     .bind(
-      createId("sess"),
+      sessionId,
       body.wallet.toLowerCase(),
       nowIso(),
       expiresAt,
@@ -157,7 +168,9 @@ async function handleSuperMint(request: Request, env: Env, actorWallet: string):
   if (!body?.to || body?.amount === undefined) return badRequest("to, amount required");
   const to = normalizeAddr(body.to);
   if (!to) return badRequest("Invalid recipient");
-  const amount = String(body.amount);
+  const parsed = parsePositiveAmount(body.amount);
+  if (!parsed.ok) return parsed.response;
+  const amount = parsed.amount;
   const cap = await enforceMintCap(env, amount);
   if (!cap.ok) {
     await writeOwnerAudit(env, { action: "super.mint", actorWallet, targetWallet: to, payload: { amount }, status: "failed", error: cap.error, request });
@@ -181,7 +194,9 @@ async function handleSuperTransfer(request: Request, env: Env, actorWallet: stri
   if (!body?.to || body?.amount === undefined) return badRequest("to, amount required");
   const to = normalizeAddr(body.to);
   if (!to) return badRequest("Invalid recipient");
-  const amount = String(body.amount);
+  const parsed = parsePositiveAmount(body.amount);
+  if (!parsed.ok) return parsed.response;
+  const amount = parsed.amount;
   try {
     const { txHash } = await relayer.transferSuper(to, amount);
     await writeOwnerAudit(env, { action: "super.transfer", actorWallet, targetWallet: to, payload: { amount }, txHash, request });
@@ -204,9 +219,14 @@ async function handleSuperAirdrop(request: Request, env: Env, actorWallet: strin
 
   for (const item of body.items) {
     const w = normalizeAddr(item.wallet);
-    const amount = String(item.amount);
+    const parsed = parsePositiveAmount(item.amount);
+    const amount = parsed.ok ? parsed.amount : String(item.amount);
     if (!w) {
       results.push({ wallet: item.wallet, amount, error: "invalid address" });
+      continue;
+    }
+    if (!parsed.ok) {
+      results.push({ wallet: w, amount, error: "amount must be > 0" });
       continue;
     }
     try {
@@ -251,7 +271,9 @@ async function handleSuperBurn(request: Request, env: Env, actorWallet: string):
   if (!relayer) return internalError("OWNER_PRIVATE_KEY not configured");
   const body = await parseJson<{ from?: string; amount?: string | number }>(request);
   if (body?.amount === undefined) return badRequest("amount required");
-  const amount = String(body.amount);
+  const parsed = parsePositiveAmount(body.amount);
+  if (!parsed.ok) return parsed.response;
+  const amount = parsed.amount;
   try {
     if (body.from && normalizeAddr(body.from) !== relayer.address.toLowerCase()) {
       const from = normalizeAddr(body.from)!;
@@ -516,13 +538,21 @@ async function handleEarningsAdjust(request: Request, env: Env, userId: string, 
   }
   const du = Number(body.deltaUsdt ?? 0);
   const ds = Number(body.deltaSuper ?? 0);
+  if (!Number.isFinite(du) || !Number.isFinite(ds)) {
+    return badRequest("deltaUsdt/deltaSuper invalid");
+  }
   const profile = await env.DB.prepare(
     `SELECT total_reward_usdt, total_reward_super FROM customer_profiles WHERE user_id=?`
   ).bind(userId).first<{ total_reward_usdt: string; total_reward_super: string }>();
   if (!profile) return notFound("User not found");
 
-  const nextUsdt = (Number(profile.total_reward_usdt || "0") + du).toString();
-  const nextSuper = (Number(profile.total_reward_super || "0") + ds).toString();
+  const nextUsdtNum = Number(profile.total_reward_usdt || "0") + du;
+  const nextSuperNum = Number(profile.total_reward_super || "0") + ds;
+  if (nextUsdtNum < 0 || nextSuperNum < 0) {
+    return badRequest("Adjustment would make reward totals negative");
+  }
+  const nextUsdt = nextUsdtNum.toString();
+  const nextSuper = nextSuperNum.toString();
 
   const now = nowIso();
   const id = createId("rwd");
@@ -741,6 +771,9 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
   const actor = a.wallet;
 
   if (pathParts[0] === "auth" && pathParts[1] === "logout" && request.method === "POST") {
+    await env.DB.prepare(
+      "UPDATE owner_sessions SET revoked=1 WHERE wallet = ? AND revoked = 0"
+    ).bind(actor).run();
     await writeOwnerAudit(env, { action: "auth.logout", actorWallet: actor, request });
     return json({ ok: true });
   }

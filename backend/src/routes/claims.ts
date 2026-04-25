@@ -26,6 +26,31 @@ async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string)
   return Boolean(row?.id);
 }
 
+async function reserveRewardSuper(env: Env, userId: string, amount: number, at: string): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) - ?, 6) AS TEXT),
+         updated_at = ?
+     WHERE user_id = ?
+       AND CAST(total_reward_super AS REAL) >= ?`
+  )
+    .bind(amount, at, userId, amount)
+    .run();
+
+  return Number(result.meta?.changes ?? 0) > 0;
+}
+
+async function restoreRewardSuper(env: Env, userId: string, amount: number, at: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) + ?, 6) AS TEXT),
+         updated_at = ?
+     WHERE user_id = ?`
+  )
+    .bind(amount, at, userId)
+    .run();
+}
+
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "reward-withdraw") {
     if (await isMaintenanceEnabled(env)) {
@@ -60,23 +85,20 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     }
 
     await ensureCustomerProfile(env, body.userId);
-    const profile = await env.DB.prepare(
-      "SELECT total_reward_super FROM customer_profiles WHERE user_id = ?"
-    )
-      .bind(body.userId)
-      .first<{ total_reward_super: string }>();
-
-    const available = Number(profile?.total_reward_super ?? "0");
-    if (!Number.isFinite(available) || available < amount) {
+    const now = nowIso();
+    const reserved = await reserveRewardSuper(env, body.userId, amount, now);
+    if (!reserved) {
       return badRequest("Insufficient reward SUPER balance");
     }
 
-    const relayer = tryCreateRelayer(env);
-    if (!relayer) return json({ error: "OWNER_PRIVATE_KEY not configured" }, 500);
-
-    const now = nowIso();
     const withdrawalId = createId("rwdw");
     try {
+      const relayer = tryCreateRelayer(env);
+      if (!relayer) {
+        await restoreRewardSuper(env, body.userId, amount, nowIso());
+        return json({ error: "OWNER_PRIVATE_KEY not configured" }, 500);
+      }
+
       const { txHash } = await relayer.transferSuper(body.wallet.toLowerCase(), amount.toString());
 
       await env.DB.prepare(
@@ -99,6 +121,7 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
       return json({ ok: true, id: withdrawalId, amountSuper: amount.toString(), txHash, status: "confirmed", createdAt: now }, 201);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "withdraw failed";
+      await restoreRewardSuper(env, body.userId, amount, nowIso());
       await env.DB.prepare(
         `INSERT INTO reward_withdrawals (
           id, user_id, wallet, amount_super, status, note, created_at, updated_at
@@ -128,6 +151,9 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     }
     if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
       return badRequest("Wallet mismatch");
+    }
+    if (!(await assertUserOwnedByWallet(env, body.userId, body.wallet))) {
+      return unauthorized("User does not belong to signed wallet");
     }
 
     const limit = Math.min(50, Math.max(1, Number(body.limit ?? 10) || 10));
@@ -199,6 +225,9 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
       return badRequest("Wallet mismatch");
     }
+    if (!(await assertUserOwnedByWallet(env, body.userId, body.wallet))) {
+      return unauthorized("User does not belong to signed wallet");
+    }
 
     const amountSuper = Number(body.amountSuper ?? "0");
     const amountUsdt = Number(body.amountUsdt ?? "0");
@@ -207,6 +236,12 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     }
 
     await ensureCustomerProfile(env, body.userId);
+    const now = nowIso();
+    const reserved = await reserveRewardSuper(env, body.userId, amountSuper, now);
+    if (!reserved) {
+      return badRequest("Insufficient reward SUPER balance");
+    }
+
     const profile = await env.DB.prepare(
       "SELECT exchange_auto_enabled FROM customer_profiles WHERE user_id = ?"
     )
@@ -218,47 +253,50 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     const autoEnabled = globalAuto && userAuto;
     const mode = autoEnabled ? "auto" : "manual";
     const status = autoEnabled ? "auto_processing" : "manual_pending";
-
-    const now = nowIso();
     const exchangeId = createId("exr");
-    await env.DB.prepare(
-      `INSERT INTO exchange_orders (
-        id, user_id, wallet, amount_super, amount_usdt, mode, status,
-        request_note, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        exchangeId,
-        body.userId,
-        body.wallet.toLowerCase(),
-        amountSuper.toString(),
-        Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
-        mode,
-        status,
-        body.note?.trim() || null,
-        now,
-        now,
+    try {
+      await env.DB.prepare(
+        `INSERT INTO exchange_orders (
+          id, user_id, wallet, amount_super, amount_usdt, mode, status,
+          request_note, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run();
+        .bind(
+          exchangeId,
+          body.userId,
+          body.wallet.toLowerCase(),
+          amountSuper.toString(),
+          Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+          mode,
+          status,
+          body.note?.trim() || null,
+          now,
+          now,
+        )
+        .run();
 
-    await env.DB.prepare(
-      `INSERT INTO swap_trade_logs (
-        id, user_id, wallet, direction, amount_in, amount_out,
-        price_snapshot, status, note, created_at, updated_at
-      ) VALUES (?, ?, ?, 'SUPER_TO_USDT', ?, ?, '0', ?, ?, ?, ?)`
-    )
-      .bind(
-        createId("swl"),
-        body.userId,
-        body.wallet.toLowerCase(),
-        amountSuper.toString(),
-        Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
-        status,
-        autoEnabled ? "auto exchange request" : "manual exchange request",
-        now,
-        now,
+      await env.DB.prepare(
+        `INSERT INTO swap_trade_logs (
+          id, user_id, wallet, direction, amount_in, amount_out,
+          price_snapshot, status, note, created_at, updated_at
+        ) VALUES (?, ?, ?, 'SUPER_TO_USDT', ?, ?, '0', ?, ?, ?, ?)`
       )
-      .run();
+        .bind(
+          createId("swl"),
+          body.userId,
+          body.wallet.toLowerCase(),
+          amountSuper.toString(),
+          Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+          status,
+          autoEnabled ? "auto exchange request" : "manual exchange request",
+          now,
+          now,
+        )
+        .run();
+    } catch (err) {
+      await restoreRewardSuper(env, body.userId, amountSuper, nowIso());
+      throw err;
+    }
 
     return json({
       id: exchangeId,
