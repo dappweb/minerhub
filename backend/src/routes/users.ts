@@ -180,14 +180,14 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       `SELECT
         u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
         cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
-        COALESCE(cp.contract_term_days, 1095) AS contract_term_days,
-        COALESCE(cp.monthly_card_days, 30) AS monthly_card_days,
-        COALESCE(cp.contract_active, 0) AS contract_active,
-        COALESCE(cp.activation_status, 'pending') AS activation_status,
-        COALESCE(cp.exchange_auto_enabled, 1) AS exchange_auto_enabled,
-        COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS reward_rate_usdt_per_hour,
-        COALESCE(cp.total_reward_usdt, '0') AS total_reward_usdt,
-        COALESCE(cp.total_reward_super, '0') AS total_reward_super,
+        COALESCE(cp.contract_term_days, 1095) AS contractTermDays,
+        COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
+        COALESCE(cp.contract_active, 0) AS contractActive,
+        COALESCE(cp.activation_status, 'pending') AS activationStatus,
+        COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
+        COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
+        COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+        COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
         cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
         cp.agreement_accepted_at AS agreementAcceptedAt, cp.offline_alerted_at AS offlineAlertedAt, cp.notes
       FROM users u
