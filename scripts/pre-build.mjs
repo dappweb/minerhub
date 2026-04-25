@@ -16,6 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { validateApkFile } from './lib/validate-apk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -99,6 +100,13 @@ async function main() {
 
   if (!fs.existsSync(APK_PATH)) {
     console.log('ℹ️  未找到 APK (public/downloads/app-release.apk)，跳过上传。');
+    return;
+  }
+
+  try {
+    validateApkFile(APK_PATH);
+  } catch (error) {
+    console.error(`❌ APK 校验失败，跳过上传：${error.message}`);
     return;
   }
 

@@ -19,6 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { validateApkFile } from './lib/validate-apk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -69,8 +70,10 @@ if (!platform || !['android', 'ios'].includes(platform)) {
 // Upload
 // ──────────────────────────────────────────
 async function uploadAndroid(apkPath, version) {
-  if (!fs.existsSync(apkPath)) {
-    console.error(`❌ File not found: ${apkPath}`);
+  try {
+    validateApkFile(apkPath);
+  } catch (error) {
+    console.error(`❌ ${error.message}`);
     process.exit(1);
   }
 
