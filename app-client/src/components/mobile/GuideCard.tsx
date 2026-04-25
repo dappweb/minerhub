@@ -16,6 +16,13 @@ type GuideCardProps = {
   disabled?: boolean;
   steps: GuideStep[];
   onPress: () => void;
+  /** When provided, show a secondary "contact support" button below the primary CTA */
+  contactSupportLabel?: string;
+  onContactSupport?: () => void;
+  /** Label shown above the focus card ("Current task" / "下一步") */
+  eyebrowLabel?: string;
+  /** Label shown above the active focus step */
+  focusCardLabel?: string;
 };
 
 export default function GuideCard({
@@ -25,20 +32,24 @@ export default function GuideCard({
   disabled = false,
   steps,
   onPress,
+  contactSupportLabel,
+  onContactSupport,
+  eyebrowLabel = '当前任务',
+  focusCardLabel = '现在最值得先完成',
 }: GuideCardProps) {
   const activeStep = steps.find((step) => step.active) ?? steps.find((step) => !step.complete) ?? steps[steps.length - 1];
 
   return (
     <View style={styles.guideCard}>
       <View style={styles.headerMain}>
-        <Text style={styles.eyebrow}>当前任务</Text>
+        <Text style={styles.eyebrow}>{eyebrowLabel}</Text>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.body}>{description}</Text>
       </View>
 
       {activeStep ? (
         <View style={styles.focusCard}>
-          <Text style={styles.focusLabel}>现在最值得先完成</Text>
+          <Text style={styles.focusLabel}>{focusCardLabel}</Text>
           <View style={styles.focusRow}>
             <View style={[styles.focusBadge, activeStep.complete && styles.focusBadgeDone]}>
               <Text style={styles.focusBadgeText}>{activeStep.complete ? 'DONE' : 'NEXT'}</Text>
@@ -54,6 +65,12 @@ export default function GuideCard({
       <TouchableOpacity style={[styles.primaryBtn, disabled && styles.disabledBtn]} onPress={onPress} disabled={disabled}>
         <Text style={styles.primaryBtnText}>{buttonLabel}</Text>
       </TouchableOpacity>
+
+      {contactSupportLabel && onContactSupport ? (
+        <TouchableOpacity style={styles.supportBtn} onPress={onContactSupport}>
+          <Text style={styles.supportBtnText}>{contactSupportLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.stepsRow}>
         {steps.map((step, index) => (
@@ -164,6 +181,20 @@ const styles = StyleSheet.create({
   },
   disabledBtn: {
     opacity: 0.55,
+  },
+  supportBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2e90d1',
+    backgroundColor: '#082754',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  supportBtnText: {
+    color: '#67e8f9',
+    fontSize: 13,
+    fontWeight: '700',
   },
   stepsRow: {
     flexDirection: 'row',

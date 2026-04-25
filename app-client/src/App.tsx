@@ -149,6 +149,21 @@ const translations = {
     guideStepDone: 'Done',
     guideStepTodo: 'Next',
     guideStepLocked: 'Locked',
+    guideStepActivation: 'Monthly Card Activation',
+    guideStepActivationStatus: 'Send machine code to support to activate',
+    guideStepActivationDone: 'Activated',
+    guideContactSupport: '📞 Contact Support',
+    guideEyebrow: 'Current Task',
+    guideFocusLabel: 'Do this next',
+    guideDescActivate: 'Miner registered. Now send your machine code to support to activate the monthly card, then rewards will start accruing.',
+    guideCtaActivate: 'Already Activated – Setup Miner',
+    agreementModalTitle: 'User Agreement',
+    agreementModalSubtitle: 'Please read and accept the agreement to continue using Coin Planet.',
+    agreementAcceptBtn: 'Accept & Continue',
+    agreementDeclineBtn: 'Decline',
+    agreementDeclinedWarn: 'You must accept the agreement to continue.',
+    agreementSubmittingBtn: 'Submitting...',
+
     homeOverview: 'Overview',
     homePrimaryAction: 'Next Step',
     rewardsSummary: 'Reward Summary',
@@ -365,6 +380,21 @@ const translations = {
     guideStepDone: '完成',
     guideStepTodo: '下一步',
     guideStepLocked: '待解锁',
+    guideStepActivation: '月卡激活',
+    guideStepActivationStatus: '将机器码提交给客服开通月卡',
+    guideStepActivationDone: '已激活',
+    guideContactSupport: '📞 联系客服',
+    guideEyebrow: '当前任务',
+    guideFocusLabel: '现在最值得先完成',
+    guideDescActivate: '矿机已注册。请将机器码提供给客服申请开通月卡，激活后收益将自动开始累计。',
+    guideCtaActivate: '已开通月卡 → 继续矿机设置',
+    agreementModalTitle: '用户协议',
+    agreementModalSubtitle: '请阅读并同意协议，方可继续使用 Coin Planet。',
+    agreementAcceptBtn: '同意并继续',
+    agreementDeclineBtn: '拒绝',
+    agreementDeclinedWarn: '需同意用户协议方可继续使用。',
+    agreementSubmittingBtn: '提交中...',
+
     homeOverview: '总览',
     homePrimaryAction: '下一步操作',
     rewardsSummary: '收益总览',
@@ -2072,24 +2102,61 @@ export default function App() {
     }
   };
 
+  // Whether miner is chain-registered but not yet admin-activated (contract not active yet)
+  const pendingActivation = identityReady && minerReady && !hasActiveContract && !contractExpired;
+
+  // First available contact from systemStatus that has a link
+  const firstSupportContact = useMemo(() => {
+    const contacts = systemStatus?.supportContacts ?? [];
+    for (const c of contacts) {
+      if (!c.value?.trim()) continue;
+      const v = c.value.trim();
+      switch (c.type) {
+        case 'telegram': return `https://t.me/${v.replace(/^@/, '')}`;
+        case 'whatsapp': return `https://wa.me/${v.replace(/[^0-9]/g, '')}`;
+        case 'email': return `mailto:${v}`;
+        case 'phone': return `tel:${v.replace(/\s+/g, '')}`;
+        case 'url': return v.startsWith('http') ? v : `https://${v}`;
+        default: continue;
+      }
+    }
+    return null;
+  }, [systemStatus?.supportContacts]);
+
+  const handleContactSupport = () => {
+    if (firstSupportContact) {
+      import('react-native').then(({ Linking }) => {
+        void Linking.openURL(firstSupportContact).catch(() => undefined);
+      });
+    } else {
+      setActiveTab('profile');
+    }
+  };
+
   const guideTitle = identityReady && minerReady ? t.guideReadyTitle : t.guideTitle;
   const guideDescription = !identityReady
     ? t.guideDescInit
     : !minerReady
       ? t.guideDescMine
-      : contractExpired
-        ? t.contractExpiredBody
-        : t.guideDescReady;
+      : pendingActivation
+        ? t.guideDescActivate
+        : contractExpired
+          ? t.contractExpiredBody
+          : t.guideDescReady;
   const guideCtaLabel = !identityReady
     ? t.syncIdentity
     : !minerReady
       ? t.setupMiner
-      : t.claimReward;
+      : pendingActivation
+        ? t.guideCtaActivate
+        : t.claimReward;
   const guideAction = !identityReady
     ? initializeAccount
     : !minerReady
       ? startMining
-      : claimReward;
+      : pendingActivation
+        ? startMining  // retry miner setup after admin activates
+        : claimReward;
   const guideSteps = [
     {
       key: 'identity',
@@ -2099,17 +2166,30 @@ export default function App() {
       complete: identityReady,
     },
     {
+      key: 'activation',
+      label: t.guideStepActivation,
+      status: hasActiveContract
+        ? t.guideStepActivationDone
+        : minerReady
+          ? t.guideStepActivationStatus
+          : identityReady
+            ? t.guideStepTodo
+            : t.guideStepLocked,
+      active: identityReady && !hasActiveContract,
+      complete: hasActiveContract,
+    },
+    {
       key: 'miner',
       label: t.guideStepMiner,
-      status: minerReady ? t.guideStepDone : identityReady ? t.guideStepTodo : t.guideStepLocked,
-      active: identityReady && !minerReady,
+      status: minerReady ? t.guideStepDone : hasActiveContract ? t.guideStepTodo : t.guideStepLocked,
+      active: hasActiveContract && !minerReady,
       complete: minerReady,
     },
     {
       key: 'reward',
       label: t.guideStepReward,
-      status: identityReady && minerReady ? t.guideStepTodo : t.guideStepLocked,
-      active: identityReady && minerReady,
+      status: identityReady && minerReady && hasActiveContract ? t.guideStepTodo : t.guideStepLocked,
+      active: identityReady && minerReady && hasActiveContract,
       complete: false,
     },
   ];
@@ -2140,9 +2220,43 @@ export default function App() {
     );
   }
 
-  if (agreementNeedsAcceptance && userAgreement) {
-    // Agreement is required but not yet accepted. Do NOT block the whole app;
-    // surface manual acceptance via ProfileTab (wallet ID card) instead.
+  if (agreementNeedsAcceptance && userAgreement && !onboardingVisible) {
+    const agreementTitle = (lang === 'zh' ? userAgreement.titleZh : userAgreement.titleEn) || t.agreementModalTitle;
+    const agreementContent = (lang === 'zh' ? userAgreement.contentZh : userAgreement.contentEn) || '';
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <ScrollView style={styles.mainScroll} contentContainerStyle={[styles.scrollContent, { padding: 24 }]}>
+          <Text style={{ color: '#67e8f9', fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+            {t.agreementModalTitle}
+          </Text>
+          <Text style={{ color: '#e2f3ff', fontSize: 20, fontWeight: '800', marginBottom: 6 }}>{agreementTitle}</Text>
+          <Text style={{ color: '#9cc6ff', fontSize: 13, marginBottom: 20 }}>{t.agreementModalSubtitle}</Text>
+          <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#225b98', backgroundColor: '#082754', padding: 14, maxHeight: 320, marginBottom: 20 }}>
+            <ScrollView>
+              <Text style={{ color: '#c9e1ff', fontSize: 13, lineHeight: 20 }}>{agreementContent || '...'}</Text>
+            </ScrollView>
+          </View>
+          {agreementError ? <Text style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{agreementError}</Text> : null}
+          {agreementDeclined ? <Text style={{ color: '#fbbf24', fontSize: 13, marginBottom: 12 }}>{t.agreementDeclinedWarn}</Text> : null}
+          <TouchableOpacity
+            style={{ borderRadius: 14, backgroundColor: '#22d3ee', paddingVertical: 14, alignItems: 'center', marginBottom: 12 }}
+            onPress={() => { void handleAcceptAgreement(); }}
+            disabled={agreementSubmitting}
+          >
+            <Text style={{ color: '#083344', fontSize: 15, fontWeight: '800' }}>
+              {agreementSubmitting ? t.agreementSubmittingBtn : t.agreementAcceptBtn}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ borderRadius: 14, borderWidth: 1, borderColor: '#384f6e', paddingVertical: 12, alignItems: 'center' }}
+            onPress={() => setAgreementDeclined(true)}
+          >
+            <Text style={{ color: '#64748b', fontSize: 14 }}>{t.agreementDeclineBtn}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -2166,7 +2280,7 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {!(identityReady && minerReady) && (
+          {!(identityReady && minerReady && hasActiveContract) && (
             <GuideCard
               title={guideTitle}
               description={guideDescription}
@@ -2174,6 +2288,10 @@ export default function App() {
               disabled={isBusy || contractExpired}
               steps={guideSteps}
               onPress={guideAction}
+              eyebrowLabel={t.guideEyebrow}
+              focusCardLabel={t.guideFocusLabel}
+              contactSupportLabel={pendingActivation ? t.guideContactSupport : undefined}
+              onContactSupport={pendingActivation ? handleContactSupport : undefined}
             />
           )}
 
