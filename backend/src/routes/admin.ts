@@ -1,6 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
-import { isOwnerWallet } from "../lib/ownerAuth";
+import { isOwnerWallet, requireOwnerAuth } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json, unauthorized } from "../lib/response";
 import { runScheduledTasks } from "../lib/scheduled";
@@ -137,14 +137,8 @@ export function deriveLiveOnlineStatus(lastSeenAt: string | null | undefined): "
 }
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
-  const auth = await extractAndVerifyAuth(request, env);
-  if (!auth.valid) {
-    return unauthorized(auth.error || "Signature verification failed");
-  }
-  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
-    return unauthorized("Owner wallet required");
-  }
-  return null;
+  const auth = await requireOwnerAuth(request, env);
+  return auth.ok ? null : auth.response;
 }
 
 async function requireOwner(request: Request, env: Env): Promise<Response | null> {

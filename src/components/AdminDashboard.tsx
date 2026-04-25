@@ -457,11 +457,74 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [deviceDetail, setDeviceDetail] = useState<AdminDeviceDetail | null>(null);
   const [deviceDetailForm, setDeviceDetailForm] = useState<DeviceDetailFormState | null>(null);
+  const [ownerSessionToken, setOwnerSessionToken] = useState<string>(() => sessionStorage.getItem('ownerJwt') || '');
+  const [ownerSessionExpiresAt, setOwnerSessionExpiresAt] = useState<string>(() => sessionStorage.getItem('ownerJwtExp') || '');
+  const ownerLoginPromiseRef = useRef<Promise<string> | null>(null);
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
   const poolAddress = getMiningPoolAddress();
   const superAddress = getSuperTokenAddress();
   const swapRouterAddress = getSwapRouterAddress();
+
+  const hasValidOwnerSession = useCallback(() => {
+    if (!ownerSessionToken || !ownerSessionExpiresAt) return false;
+    return new Date(ownerSessionExpiresAt).getTime() > Date.now() + 5_000;
+  }, [ownerSessionExpiresAt, ownerSessionToken]);
+
+  const persistOwnerSession = useCallback((token: string, expiresAt: string) => {
+    sessionStorage.setItem('ownerJwt', token);
+    sessionStorage.setItem('ownerJwtExp', expiresAt);
+    setOwnerSessionToken(token);
+    setOwnerSessionExpiresAt(expiresAt);
+  }, []);
+
+  const clearOwnerSession = useCallback(() => {
+    sessionStorage.removeItem('ownerJwt');
+    sessionStorage.removeItem('ownerJwtExp');
+    sessionStorage.removeItem('ownerJwtWallet');
+    setOwnerSessionToken('');
+    setOwnerSessionExpiresAt('');
+  }, []);
+
+  const ensureOwnerSession = useCallback(async (): Promise<string> => {
+    if (hasValidOwnerSession()) {
+      return ownerSessionToken;
+    }
+
+    if (ownerLoginPromiseRef.current) {
+      return ownerLoginPromiseRef.current;
+    }
+
+    const loginPromise = (async () => {
+      const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ts = Date.now();
+      const message = `coinplanet-owner|login|${nonce}|${ts}`;
+      const signature = await signMessageAsync(adminWallet, message);
+      const response = await fetch(`${apiBaseUrl}/api/owner/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ wallet: adminWallet, signature, nonce, ts }),
+      });
+
+      if (!response.ok) {
+        throw new Error((await response.text()) || `Owner login failed: ${response.status}`);
+      }
+
+      const data = (await response.json()) as { token: string; expiresAt: string };
+      persistOwnerSession(data.token, data.expiresAt);
+      return data.token;
+    })();
+
+    ownerLoginPromiseRef.current = loginPromise;
+    try {
+      return await loginPromise;
+    } catch (error) {
+      clearOwnerSession();
+      throw error;
+    } finally {
+      ownerLoginPromiseRef.current = null;
+    }
+  }, [adminWallet, apiBaseUrl, clearOwnerSession, hasValidOwnerSession, ownerSessionToken, persistOwnerSession, signMessageAsync]);
 
   const buildSignedHeaders = useCallback(async (path: string, body: Record<string, unknown>) => {
     const nonce = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
@@ -471,13 +534,19 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     const message = `coinplanet|${nonce}|${pathnameForSig}|${JSON.stringify(body)}`;
     const signature = await signMessageAsync(adminWallet, message);
 
-    return {
+    const headers: Record<string, string> = {
       'content-type': 'application/json',
       'x-wallet': adminWallet,
       'x-nonce': nonce,
       'x-signature': signature,
     };
-  }, [adminWallet, signMessageAsync]);
+
+    if (hasValidOwnerSession()) {
+      headers.authorization = `Bearer ${ownerSessionToken}`;
+    }
+
+    return headers;
+  }, [adminWallet, hasValidOwnerSession, ownerSessionToken, signMessageAsync]);
 
   const signedRequest = useCallback(async <T,>(path: string, method: string, body: Record<string, unknown> = {}): Promise<T> => {
     const headers = await buildSignedHeaders(path, body);
@@ -499,19 +568,33 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [apiBaseUrl, buildSignedHeaders]);
 
   const ownerReadRequest = useCallback(async <T,>(path: string): Promise<T> => {
-    // Backend requireOwnerRead enforces signature auth on all admin GETs, so we must sign the request.
-    // Body is empty for GET, and the server canonical message includes JSON.stringify({}) = "{}".
-    const headers = await buildSignedHeaders(path, {});
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      method: 'GET',
-      headers,
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
+    let token = await ensureOwnerSession();
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        method: 'GET',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401 && attempt === 0) {
+        clearOwnerSession();
+        token = await ensureOwnerSession();
+        continue;
+      }
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Request failed: ${response.status}`);
+      }
+
+      return (await response.json()) as T;
     }
-    return (await response.json()) as T;
-  }, [apiBaseUrl, buildSignedHeaders]);
+
+    throw new Error('Owner read retry exhausted');
+  }, [apiBaseUrl, clearOwnerSession, ensureOwnerSession]);
 
   const loadBackendData = useCallback(async () => {
     if (!adminWallet) return;
@@ -797,6 +880,20 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     setMintRecipient(adminWallet);
     setEcosystemRecipient(adminWallet);
   }, [adminWallet]);
+
+  useEffect(() => {
+    const storedWallet = sessionStorage.getItem('ownerJwtWallet') || '';
+    const normalizedWallet = adminWallet.toLowerCase();
+    if (!normalizedWallet) {
+      clearOwnerSession();
+      sessionStorage.removeItem('ownerJwtWallet');
+      return;
+    }
+    if (storedWallet && storedWallet !== normalizedWallet) {
+      clearOwnerSession();
+    }
+    sessionStorage.setItem('ownerJwtWallet', normalizedWallet);
+  }, [adminWallet, clearOwnerSession]);
 
   useEffect(() => {
     if (!systemStatus) return;

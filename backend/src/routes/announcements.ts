@@ -1,6 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
-import { isOwnerWallet } from "../lib/ownerAuth";
+import { isOwnerWallet, requireOwnerAuth } from "../lib/ownerAuth";
 import { badRequest, json, notFound, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -136,14 +136,8 @@ async function ensureAnnouncementsSchema(env: Env): Promise<void> {
 }
 
 async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
-  const auth = await extractAndVerifyAuth(request, env);
-  if (!auth.valid) {
-    return unauthorized(auth.error || "Signature verification failed");
-  }
-  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
-    return unauthorized("Owner wallet required");
-  }
-  return null;
+  const auth = await requireOwnerAuth(request, env);
+  return auth.ok ? null : auth.response;
 }
 
 async function requireOwner(request: Request, env: Env): Promise<Response | null> {
