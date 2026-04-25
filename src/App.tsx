@@ -44,7 +44,6 @@ export default function App() {
   const [authorizedAdminAddresses, setAuthorizedAdminAddresses] = React.useState<string[]>([]);
   const [ownerAuthorityLoaded, setOwnerAuthorityLoaded] = React.useState<boolean>(false);
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
-  const autoVerifyAttemptedWalletRef = React.useRef<string>('');
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
@@ -183,8 +182,7 @@ export default function App() {
     if (authorizedAdminAddresses.includes(lower)) {
       return true;
     }
-    // 3. Immediate env / hardcoded fallback — available BEFORE async chain data arrives
-    //    so the signature flow starts immediately on button click without waiting for RPC.
+    // 3. Immediate env / hardcoded fallback is available before async chain data arrives.
     if (extraAdminAddresses.includes(lower)) {
       return true;
     }
@@ -241,7 +239,6 @@ export default function App() {
 
   React.useEffect(() => {
     if (!adminWallet) {
-      autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
       setAdminLoginStatus('请先使用钱包登录后台');
       setViewMode('website');
@@ -249,7 +246,6 @@ export default function App() {
     }
 
     if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(adminWallet)) {
-      autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
       setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
       setViewMode('website');
@@ -269,7 +265,7 @@ export default function App() {
         return;
       }
 
-      setAdminLoginStatus('姝ｅ湪鏍￠獙閾句笂绠＄悊鍛樻潈闄愶紝閫氳繃鍚庝細寮瑰嚭閽卞寘绛惧悕銆?);
+      setAdminLoginStatus('正在校验链上管理员权限，通过后会弹出钱包签名。');
       const hasOwnerAccess = await resolveOwnerAccess(walletAddress);
       if (!hasOwnerAccess) {
         setVerifiedOwnerWallet('');
@@ -311,22 +307,6 @@ export default function App() {
     [resolveOwnerAccess, signAdminMessage],
   );
 
-  React.useEffect(() => {
-    if (!adminWallet) return;
-    if (!isOwnerAddress(adminWallet)) return;
-    if (isSignatureVerified) {
-      setViewMode('admin');
-      return;
-    }
-    if (isSignaturePending) return;
-
-    const normalizedWallet = adminWallet.toLowerCase();
-    if (autoVerifyAttemptedWalletRef.current === normalizedWallet) return;
-
-    autoVerifyAttemptedWalletRef.current = normalizedWallet;
-    void verifyOwnerSignatureAndEnter(adminWallet);
-  }, [adminWallet, isOwnerAddress, isSignaturePending, isSignatureVerified, verifyOwnerSignatureAndEnter]);
-
   const renderConnectAction = (className: string, showConnectedLabel: boolean) => (
     <ConnectButton.Custom>
       {({ account, mounted, openConnectModal }) => {
@@ -335,7 +315,7 @@ export default function App() {
 
         const label = !connected
           ? '连接钱包'
-          : isOwnerAddress(account.address)
+          : hasImmediateOwnerAccess(account.address)
             ? showConnectedLabel
               ? isSignatureVerified
                 ? `已验证 ${formatWallet(account.address)}`
@@ -353,14 +333,20 @@ export default function App() {
                 return;
               }
 
-              if (!isOwnerAddress(account.address)) {
+              if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(account.address)) {
                 setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
                 setViewMode('website');
                 return;
               }
 
+              if (isSignatureVerified) {
+                setViewMode('admin');
+                return;
+              }
+
               void verifyOwnerSignatureAndEnter(account.address);
             }}
+            disabled={isSignaturePending}
             className={className}
             type="button"
           >
@@ -385,8 +371,20 @@ export default function App() {
                 return;
               }
 
+              if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(account.address)) {
+                setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
+                setViewMode('website');
+                return;
+              }
+
+              if (isSignatureVerified) {
+                setViewMode('admin');
+                return;
+              }
+
               void verifyOwnerSignatureAndEnter(account.address);
             }}
+            disabled={isSignaturePending}
             className={className}
             type="button"
           >
@@ -414,18 +412,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-cyan-500/30">
-      {!isAdminView && maintenanceEnabled && (
-        <div className="min-h-screen flex items-center justify-center px-6">
-          <div className="max-w-xl w-full rounded-3xl border border-cyan-500/20 bg-slate-900/70 p-10 text-center shadow-2xl">
-            <div className="text-sm uppercase tracking-[0.35em] text-cyan-300 mb-4">Maintenance Mode</div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">{systemStatus?.maintenanceMessageZh ?? '系统维护中，请稍后再试。'}</h1>
-            <p className="text-slate-400 mb-6">{systemStatus?.maintenanceMessageEn ?? 'System maintenance in progress. Please try again later.'}</p>
-            <div className="flex justify-center">
-              {renderConnectAction('px-5 py-3 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors', true)}
-            </div>
-          </div>
-        </div>
-      )}
       {!isAdminView && (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -436,7 +422,7 @@ export default function App() {
               <span className="text-[10px] uppercase tracking-widest text-[#F0B90B]">SUPER on BNB Chain</span>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-3 text-sm font-medium text-slate-300">
+          <div className="flex items-center gap-3 text-sm font-medium text-slate-300">
             <BscBadge className="hidden lg:inline-flex" />
             {renderOwnerDashboardEntry(
               'px-4 py-2 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors',

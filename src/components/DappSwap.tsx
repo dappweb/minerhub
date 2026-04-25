@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowDownUp, Settings, Wallet, Activity, Info } from 'lucide-react';
-import { connectWallet, swapSuperToUsdtOnChain } from '../lib/blockchain';
 
 export default function DappSwap() {
   const [superAmount, setSuperAmount] = useState('10000');
   const [usdtAmount, setUsdtAmount] = useState('10.00');
-  const [walletAddress, setWalletAddress] = useState<string>('');
-  const [txStatus, setTxStatus] = useState<string>('请先连接钱包');
+  const [txStatus, setTxStatus] = useState<string>('此区域仅展示兑换预估，实际交易请在 App 内完成。');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSuperChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,31 +17,13 @@ export default function DappSwap() {
   };
 
   const handleConnectWallet = async () => {
-    try {
-      setIsSubmitting(true);
-      const address = await connectWallet();
-      setWalletAddress(address);
-      setTxStatus('钱包已连接，可发起兑换。');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '连接钱包失败';
-      setTxStatus(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setTxStatus('网页展示区不直接连接钱包。请下载 Coin Planet App，在 App 内完成钱包授权与兑换。');
   };
 
   const handleConfirmSwap = async () => {
-    try {
-      setIsSubmitting(true);
-      setTxStatus('正在提交链上兑换交易...');
-      const hash = await swapSuperToUsdtOnChain(superAmount);
-      setTxStatus(`兑换成功: ${hash.slice(0, 10)}...`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '兑换失败';
-      setTxStatus(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setIsSubmitting(true);
+    setTxStatus('已根据当前输入更新预估结果。实际兑换需要在 App 内确认钱包授权和链上交易。');
+    window.setTimeout(() => setIsSubmitting(false), 300);
   };
 
   return (
@@ -147,15 +127,15 @@ export default function DappSwap() {
               disabled={isSubmitting}
               className="w-full mt-6 py-3 rounded-xl bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors disabled:opacity-60"
             >
-              {walletAddress ? '钱包已连接' : '连接钱包'}
+              App 内连接钱包
             </button>
 
             <button
               onClick={handleConfirmSwap}
-              disabled={isSubmitting || !walletAddress}
+              disabled={isSubmitting}
               className="w-full mt-3 py-4 rounded-xl bg-cyan-500 text-slate-950 font-bold text-lg hover:bg-cyan-400 transition-colors shadow-[0_0_20px_-5px_rgba(6,182,212,0.5)] disabled:opacity-60"
             >
-              确认链上兑换
+              更新兑换预估
             </button>
 
             <p className="mt-3 text-xs text-slate-400 break-all">{txStatus}</p>

@@ -1,5 +1,6 @@
 import { Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
+import QRCode from 'qrcode';
 import React from 'react';
 
 const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
@@ -35,9 +36,7 @@ interface DownloadState {
 function buildFallbackState(): DownloadState {
   const androidEnvUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL;
 
-  // Keep a deterministic local fallback so static Pages deployments can serve
-  // APK directly without requiring backend upload metadata first.
-  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '/api/downloads/android';
+  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '';
 
   return {
     android: androidUrl ? { available: true, downloadUrl: androidUrl } : { available: false },
@@ -79,6 +78,7 @@ export default function DownloadSection() {
     android: { available: false },
   });
   const [loading, setLoading] = React.useState(true);
+  const [qrDataUrl, setQrDataUrl] = React.useState<string>('');
   const apiBase = React.useMemo(() => resolveApiBaseUrl(), []);
 
   React.useEffect(() => {
@@ -110,12 +110,40 @@ export default function DownloadSection() {
   }, [apiBase]);
 
   const current = state.android;
-
-  const resolveUrl = (url?: string) => {
+  const resolveUrl = React.useCallback((url?: string) => {
     if (!url) return '';
     if (url.startsWith('http')) return url;
     return `${apiBase}${url}`;
-  };
+  }, [apiBase]);
+  const resolvedDownloadUrl = React.useMemo(() => resolveUrl(current.downloadUrl), [current.downloadUrl, resolveUrl]);
+
+  React.useEffect(() => {
+    let canceled = false;
+    if (!current.available || !resolvedDownloadUrl) {
+      setQrDataUrl('');
+      return;
+    }
+
+    QRCode.toDataURL(resolvedDownloadUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 240,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    })
+      .then((dataUrl) => {
+        if (!canceled) setQrDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (!canceled) setQrDataUrl('');
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [current.available, resolvedDownloadUrl]);
 
   const handleDownload = (url?: string) => {
     const full = resolveUrl(url);
@@ -263,7 +291,7 @@ export default function DownloadSection() {
             </div>
 
             <div className="mt-2 text-xs text-slate-500">
-              官方下载地址：{resolveUrl(current.downloadUrl) || `${apiBase}/api/downloads/android`}
+              官方下载地址：{resolvedDownloadUrl || '暂无可用下载地址'}
             </div>
           </div>
 
@@ -273,13 +301,17 @@ export default function DownloadSection() {
               <span className="font-semibold">{getQrTitle()}</span>
             </div>
 
-            {current.available && current.downloadUrl ? (
+            {current.available && resolvedDownloadUrl ? (
               <div className="mx-auto mb-4 w-fit rounded-2xl border border-cyan-400/30 bg-white/95 p-3 shadow-[0_12px_45px_-25px_rgba(255,255,255,0.9)]">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(resolveUrl(current.downloadUrl))}`}
-                  alt="android QR"
-                  className="h-52 w-52 rounded-lg"
-                />
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt="android QR"
+                    className="h-52 w-52 rounded-lg"
+                  />
+                ) : (
+                  <div className="flex h-52 w-52 items-center justify-center rounded-lg text-sm text-slate-500">生成中...</div>
+                )}
               </div>
             ) : (
               <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/70">

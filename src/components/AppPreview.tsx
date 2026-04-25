@@ -1,53 +1,15 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Battery, Wifi, Signal, Activity, ArrowRightLeft, Wallet } from 'lucide-react';
-import { claimRewardsOnChain, connectWallet, startMiningOnChain } from '../lib/blockchain';
 
 export default function AppPreview() {
-  const [walletAddress, setWalletAddress] = useState<string>('');
-  const [miningStatus, setMiningStatus] = useState<string>('等待连接钱包');
+  const [miningStatus, setMiningStatus] = useState<string>('产品预览区不会发起真实钱包或链上交易。');
   const [pendingAction, setPendingAction] = useState<boolean>(false);
 
-  const handleConnect = async () => {
-    try {
-      setPendingAction(true);
-      const address = await connectWallet();
-      setWalletAddress(address);
-      setMiningStatus('钱包已连接，可发起链上挖矿。');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '连接钱包失败';
-      setMiningStatus(message);
-    } finally {
-      setPendingAction(false);
-    }
-  };
-
-  const handleStartMining = async () => {
-    try {
-      setPendingAction(true);
-      setMiningStatus('链上提交挖矿交易中...');
-      const hash = await startMiningOnChain();
-      setMiningStatus(`挖矿交易已确认: ${hash.slice(0, 10)}...`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '挖矿交易失败';
-      setMiningStatus(message);
-    } finally {
-      setPendingAction(false);
-    }
-  };
-
-  const handleClaim = async () => {
-    try {
-      setPendingAction(true);
-      setMiningStatus('链上领取收益中...');
-      const hash = await claimRewardsOnChain();
-      setMiningStatus(`收益领取成功: ${hash.slice(0, 10)}...`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '收益领取失败';
-      setMiningStatus(message);
-    } finally {
-      setPendingAction(false);
-    }
+  const handlePreviewAction = (message: string) => {
+    setPendingAction(true);
+    setMiningStatus(message);
+    window.setTimeout(() => setPendingAction(false), 300);
   };
 
   return (
@@ -101,7 +63,7 @@ export default function AppPreview() {
             viewport={{ once: true }}
             className="flex-1 flex justify-center lg:justify-end w-full"
           >
-            <div className="relative w-[320px] h-[650px] bg-slate-950 rounded-[3rem] border-[8px] border-slate-800 shadow-2xl overflow-hidden flex flex-col shrink-0">
+            <div className="relative h-[650px] w-full max-w-[320px] bg-slate-950 rounded-[3rem] border-[8px] border-slate-800 shadow-2xl overflow-hidden flex flex-col shrink-0">
               <div className="h-7 w-full flex justify-between items-center px-6 pt-2 text-[10px] text-slate-400 z-10">
                 <span>12:00</span>
                 <div className="flex gap-1.5 items-center">
@@ -164,26 +126,26 @@ export default function AppPreview() {
 
                 <div className="mt-6 space-y-3">
                   <button
-                    onClick={handleConnect}
+                    onClick={() => handlePreviewAction('钱包授权需要在 Coin Planet App 内完成，此处仅展示界面状态。')}
                     disabled={pendingAction}
                     className="w-full py-3 rounded-xl bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors disabled:opacity-60"
                   >
-                    {walletAddress ? '钱包已连接' : '连接钱包'}
+                    查看钱包同步状态
                   </button>
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={handleStartMining}
-                      disabled={pendingAction || !walletAddress}
+                      onClick={() => handlePreviewAction('请在 App 内完成机器码开通与设备激活后开始累计收益。')}
+                      disabled={pendingAction}
                       className="py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors disabled:opacity-60"
                     >
-                      开始链上挖矿
+                      App 内激活
                     </button>
                     <button
-                      onClick={handleClaim}
-                      disabled={pendingAction || !walletAddress}
+                      onClick={() => handlePreviewAction('收益领取需要在 App 内确认钱包交易，网页预览不直接发起。')}
+                      disabled={pendingAction}
                       className="py-3 rounded-xl bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors disabled:opacity-60"
                     >
-                      领取收益
+                      App 内领取
                     </button>
                   </div>
                   <p className="text-xs text-slate-400 break-all">{miningStatus}</p>

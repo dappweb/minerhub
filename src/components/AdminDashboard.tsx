@@ -438,6 +438,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [agreementContentZh, setAgreementContentZh] = useState<string>('');
   const [agreementContentEn, setAgreementContentEn] = useState<string>('');
   const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
+  const [systemSettingsDirty, setSystemSettingsDirty] = useState<boolean>(false);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(() => createEmptyAnnouncementForm());
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string>('');
@@ -470,6 +471,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     if (!ownerSessionToken || !ownerSessionExpiresAt) return false;
     return new Date(ownerSessionExpiresAt).getTime() > Date.now() + 5_000;
   }, [ownerSessionExpiresAt, ownerSessionToken]);
+
+  const markSystemSettingsDirty = useCallback(() => {
+    setSystemSettingsDirty(true);
+  }, []);
 
   const persistOwnerSession = useCallback((token: string, expiresAt: string) => {
     sessionStorage.setItem('ownerJwt', token);
@@ -814,6 +819,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       payload.deviceStatus = bulkDeviceStatus;
     }
 
+    const actionLabel =
+      mode === 'rate'
+        ? `将 ${deviceIds.length} 台设备收益率改为 ${bulkDeviceRate} USDT/h`
+        : mode === 'extend'
+          ? `为 ${deviceIds.length} 台设备续期 ${Math.floor(Number(bulkDeviceExtendDays))} 天`
+          : mode === 'monthlyRenew'
+            ? `为 ${deviceIds.length} 台设备按月续期`
+            : `将 ${deviceIds.length} 台设备状态改为 ${bulkDeviceStatus}`;
+    if (!window.confirm(`确认${actionLabel}？`)) return;
+
     try {
       setBackendError('');
       setAdminActionLoading(`bulk-device-${mode}`);
@@ -897,6 +912,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   useEffect(() => {
     if (!systemStatus) return;
+    if (systemSettingsDirty) return;
     setMaintenanceMessageZh(systemStatus.maintenanceMessageZh);
     setMaintenanceMessageEn(systemStatus.maintenanceMessageEn);
     setMonthlyCardDays(systemStatus.monthlyCardDays.toString());
@@ -921,7 +937,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           }))
         : [],
     );
-  }, [systemStatus]);
+  }, [systemSettingsDirty, systemStatus]);
 
   useEffect(() => {
     void refreshOnChainData();
@@ -1199,6 +1215,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     setBackendError('');
     try {
       await signedRequest<{ ok: boolean }>('/api/system/settings', 'PUT', payload);
+      setSystemSettingsDirty(false);
       await loadBackendData();
     } catch (saveError) {
       setBackendError(saveError instanceof Error ? saveError.message : '保存系统设置失败');
@@ -1223,6 +1240,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('系统状态尚未同步，请稍后重试。');
       return;
     }
+    const nextLabel = systemStatus.maintenanceEnabled ? '关闭维护模式' : '开启维护模式';
+    if (!window.confirm(`确认${nextLabel}？该操作会立即影响线上 App 用户。`)) return;
     await saveSystemSettings({
       maintenanceEnabled: !systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
@@ -1238,6 +1257,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('系统状态尚未同步，请稍后重试。');
       return;
     }
+    const nextLabel = systemStatus.exchangeAutoEnabled ? '关闭自动兑换' : '开启自动兑换';
+    if (!window.confirm(`确认${nextLabel}？该操作会立即影响用户兑换流程。`)) return;
     await saveSystemSettings({
       maintenanceEnabled: systemStatus.maintenanceEnabled,
       maintenanceMessageZh,
@@ -1295,6 +1316,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleAddSupportContact = () => {
+    markSystemSettingsDirty();
     setSupportContacts((prev) => [
       ...prev,
       {
@@ -1308,10 +1330,12 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleUpdateSupportContact = (id: string, field: keyof SupportContact, value: string) => {
+    markSystemSettingsDirty();
     setSupportContacts((prev) => prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
   const handleRemoveSupportContact = (id: string) => {
+    markSystemSettingsDirty();
     setSupportContacts((prev) => prev.filter((item) => item.id !== id));
   };
 
@@ -1329,6 +1353,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         }))
         .filter((item) => item.type && item.value);
       await signedRequest<{ ok: boolean }>('/api/system/settings', 'PUT', { supportContacts: payload });
+      setSystemSettingsDirty(false);
       await loadBackendData();
     } catch (saveError) {
       setBackendError(saveError instanceof Error ? saveError.message : '保存联系方式失败');
@@ -2010,13 +2035,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                  <input value={maintenanceMessageZh} onChange={(event) => setMaintenanceMessageZh(event.target.value)} className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="维护文案（中文）" />
-                  <input value={maintenanceMessageEn} onChange={(event) => setMaintenanceMessageEn(event.target.value)} className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="Maintenance message (EN)" />
-                  <input value={monthlyCardDays} onChange={(event) => setMonthlyCardDays(event.target.value)} inputMode="numeric" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="月卡天数" />
-                  <input value={contractTermDays} onChange={(event) => setContractTermDays(event.target.value)} inputMode="numeric" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="合同默认天数" />
+                  <input value={maintenanceMessageZh} onChange={(event) => { markSystemSettingsDirty(); setMaintenanceMessageZh(event.target.value); }} className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="维护文案（中文）" />
+                  <input value={maintenanceMessageEn} onChange={(event) => { markSystemSettingsDirty(); setMaintenanceMessageEn(event.target.value); }} className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="Maintenance message (EN)" />
+                  <input value={monthlyCardDays} onChange={(event) => { markSystemSettingsDirty(); setMonthlyCardDays(event.target.value); }} inputMode="numeric" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="月卡天数" />
+                  <input value={contractTermDays} onChange={(event) => { markSystemSettingsDirty(); setContractTermDays(event.target.value); }} inputMode="numeric" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="合同默认天数" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input value={rewardRatePerHour} onChange={(event) => setRewardRatePerHour(event.target.value)} inputMode="decimal" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="每小时收益 USDT" />
+                  <input value={rewardRatePerHour} onChange={(event) => { markSystemSettingsDirty(); setRewardRatePerHour(event.target.value); }} inputMode="decimal" className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" placeholder="每小时收益 USDT" />
                   <div className="flex gap-2">
                     <button onClick={handleToggleMaintenance} disabled={adminActionLoading === 'systemSettings' || !systemStatus} className="flex-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium text-slate-950">
                       {adminActionLoading === 'systemSettings' ? '保存中...' : '切换维护'}
@@ -2052,19 +2077,19 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                   <input
                     value={agreementVersion}
-                    onChange={(event) => setAgreementVersion(event.target.value)}
+                    onChange={(event) => { markSystemSettingsDirty(); setAgreementVersion(event.target.value); }}
                     placeholder="版本号 (如 1.0.0)"
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
                   />
                   <input
                     value={agreementTitleZh}
-                    onChange={(event) => setAgreementTitleZh(event.target.value)}
+                    onChange={(event) => { markSystemSettingsDirty(); setAgreementTitleZh(event.target.value); }}
                     placeholder="协议标题（中文）"
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
                   />
                   <input
                     value={agreementTitleEn}
-                    onChange={(event) => setAgreementTitleEn(event.target.value)}
+                    onChange={(event) => { markSystemSettingsDirty(); setAgreementTitleEn(event.target.value); }}
                     placeholder="Agreement title (EN)"
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
                   />
@@ -2072,14 +2097,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                   <textarea
                     value={agreementContentZh}
-                    onChange={(event) => setAgreementContentZh(event.target.value)}
+                    onChange={(event) => { markSystemSettingsDirty(); setAgreementContentZh(event.target.value); }}
                     placeholder="协议正文（中文）"
                     rows={8}
                     className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400 font-mono"
                   />
                   <textarea
                     value={agreementContentEn}
-                    onChange={(event) => setAgreementContentEn(event.target.value)}
+                    onChange={(event) => { markSystemSettingsDirty(); setAgreementContentEn(event.target.value); }}
                     placeholder="Agreement content (EN)"
                     rows={8}
                     className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400 font-mono"
@@ -2693,7 +2718,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <button
                         type="button"
                         onClick={() => void handleBulkDeviceUpdate('rate')}
-                        disabled={adminActionLoading === 'bulk-device-rate'}
+                        disabled={adminActionLoading === 'bulk-device-rate' || selectedDeviceIds.size === 0}
                         className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
                       >
                         {adminActionLoading === 'bulk-device-rate' ? '处理中…' : '批量改收益率'}
@@ -2708,7 +2733,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <button
                         type="button"
                         onClick={() => void handleBulkDeviceUpdate('extend')}
-                        disabled={adminActionLoading === 'bulk-device-extend'}
+                        disabled={adminActionLoading === 'bulk-device-extend' || selectedDeviceIds.size === 0}
                         className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
                       >
                         {adminActionLoading === 'bulk-device-extend' ? '处理中…' : '批量续期'}
@@ -2716,7 +2741,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <button
                         type="button"
                         onClick={() => void handleBulkDeviceUpdate('monthlyRenew')}
-                        disabled={adminActionLoading === 'bulk-device-monthlyRenew'}
+                        disabled={adminActionLoading === 'bulk-device-monthlyRenew' || selectedDeviceIds.size === 0}
                         className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
                       >
                         {adminActionLoading === 'bulk-device-monthlyRenew' ? '处理中…' : '按月批量续期'}
@@ -2734,7 +2759,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <button
                         type="button"
                         onClick={() => void handleBulkDeviceUpdate('status')}
-                        disabled={adminActionLoading === 'bulk-device-status'}
+                        disabled={adminActionLoading === 'bulk-device-status' || selectedDeviceIds.size === 0}
                         className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
                       >
                         {adminActionLoading === 'bulk-device-status' ? '处理中…' : '批量改状态'}
