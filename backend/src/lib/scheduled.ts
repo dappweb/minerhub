@@ -109,15 +109,62 @@ export async function notifyOfflineCustomers(
   return { notified: rows.length };
 }
 
+/**
+ * Clean up old historical records (device status history, reward ledger, operation logs).
+ * Retains records from the last 90 days; removes older entries for database hygiene.
+ * Returns number of records deleted across all tables.
+ */
+export async function cleanupOldHistoryRecords(env: Env, retentionDays = 90): Promise<{ deleted: number }> {
+  const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  let totalDeleted = 0;
+
+  // Clean device_status_history
+  const deviceHistoryResult = await env.DB.prepare(
+    `DELETE FROM device_status_history WHERE observed_at < ?`
+  )
+    .bind(cutoffDate)
+    .run();
+  totalDeleted += deviceHistoryResult.success ? (deviceHistoryResult.meta.changes ?? 0) : 0;
+
+  // Clean reward_ledger
+  const rewardLedgerResult = await env.DB.prepare(
+    `DELETE FROM reward_ledger WHERE created_at < ?`
+  )
+    .bind(cutoffDate)
+    .run();
+  totalDeleted += rewardLedgerResult.success ? (rewardLedgerResult.meta.changes ?? 0) : 0;
+
+  // Clean operation_logs (if exists)
+  try {
+    const opLogsResult = await env.DB.prepare(
+      `DELETE FROM operation_logs WHERE created_at < ?`
+    )
+      .bind(cutoffDate)
+      .run();
+    totalDeleted += opLogsResult.success ? (opLogsResult.meta.changes ?? 0) : 0;
+  } catch {
+    // table may not exist, skip
+  }
+
+  return { deleted: totalDeleted };
+}
+
 export async function runScheduledTasks(env: Env): Promise<{
   expired: number;
   notified: number;
   releasedLocks: number;
+  cleaned: number;
 }> {
-  const [expired, notified, released] = await Promise.all([
+  const [expired, notified, released, cleanup] = await Promise.all([
     expireOverdueContracts(env),
     notifyOfflineCustomers(env),
     autoReleaseMaturedLocks(env),
+    cleanupOldHistoryRecords(env),
   ]);
-  return { expired: expired.expired, notified: notified.notified, releasedLocks: released.released };
+  return {
+    expired: expired.expired,
+    notified: notified.notified,
+    releasedLocks: released.released,
+    cleaned: cleanup.deleted,
+  };
 }
