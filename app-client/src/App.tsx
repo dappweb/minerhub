@@ -219,6 +219,10 @@ const translations = {
     errInvalidHashrate: 'Invalid hashrate value.',
     errDeviceIdRequired: 'Device ID is required.',
     errNetwork: 'Network is unstable. Please retry in a moment.',
+    errMaintenance: 'System is under maintenance. Please try again later.',
+    errAuthInvalid: 'Authentication expired or invalid. Please re-sync identity and retry.',
+    errServerBusy: 'Service is busy. Please retry in a moment.',
+    errInvalidRequest: 'Request parameters are invalid. Please check your input.',
     gasAssistTitle: 'Gas Top-up',
     gasAssistHint: 'Gas cannot be purchased with tokens. Please request admin recharge.',
     gasTokenLabel: 'Pay token',
@@ -431,6 +435,10 @@ const translations = {
     errInvalidHashrate: '算力参数不合法。',
     errDeviceIdRequired: '缺少设备 ID。',
     errNetwork: '网络不稳定，请稍后重试。',
+    errMaintenance: '系统维护中，请稍后再试。',
+    errAuthInvalid: '鉴权失效或登录状态过期，请重新同步身份后重试。',
+    errServerBusy: '服务繁忙，请稍后重试。',
+    errInvalidRequest: '请求参数无效，请检查后重试。',
     gasAssistTitle: 'Gas 充值',
     gasAssistHint: 'Gas 不支持用代币兑换，需由管理员充值。',
     gasTokenLabel: '支付代币',
@@ -707,12 +715,51 @@ export default function App() {
 
   const isInsufficientBnbError = (message: string) => {
     const msg = message.toLowerCase();
-    return msg.includes('insufficient bnb') || msg.includes('insufficient funds') || msg.includes('exceeds the balance');
+    return (
+      msg.includes('insufficient bnb')
+      || msg.includes('insufficient funds')
+      || msg.includes('exceeds the balance')
+      || (msg.includes('bnb') && msg.includes('余额不足'))
+    );
+  };
+
+  const extractKnownErrorText = (raw: string): string => {
+    const firstLine = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean) ?? '';
+
+    if (!firstLine) return '';
+
+    let normalized = firstLine;
+    if (normalized.toLowerCase().startsWith('api unavailable:')) {
+      normalized = normalized.slice('api unavailable:'.length).trim();
+    }
+
+    if ((normalized.startsWith('{') && normalized.endsWith('}')) || (normalized.startsWith('[') && normalized.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(normalized);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const obj = parsed as Record<string, unknown>;
+          if (typeof obj.error === 'string' && obj.error.trim()) {
+            return obj.error.trim();
+          }
+          if (typeof obj.message === 'string' && obj.message.trim()) {
+            return obj.message.trim();
+          }
+        }
+      } catch {
+        // keep normalized as-is when payload is not valid JSON.
+      }
+    }
+
+    return normalized;
   };
 
   const toFriendlyErrorMessage = (error: unknown): string => {
     const raw = error instanceof Error ? error.message : '';
-    const msg = raw.toLowerCase();
+    const normalized = extractKnownErrorText(raw);
+    const msg = normalized.toLowerCase();
 
     if (msg.includes('insufficient bnb') || msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
       return t.errInsufficientBnb;
@@ -722,7 +769,7 @@ export default function App() {
     }
 
     // Map well-known contract revert reasons to friendly localized text.
-    const revertReasonMatch = raw.match(/(?:Transaction reverted:|reverted with the following reason:?)\s*([^\n]+)/i);
+    const revertReasonMatch = normalized.match(/(?:Transaction reverted:|reverted with the following reason:?)\s*([^\n]+)/i);
     const revertReason = (revertReasonMatch ? revertReasonMatch[1] : '').trim();
     const reasonLower = revertReason.toLowerCase();
     if (reasonLower) {
@@ -739,6 +786,35 @@ export default function App() {
     if (msg.includes('reverted')) {
       return t.errReverted;
     }
+    if (msg.includes('system is under maintenance') || msg.includes('maintenance')) {
+      return t.errMaintenance;
+    }
+    if (
+      msg.includes('signature verification failed')
+      || msg.includes('missing auth headers')
+      || msg.includes('nonce already used')
+      || msg.includes('timestamp out of range')
+      || msg.includes('invalid token')
+      || msg.includes('verification error')
+    ) {
+      return t.errAuthInvalid;
+    }
+    if (
+      msg.includes('internal server error')
+      || msg.includes('all bsc upstreams failed')
+      || msg.includes('request failed: 5')
+    ) {
+      return t.errServerBusy;
+    }
+    if (
+      msg.includes('wallet query param is required')
+      || msg.includes('unsupported')
+      || msg.includes('invalid json-rpc body')
+      || msg.includes('payload too large')
+      || msg.includes('method not allowed')
+    ) {
+      return t.errInvalidRequest;
+    }
     if (
       msg.includes('network request failed') ||
       msg.includes('failed to fetch') ||
@@ -748,11 +824,11 @@ export default function App() {
       return t.errNetwork;
     }
 
-    if (!raw) {
+    if (!normalized) {
       return t.errNetwork;
     }
 
-    return raw.split('\n').find((line) => line.trim())?.trim() ?? raw;
+    return normalized;
   };
 
   const shortAddress = useMemo(() => {
@@ -1276,7 +1352,7 @@ export default function App() {
       const details = await getUserDetails(userId);
       setUserDetails(details);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
+      const message = toFriendlyErrorMessage(error);
       setAgreementError(`${t.agreementFailed}${message}`);
     } finally {
       setAgreementSubmitting(false);
@@ -1492,8 +1568,9 @@ export default function App() {
       setUsdtBalance(balances.usdt);
       setStatus(t.initDone);
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.initFail;
-      const lower = message.toLowerCase();
+      const rawMessage = error instanceof Error ? error.message : '';
+      const message = toFriendlyErrorMessage(error);
+      const lower = rawMessage.toLowerCase();
       const isNetworkIssue =
         lower.includes('network request failed') ||
         lower.includes('failed to fetch') ||
@@ -1971,8 +2048,8 @@ export default function App() {
         void initializeAccount();
       }, 500);
     } catch (error) {
-      const message = error instanceof Error ? error.message : lang === 'zh' ? '导入失败' : 'Import failed';
-      setImportError(message);
+      const message = toFriendlyErrorMessage(error);
+      setImportError(message || (lang === 'zh' ? '导入失败' : 'Import failed'));
     }
   };
 
