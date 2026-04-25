@@ -2,7 +2,22 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+import groovy.json.JsonSlurper
+
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def expoConfig = new JsonSlurper().parse(file("${projectRoot}/app.json"))
+def expoVersion = (expoConfig?.expo?.version ?: "1.0.0").toString()
+def versionSegments = expoVersion.tokenize('.').collect { segment ->
+    try {
+        return Integer.parseInt(segment)
+    } catch (Exception ignored) {
+        return 0
+    }
+}
+while (versionSegments.size() < 3) {
+    versionSegments << 0
+}
+def expoVersionCode = (versionSegments[0] * 10000) + (versionSegments[1] * 100) + versionSegments[2]
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -91,8 +106,8 @@ android {
         applicationId 'com.coinplanet.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode expoVersionCode
+        versionName expoVersion
     }
     signingConfigs {
         debug {
