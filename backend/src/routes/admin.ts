@@ -1302,6 +1302,30 @@ type AdminAlertItem = {
   activeDeviceCount: number;
 };
 
+type MachineCodeConflictUser = {
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  contractActive: number;
+  onlineStatus: "online" | "stale" | "offline";
+  deviceCount: number;
+  activeDeviceCount: number;
+  updatedAt: string;
+};
+
+type MachineCodeConflictItem = {
+  machineCode: string;
+  userCount: number;
+  activeContractCount: number;
+  users: MachineCodeConflictUser[];
+};
+
+type MachineCodeConflictResolveBody = {
+  machineCode?: string;
+  keepUserId?: string;
+  allowReassignFromActive?: boolean;
+};
+
 async function handleAdminAlerts(env: Env): Promise<Response> {
   // Return customers whose heartbeat stopped while their contract is still active.
   // Uses a broad SQL pre-filter (older than online threshold) and then classifies
@@ -1383,6 +1407,168 @@ async function handleAdminAlerts(env: Env): Promise<Response> {
   });
 }
 
+async function handleMachineCodeConflicts(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const limit = clampLimit(url.searchParams.get("limit"), 30, 100);
+
+  const groups = await env.DB.prepare(
+    `SELECT
+      TRIM(machine_code) AS machineCode,
+      COUNT(*) AS userCount,
+      SUM(CASE WHEN COALESCE(contract_active, 0) = 1 THEN 1 ELSE 0 END) AS activeContractCount,
+      MAX(updated_at) AS latestUpdatedAt
+     FROM customer_profiles
+     WHERE machine_code IS NOT NULL
+       AND TRIM(machine_code) <> ''
+     GROUP BY TRIM(machine_code)
+     HAVING COUNT(*) > 1
+     ORDER BY userCount DESC, activeContractCount DESC, latestUpdatedAt DESC
+     LIMIT ?`
+  )
+    .bind(limit)
+    .all<{
+      machineCode: string;
+      userCount: number;
+      activeContractCount: number;
+      latestUpdatedAt: string;
+    }>();
+
+  const items: MachineCodeConflictItem[] = [];
+
+  for (const group of groups.results ?? []) {
+    const detailRows = await env.DB.prepare(
+      `SELECT
+        cp.user_id AS userId,
+        u.wallet AS wallet,
+        cp.nickname AS nickname,
+        COALESCE(cp.contract_active, 0) AS contractActive,
+        cp.last_seen_at AS lastSeenAt,
+        cp.updated_at AS updatedAt,
+        COUNT(d.id) AS deviceCount,
+        SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount
+       FROM customer_profiles cp
+       INNER JOIN users u ON u.id = cp.user_id
+       LEFT JOIN devices d ON d.user_id = cp.user_id
+       WHERE TRIM(cp.machine_code) = ?
+       GROUP BY cp.user_id, u.wallet, cp.nickname, cp.contract_active, cp.last_seen_at, cp.updated_at
+       ORDER BY cp.contract_active DESC, cp.updated_at DESC`
+    )
+      .bind(group.machineCode)
+      .all<{
+        userId: string;
+        wallet: string;
+        nickname: string | null;
+        contractActive: number;
+        lastSeenAt: string | null;
+        updatedAt: string;
+        deviceCount: number;
+        activeDeviceCount: number;
+      }>();
+
+    items.push({
+      machineCode: group.machineCode,
+      userCount: Number(group.userCount ?? 0),
+      activeContractCount: Number(group.activeContractCount ?? 0),
+      users: (detailRows.results ?? []).map((row) => ({
+        userId: row.userId,
+        wallet: row.wallet,
+        nickname: row.nickname,
+        contractActive: Number(row.contractActive ?? 0),
+        onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt),
+        deviceCount: Number(row.deviceCount ?? 0),
+        activeDeviceCount: Number(row.activeDeviceCount ?? 0),
+        updatedAt: row.updatedAt,
+      })),
+    });
+  }
+
+  return json({
+    items,
+    counts: {
+      machineCodes: items.length,
+      impactedUsers: items.reduce((sum, item) => sum + item.userCount, 0),
+      activeContracts: items.reduce((sum, item) => sum + item.activeContractCount, 0),
+    },
+    generatedAt: nowIso(),
+  });
+}
+
+async function handleResolveMachineCodeConflict(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as MachineCodeConflictResolveBody | null;
+  const machineCode = body?.machineCode?.trim();
+  const keepUserId = body?.keepUserId?.trim();
+  const allowReassignFromActive = body?.allowReassignFromActive === true;
+
+  if (!machineCode) return badRequest("machineCode required");
+  if (!keepUserId) return badRequest("keepUserId required");
+
+  const rows = await env.DB.prepare(
+    `SELECT user_id, COALESCE(contract_active, 0) AS contract_active
+     FROM customer_profiles
+     WHERE TRIM(machine_code) = ?`
+  )
+    .bind(machineCode)
+    .all<{ user_id: string; contract_active: number }>();
+
+  const users = rows.results ?? [];
+  if (users.length <= 1) {
+    return json({ ok: true, resolved: false, reason: "no_conflict", machineCode, keepUserId });
+  }
+
+  const keepExists = users.some((row) => row.user_id === keepUserId);
+  if (!keepExists) return badRequest("keepUserId not in conflict group");
+
+  const now = nowIso();
+  const clearedUserIds: string[] = [];
+  const blockedActiveUserIds: string[] = [];
+
+  for (const row of users) {
+    if (row.user_id === keepUserId) continue;
+
+    const isActive = Number(row.contract_active ?? 0) === 1;
+    if (isActive && !allowReassignFromActive) {
+      blockedActiveUserIds.push(row.user_id);
+      continue;
+    }
+
+    await env.DB.prepare(
+      `UPDATE customer_profiles
+       SET machine_code = NULL, updated_at = ?
+       WHERE user_id = ? AND TRIM(machine_code) = ?`
+    )
+      .bind(now, row.user_id, machineCode)
+      .run();
+    clearedUserIds.push(row.user_id);
+  }
+
+  await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET machine_code = ?, updated_at = ?
+     WHERE user_id = ?`
+  )
+    .bind(machineCode, now, keepUserId)
+    .run();
+
+  const remainingRows = await env.DB.prepare(
+    `SELECT user_id
+     FROM customer_profiles
+     WHERE TRIM(machine_code) = ?
+     ORDER BY user_id ASC`
+  )
+    .bind(machineCode)
+    .all<{ user_id: string }>();
+
+  return json({
+    ok: true,
+    resolved: clearedUserIds.length > 0,
+    machineCode,
+    keepUserId,
+    clearedUserIds,
+    blockedActiveUserIds,
+    remainingUserIds: (remainingRows.results ?? []).map((row) => row.user_id),
+  });
+}
+
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   const ownerCheck = request.method === "GET"
     ? await requireOwnerRead(request, env)
@@ -1395,6 +1581,14 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "alerts") {
     return handleAdminAlerts(env);
+  }
+
+  if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "machine-code-conflicts") {
+    return handleMachineCodeConflicts(request, env);
+  }
+
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "machine-code-conflicts" && pathParts[1] === "resolve") {
+    return handleResolveMachineCodeConflict(request, env);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {

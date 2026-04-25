@@ -3,27 +3,27 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
-    addSwapLiquidityOnChain,
-    collectEcosystemFeeOnChain,
-    collectPlatformFeeOnChain,
-    getGlobalStatsOnChain,
-    getMinerInfoOnChain,
-    getMiningPoolAddress,
-    getMiningPoolAdminsOnChain,
-    getMiningPoolOwnerOnChain,
-    getSuperTokenAddress,
-    getSuperTokenStatsOnChain,
-    getSwapPoolStatsOnChain,
-    getSwapRouterAddress,
-    initializeSwapLiquidityOnChain,
-    mintSuperOnChain,
-    sendGasToAddressOnChain,
-    sendSuperToAddressOnChain,
-    startMiningOnChain,
-    type MiningPoolGlobalStats,
-    type MiningPoolMinerInfo,
-    type SuperTokenStats,
-    type SwapPoolStats
+  addSwapLiquidityOnChain,
+  collectEcosystemFeeOnChain,
+  collectPlatformFeeOnChain,
+  getGlobalStatsOnChain,
+  getMinerInfoOnChain,
+  getMiningPoolAddress,
+  getMiningPoolAdminsOnChain,
+  getMiningPoolOwnerOnChain,
+  getSuperTokenAddress,
+  getSuperTokenStatsOnChain,
+  getSwapPoolStatsOnChain,
+  getSwapRouterAddress,
+  initializeSwapLiquidityOnChain,
+  mintSuperOnChain,
+  sendGasToAddressOnChain,
+  sendSuperToAddressOnChain,
+  startMiningOnChain,
+  type MiningPoolGlobalStats,
+  type MiningPoolMinerInfo,
+  type SuperTokenStats,
+  type SwapPoolStats
 } from '../lib/blockchain';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import OwnerConsole from './OwnerConsole';
@@ -228,6 +228,25 @@ type CustomerRecommendation = {
   rewardTotal: number;
 };
 
+function getMinerRegisterBadge(customer: CustomerItem): { text: string; className: string } {
+  if (customer.deviceCount <= 0) {
+    return {
+      text: '未注册',
+      className: 'bg-slate-700/60 text-slate-200 border border-slate-600/70',
+    };
+  }
+  if (customer.activeDeviceCount > 0) {
+    return {
+      text: `已注册(${customer.activeDeviceCount})`,
+      className: 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40',
+    };
+  }
+  return {
+    text: `已注册(${customer.deviceCount})·停用`,
+    className: 'bg-amber-500/20 text-amber-200 border border-amber-500/40',
+  };
+}
+
 type AdminWalletSummary = {
   wallet: string;
   bnbBalance: string | null;
@@ -255,6 +274,45 @@ type AdminAlertResponse = {
   counts: { total: number; stale: number; offline: number };
   thresholds: { onlineMs: number; staleMs: number };
   generatedAt: string;
+};
+
+type MachineCodeConflictUser = {
+  userId: string;
+  wallet: string;
+  nickname: string | null;
+  contractActive: number;
+  onlineStatus: 'online' | 'stale' | 'offline';
+  deviceCount: number;
+  activeDeviceCount: number;
+  updatedAt: string;
+};
+
+type MachineCodeConflictItem = {
+  machineCode: string;
+  userCount: number;
+  activeContractCount: number;
+  users: MachineCodeConflictUser[];
+};
+
+type MachineCodeConflictResponse = {
+  items: MachineCodeConflictItem[];
+  counts: {
+    machineCodes: number;
+    impactedUsers: number;
+    activeContracts: number;
+  };
+  generatedAt: string;
+};
+
+type MachineCodeConflictResolveResponse = {
+  ok: boolean;
+  resolved: boolean;
+  machineCode: string;
+  keepUserId: string;
+  clearedUserIds: string[];
+  blockedActiveUserIds: string[];
+  remainingUserIds: string[];
+  reason?: string;
 };
 
 function formatOfflineDuration(seconds: number): string {
@@ -400,6 +458,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [adminSummary, setAdminSummary] = useState<AdminWalletSummary | null>(null);
   const [adminAlerts, setAdminAlerts] = useState<AdminAlertResponse | null>(null);
+  const [machineCodeConflicts, setMachineCodeConflicts] = useState<MachineCodeConflictResponse | null>(null);
+  const [machineCodeKeepUserByCode, setMachineCodeKeepUserByCode] = useState<Record<string, string>>({});
+  const [machineCodeResolveLoading, setMachineCodeResolveLoading] = useState<string>('');
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [withdrawalRecords, setWithdrawalRecords] = useState<WithdrawalRecord[]>([]);
   const [exchangeRecords, setExchangeRecords] = useState<ExchangeRecord[]>([]);
@@ -648,12 +709,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           return null;
         });
 
-      const [statusResponse, customersResponse, announcementsResponse, alertsResponse] = await Promise.all([
+      const [statusResponse, customersResponse, announcementsResponse, alertsResponse, machineCodeConflictsResponse] = await Promise.all([
         statusPromise,
         ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>('/api/admin/customers'),
         announcementsPromise,
         ownerReadRequest<AdminAlertResponse>('/api/admin/alerts').catch((err: unknown) => {
           warnings.push(`掉线告警同步失败: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        }),
+        ownerReadRequest<MachineCodeConflictResponse>('/api/admin/machine-code-conflicts?limit=30').catch((err: unknown) => {
+          warnings.push(`机器码冲突同步失败: ${err instanceof Error ? err.message : String(err)}`);
           return null;
         }),
       ]);
@@ -663,6 +728,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setAdminSummary(customersResponse.admin ?? null);
       setAnnouncements(announcementsResponse.items ?? []);
       setAdminAlerts(alertsResponse);
+      setMachineCodeConflicts(machineCodeConflictsResponse);
       if (warnings.length > 0) {
         setBackendError(warnings.join('；'));
       }
@@ -873,6 +939,42 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     loadDeviceDetail,
     loadBackendData,
   ]);
+
+  const handleResolveMachineCodeConflict = useCallback(async (item: MachineCodeConflictItem) => {
+    const fallbackKeepUser =
+      item.users.find((user) => user.contractActive === 1)?.userId
+      ?? item.users[0]?.userId
+      ?? '';
+    const keepUserId = machineCodeKeepUserByCode[item.machineCode] || fallbackKeepUser;
+    if (!keepUserId) {
+      setBackendError('缺少保留账号，无法处理机器码冲突');
+      return;
+    }
+
+    const keepUser = item.users.find((user) => user.userId === keepUserId);
+    const keepLabel = keepUser?.nickname || `${keepUser?.wallet.slice(0, 10)}...${keepUser?.wallet.slice(-6)}` || keepUserId;
+    if (!window.confirm(`确认将机器码 ${item.machineCode} 保留给 ${keepLabel}，并清理其余账号绑定？`)) {
+      return;
+    }
+
+    try {
+      setBackendError('');
+      setMachineCodeResolveLoading(item.machineCode);
+      const response = await signedRequest<MachineCodeConflictResolveResponse>('/api/admin/machine-code-conflicts/resolve', 'POST', {
+        machineCode: item.machineCode,
+        keepUserId,
+      });
+
+      if (response.blockedActiveUserIds.length > 0) {
+        setBackendError(`已部分处理：${response.clearedUserIds.length} 个账号已清理，${response.blockedActiveUserIds.length} 个有效合约账号被保护未清理。`);
+      }
+      await loadBackendData();
+    } catch (error) {
+      setBackendError(error instanceof Error ? error.message : '处理机器码冲突失败');
+    } finally {
+      setMachineCodeResolveLoading('');
+    }
+  }, [loadBackendData, machineCodeKeepUserByCode, signedRequest]);
 
   const refreshOnChainData = useCallback(async () => {
     if (!poolAddress || !adminWallet) {
@@ -2522,6 +2624,96 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
 
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-amber-200">机器码冲突检测</div>
+                      <p className="text-xs text-amber-100/80 mt-1">同一机器码对应多个账户时，会影响客服核对与合同归属，请优先处理。</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadBackendData()}
+                      disabled={backendLoading}
+                      className="px-3 py-1.5 rounded border border-amber-500/40 bg-amber-500/20 text-xs text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                    >
+                      刷新冲突
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mb-3">
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">冲突机器码</div>
+                      <div className="text-slate-100 mt-1">{machineCodeConflicts?.counts.machineCodes ?? 0}</div>
+                    </div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">影响账户数</div>
+                      <div className="text-slate-100 mt-1">{machineCodeConflicts?.counts.impactedUsers ?? 0}</div>
+                    </div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                      <div className="text-slate-400">其中有效合同</div>
+                      <div className="text-slate-100 mt-1">{machineCodeConflicts?.counts.activeContracts ?? 0}</div>
+                    </div>
+                  </div>
+
+                  {machineCodeConflicts?.items?.length ? (
+                    <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                      {machineCodeConflicts.items.slice(0, 12).map((item) => {
+                        const fallbackKeepUser =
+                          item.users.find((user) => user.contractActive === 1)?.userId
+                          ?? item.users[0]?.userId
+                          ?? '';
+                        const selectedKeepUserId = machineCodeKeepUserByCode[item.machineCode] || fallbackKeepUser;
+                        return (
+                        <div key={item.machineCode} className="rounded-lg border border-amber-500/30 bg-slate-950/60 p-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-mono text-amber-100">{item.machineCode}</span>
+                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-200">{item.userCount} 个账户</span>
+                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-200">有效合同 {item.activeContractCount}</span>
+                          </div>
+                          <div className="text-slate-300/90">
+                            {item.users.slice(0, 4).map((user) => (
+                              <div key={user.userId} className="flex flex-wrap items-center gap-2">
+                                <span>{user.nickname || user.wallet.slice(0, 10)}</span>
+                                <span className="font-mono text-slate-400">{user.wallet.slice(0, 10)}...{user.wallet.slice(-6)}</span>
+                                <span className={user.onlineStatus === 'online' ? 'text-emerald-300' : user.onlineStatus === 'stale' ? 'text-amber-300' : 'text-red-300'}>
+                                  {user.onlineStatus === 'online' ? '在线' : user.onlineStatus === 'stale' ? '延迟' : '离线'}
+                                </span>
+                                <span className="text-slate-500">设备 {user.activeDeviceCount}/{user.deviceCount}</span>
+                              </div>
+                            ))}
+                          </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <select
+                                value={selectedKeepUserId}
+                                onChange={(e) => setMachineCodeKeepUserByCode((prev) => ({ ...prev, [item.machineCode]: e.target.value }))}
+                                className="h-8 rounded border border-amber-500/40 bg-slate-900 px-2 text-[11px] text-slate-100 outline-none focus:border-amber-300"
+                              >
+                                {item.users.map((user) => (
+                                  <option key={user.userId} value={user.userId}>
+                                    {user.contractActive === 1 ? '有效合同' : '停用合同'} · {user.nickname || `${user.wallet.slice(0, 10)}...${user.wallet.slice(-6)}`}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => void handleResolveMachineCodeConflict(item)}
+                                disabled={machineCodeResolveLoading === item.machineCode || !selectedKeepUserId}
+                                className="px-2.5 py-1 rounded border border-amber-400/50 bg-amber-500/20 text-[11px] text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                              >
+                                {machineCodeResolveLoading === item.machineCode ? '处理中…' : '保留所选账号并清理其余'}
+                              </button>
+                            </div>
+                        </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+                      当前未发现机器码冲突。
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-4">
                   <div className="text-sm font-semibold text-amber-200 mb-2">系统管理员</div>
                   <div className="text-xs text-slate-300 break-all font-mono mb-3">{adminSummary?.wallet ?? adminWallet}</div>
@@ -2680,6 +2872,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <th className="px-3 py-2 font-medium">机器码</th>
                         <th className="px-3 py-2 font-medium">合同到期</th>
                         <th className="px-3 py-2 font-medium">状态</th>
+                        <th className="px-3 py-2 font-medium">矿机注册</th>
                         <th className="px-3 py-2 font-medium">在线</th>
                         <th className="px-3 py-2 font-medium">设备</th>
                         <th className="px-3 py-2 font-medium">BNB</th>
@@ -2694,6 +2887,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     <tbody className="divide-y divide-slate-800/50">
                       {visibleCustomers.map((entry) => {
                         const { customer, remainDays, expiring, expired, priority, actionLabel, reasons, score } = entry;
+                        const registerBadge = getMinerRegisterBadge(customer);
                         const checked = selectedCustomerIds.has(customer.id);
                         const isOfflineAlert = customer.contractActive === 1 && customer.onlineStatus !== 'online';
                         const rowClass = isOfflineAlert
@@ -2720,6 +2914,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                 : '未激活'}
                             </td>
                             <td className="px-3 py-2 text-slate-300">{customer.contractActive ? '有效' : '停用'}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ${registerBadge.className}`}>
+                                {registerBadge.text}
+                              </span>
+                            </td>
                             <td className={`px-3 py-2 font-medium ${customer.onlineStatus === 'online' ? 'text-emerald-300' : customer.onlineStatus === 'stale' ? 'text-amber-300' : 'text-red-300'}`}>
                               {customer.onlineStatus === 'online' ? '在线' : customer.onlineStatus === 'stale' ? '延迟' : '离线'}
                             </td>

@@ -174,7 +174,9 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
 
     if (typeof body.machineCode === "string" && body.machineCode.trim()) {
       await env.DB.prepare(
-        "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
+        `UPDATE customer_profiles
+         SET machine_code = COALESCE(NULLIF(TRIM(machine_code), ''), ?), updated_at = ?
+         WHERE user_id = ?`
       )
         .bind(body.machineCode.trim(), now, body.userId)
         .run();

@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    AppState,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  AppState,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -25,40 +25,40 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-    acceptUserAgreement,
-    bindReferral,
-    createExchangeRequest,
-    createUser,
-    getAnnouncements,
-    getExchangeRequests,
-    getGasWalletBalance,
-    getReferralMembers,
-    getReferralSummary,
-    getSystemStatus,
-    getUser,
-    getUserByWallet,
-    getUserDetails,
-    isExchangeOrderPendingStatus,
-    markAnnouncementRead as markAnnouncementReadApi,
-    registerDevice,
-    reportDeviceHeartbeat,
-    type AnnouncementDto,
-    type ExchangeRequestDto,
-    type ReferralMemberDto,
-    type ReferralSummaryDto
+  acceptUserAgreement,
+  bindReferral,
+  createExchangeRequest,
+  createUser,
+  getAnnouncements,
+  getExchangeRequests,
+  getGasWalletBalance,
+  getReferralMembers,
+  getReferralSummary,
+  getSystemStatus,
+  getUser,
+  getUserByWallet,
+  getUserDetails,
+  isExchangeOrderPendingStatus,
+  markAnnouncementRead as markAnnouncementReadApi,
+  registerDevice,
+  reportDeviceHeartbeat,
+  type AnnouncementDto,
+  type ExchangeRequestDto,
+  type ReferralMemberDto,
+  type ReferralSummaryDto
 } from './services/api';
 import {
-    claimRewardOnChain,
-    getSwapPriceOnChain,
-    getWalletAddress,
-    getWalletBalances,
-    registerMinerOnChain,
-    sendNativeTokenOnChain,
+  claimRewardOnChain,
+  getSwapPriceOnChain,
+  getWalletAddress,
+  getWalletBalances,
+  registerMinerOnChain,
+  sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-    exportWalletPrivateKey,
-    importWalletPrivateKey
+  exportWalletPrivateKey,
+  importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -700,10 +700,10 @@ export default function App() {
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementAutoShownRef = useRef(false);
+  const machineCodeSyncedRef = useRef<string>('');
 
   const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
-  const identityReady = Boolean(walletAddress && userId && deviceId);
   const serverWalletAddress = (typeof userDetails?.wallet === 'string' && userDetails.wallet.trim())
     ? userDetails.wallet.trim()
     : walletAddress;
@@ -713,6 +713,8 @@ export default function App() {
   const serverDeviceId = (typeof userDetails?.devices?.[0]?.device_id === 'string' && userDetails.devices[0].device_id.trim())
     ? userDetails.devices[0].device_id.trim()
     : deviceId;
+  const effectiveDeviceId = (serverDeviceId || deviceId).trim();
+  const identityReady = Boolean(walletAddress && userId && effectiveDeviceId);
   const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
     ? userDetails.inviterWallet.trim()
     : null;
@@ -890,8 +892,15 @@ export default function App() {
     if (fromServer && typeof fromServer === 'string' && fromServer.trim()) {
       return fromServer.trim();
     }
-    return deriveMachineCode(deviceId || '');
-  }, [userDetails, deviceId]);
+    return deriveMachineCode(effectiveDeviceId || '');
+  }, [userDetails, effectiveDeviceId]);
+
+  const machineCodeForUpload = useMemo(() => {
+    if (!isStableDeviceIdFormat(effectiveDeviceId)) {
+      return undefined;
+    }
+    return machineCode;
+  }, [effectiveDeviceId, machineCode]);
 
   const expireDate = useMemo(() => {
     if (!userDetails?.contractEndAt) {
@@ -1189,10 +1198,15 @@ export default function App() {
           return;
         }
 
-        await AsyncStorage.setItem(DEVICE_ID_KEY, stableId);
+        if (isStableDeviceIdFormat(stableId)) {
+          await AsyncStorage.setItem(DEVICE_ID_KEY, stableId);
+        }
         setDeviceId(stableId);
       } catch {
         const fallback = await resolveStableDeviceId();
+        if (isStableDeviceIdFormat(fallback)) {
+          await AsyncStorage.setItem(DEVICE_ID_KEY, fallback).catch(() => null);
+        }
         setDeviceId(fallback);
       }
     };
@@ -1573,7 +1587,7 @@ export default function App() {
         throw new Error(lang === 'zh' ? '请先绑定推荐人地址后再完成注册。' : 'Please bind an inviter wallet before registration.');
       }
 
-      let user = await createUser(address, pendingReferralWallet || undefined, machineCode).catch(async (err) => {
+      let user = await createUser(address, pendingReferralWallet || undefined, machineCodeForUpload).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1629,6 +1643,36 @@ export default function App() {
   }, [deviceId]);
 
   useEffect(() => {
+    const canonical = serverDeviceId.trim();
+    if (!canonical) return;
+    if (!isStableDeviceIdFormat(canonical)) return;
+    if (canonical === deviceId) return;
+    setDeviceId(canonical);
+    void AsyncStorage.setItem(DEVICE_ID_KEY, canonical).catch(() => null);
+  }, [serverDeviceId, deviceId]);
+
+  useEffect(() => {
+    if (!walletAddress || !userId || !machineCodeForUpload) return;
+    const syncKey = `${walletAddress.toLowerCase()}|${machineCodeForUpload}`;
+    if (machineCodeSyncedRef.current === syncKey) return;
+
+    let cancelled = false;
+    void createUser(walletAddress, undefined, machineCodeForUpload)
+      .then(() => {
+        if (!cancelled) {
+          machineCodeSyncedRef.current = syncKey;
+        }
+      })
+      .catch(() => {
+        // Ignore transient sync errors; next polling cycle will retry.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, userId, machineCodeForUpload]);
+
+  useEffect(() => {
     if (!walletAddress) return;
     void refreshGasFundedBalance(walletAddress);
   }, [walletAddress]);
@@ -1643,14 +1687,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!walletAddress || !userId || !deviceId) return;
+    if (!walletAddress || !userId || !effectiveDeviceId) return;
 
     let active = true;
     const sendHeartbeat = async () => {
       if (!active) return;
       try {
         await reportDeviceHeartbeat({
-          deviceId,
+          deviceId: effectiveDeviceId,
           userId,
           wallet: walletAddress,
           status: 'active',
@@ -1683,7 +1727,7 @@ export default function App() {
       clearInterval(timer);
       appStateSub.remove();
     };
-  }, [walletAddress, userId, deviceId, deviceHashrate]);
+  }, [walletAddress, userId, effectiveDeviceId, deviceHashrate]);
 
   useEffect(() => {
     if (!identityReady || !userId || !walletAddress) return;
@@ -1840,13 +1884,13 @@ export default function App() {
       }
 
       setStatus(t.registerMiner);
-      const txHash = await registerMinerOnChain(finalHashrate, deviceId);
+      const txHash = await registerMinerOnChain(finalHashrate, effectiveDeviceId);
       const device = await registerDevice({
         userId,
-        deviceId,
+        deviceId: effectiveDeviceId,
         hashrate: finalHashrate,
         wallet: walletAddress,
-        machineCode,
+        machineCode: machineCodeForUpload,
       });
 
       await markMinerReady();
@@ -1872,10 +1916,10 @@ export default function App() {
         try {
           await registerDevice({
             userId,
-            deviceId,
+            deviceId: effectiveDeviceId,
             hashrate: finalHashrate,
             wallet: walletAddress,
-            machineCode,
+            machineCode: machineCodeForUpload,
           });
           await markMinerReady();
           setStatus(t.minerRecovered);
