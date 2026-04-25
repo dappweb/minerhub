@@ -559,23 +559,37 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [adminWallet, hasValidOwnerSession, ownerSessionToken, signMessageAsync]);
 
   const signedRequest = useCallback(async <T,>(path: string, method: string, body: Record<string, unknown> = {}): Promise<T> => {
-    const headers = await buildSignedHeaders(path, body);
-    const requestInit: RequestInit = {
-      method,
-      headers,
-    };
+    let token = await ensureOwnerSession();
+    const makeHeaders = (t: string): Record<string, string> => ({
+      'content-type': 'application/json',
+      authorization: `Bearer ${t}`,
+    });
 
-    if (method !== 'GET' && method !== 'HEAD') {
-      requestInit.body = JSON.stringify(body);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const requestInit: RequestInit = {
+        method,
+        headers: makeHeaders(token),
+      };
+      if (method !== 'GET' && method !== 'HEAD') {
+        requestInit.body = JSON.stringify(body);
+      }
+      const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
+
+      if (response.status === 401 && attempt === 0) {
+        clearOwnerSession();
+        token = await ensureOwnerSession();
+        continue;
+      }
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Request failed: ${response.status}`);
+      }
+      return (await response.json()) as T;
     }
 
-    const response = await fetch(`${apiBaseUrl}${path}`, requestInit);
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
-    }
-    return (await response.json()) as T;
-  }, [apiBaseUrl, buildSignedHeaders]);
+    throw new Error('Owner write retry exhausted');
+  }, [apiBaseUrl, clearOwnerSession, ensureOwnerSession]);
 
   const ownerReadRequest = useCallback(async <T,>(path: string): Promise<T> => {
     let token = await ensureOwnerSession();
