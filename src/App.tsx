@@ -42,6 +42,7 @@ export default function App() {
   const [adminLoginStatus, setAdminLoginStatus] = React.useState<string>('请先使用钱包登录后台');
   const [ownerAuthorityAddress, setOwnerAuthorityAddress] = React.useState<string>('');
   const [authorizedAdminAddresses, setAuthorizedAdminAddresses] = React.useState<string[]>([]);
+  const [ownerAuthorityLoaded, setOwnerAuthorityLoaded] = React.useState<boolean>(false);
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
   const autoVerifyAttemptedWalletRef = React.useRef<string>('');
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
@@ -131,6 +132,7 @@ export default function App() {
             ])
           )
         );
+        setOwnerAuthorityLoaded(true);
       }
     };
 
@@ -168,7 +170,7 @@ export default function App() {
     };
   }, []);
 
-  const isOwnerAddress = React.useCallback((address: string) => {
+  const hasImmediateOwnerAccess = React.useCallback((address: string) => {
     if (!address) {
       return false;
     }
@@ -192,12 +194,48 @@ export default function App() {
     return false;
   }, [authorizedAdminAddresses, ownerAuthorityAddress, extraAdminAddresses, ownerWalletAddress]);
 
+  const resolveOwnerAccess = React.useCallback(
+    async (walletAddress: string) => {
+      if (!walletAddress) {
+        return false;
+      }
+
+      if (hasImmediateOwnerAccess(walletAddress)) {
+        return true;
+      }
+
+      const [chainOwnerResult, chainAdminsResult] = await Promise.allSettled([
+        getMiningPoolOwnerOnChain(),
+        getMiningPoolAdminsOnChain(),
+      ]);
+
+      const chainOwner = chainOwnerResult.status === 'fulfilled' ? chainOwnerResult.value : '';
+      const chainAdmins =
+        chainAdminsResult.status === 'fulfilled' ? chainAdminsResult.value.map((address) => address.toLowerCase()) : [];
+      const effectiveOwner = chainOwner || ownerWalletAddress;
+      const mergedAdmins = Array.from(
+        new Set([
+          ...extraAdminAddresses,
+          ...chainAdmins,
+          effectiveOwner ? effectiveOwner.toLowerCase() : '',
+        ])
+      );
+
+      setOwnerAuthorityAddress(effectiveOwner);
+      setAuthorizedAdminAddresses(mergedAdmins);
+      setOwnerAuthorityLoaded(true);
+
+      return mergedAdmins.includes(walletAddress.toLowerCase());
+    },
+    [extraAdminAddresses, hasImmediateOwnerAccess, ownerWalletAddress],
+  );
+
   const adminWallet = isConnected && address ? address : '';
   const isSignatureVerified =
     Boolean(adminWallet) &&
     Boolean(verifiedOwnerWallet) &&
     adminWallet.toLowerCase() === verifiedOwnerWallet.toLowerCase();
-  const isOwnerLoggedIn = Boolean(adminWallet) && isOwnerAddress(adminWallet) && isSignatureVerified;
+  const isOwnerLoggedIn = Boolean(adminWallet) && hasImmediateOwnerAccess(adminWallet) && isSignatureVerified;
   const isAdminView = viewMode === 'admin';
   const maintenanceEnabled = systemStatus?.maintenanceEnabled === true;
 
@@ -210,7 +248,7 @@ export default function App() {
       return;
     }
 
-    if (!isOwnerAddress(adminWallet)) {
+    if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(adminWallet)) {
       autoVerifyAttemptedWalletRef.current = '';
       setVerifiedOwnerWallet('');
       setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
@@ -222,7 +260,7 @@ export default function App() {
       setAdminLoginStatus('管理员钱包已连接，请完成链上签名验证后进入数据面板。');
       setViewMode('website');
     }
-  }, [adminWallet, isOwnerAddress, isSignatureVerified]);
+  }, [adminWallet, hasImmediateOwnerAccess, isSignatureVerified, ownerAuthorityLoaded]);
 
   const verifyOwnerSignatureAndEnter = React.useCallback(
     async (walletAddress: string) => {
@@ -231,7 +269,9 @@ export default function App() {
         return;
       }
 
-      if (!isOwnerAddress(walletAddress)) {
+      setAdminLoginStatus('姝ｅ湪鏍￠獙閾句笂绠＄悊鍛樻潈闄愶紝閫氳繃鍚庝細寮瑰嚭閽卞寘绛惧悕銆?);
+      const hasOwnerAccess = await resolveOwnerAccess(walletAddress);
+      if (!hasOwnerAccess) {
         setVerifiedOwnerWallet('');
         setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
         setViewMode('website');
@@ -268,7 +308,7 @@ export default function App() {
         setViewMode('website');
       }
     },
-    [isOwnerAddress, signAdminMessage],
+    [resolveOwnerAccess, signAdminMessage],
   );
 
   React.useEffect(() => {
