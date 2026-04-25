@@ -221,6 +221,7 @@ export default function ProfileTab({
   const [exportRevealing, setExportRevealing] = React.useState(false);
   const [exportCopied, setExportCopied] = React.useState(false);
   const [exportError, setExportError] = React.useState('');
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const members = referralMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
   const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet' | 'machine'>('idle');
@@ -338,18 +339,6 @@ export default function ProfileTab({
               <Text style={styles.balanceLabel}>USDT</Text>
               <Text style={styles.balanceValue}>{usdtBalance}</Text>
             </View>
-          </View>
-        )}
-        
-        {/* Import/Export Buttons */}
-        {walletAddress && (
-          <View style={styles.walletActionsRow}>
-            <TouchableOpacity style={styles.walletActionBtn} onPress={onExportWallet}>
-              <Text style={styles.walletActionBtnText}>导出</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.walletActionBtn} onPress={onImportWalletClick}>
-              <Text style={styles.walletActionBtnText}>导入</Text>
-            </TouchableOpacity>
           </View>
         )}
         
@@ -519,54 +508,67 @@ export default function ProfileTab({
       </View>
 
       <View style={s.actionCard}>
-        <Text style={s.sectionTitle}>{t.advancedSettings}</Text>
-        <Text style={s.label}>{t.transferTitle}</Text>
-        <TextInput
-          style={s.input}
-          value={transferTo}
-          onChangeText={setTransferTo}
-          placeholder={t.transferTo}
-          placeholderTextColor="#93a9d1"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isBusy}
-        />
-        <TextInput
-          style={s.input}
-          value={transferAmount}
-          onChangeText={setTransferAmount}
-          keyboardType="decimal-pad"
-          placeholder={t.transferAmount}
-          placeholderTextColor="#93a9d1"
-          editable={!isBusy}
-        />
-        <TouchableOpacity style={s.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
-          <Text style={s.secondaryBtnText}>{t.sendTransfer}</Text>
+        <TouchableOpacity style={styles.collapseHeaderBtn} onPress={() => setAdvancedOpen((prev) => !prev)}>
+          <Text style={styles.collapseHeaderTitle}>{t.advancedSettings}</Text>
+          <Text style={styles.collapseHeaderHint}>{advancedOpen ? (isZh ? '收起' : 'Hide') : (isZh ? '展开' : 'Show')}</Text>
         </TouchableOpacity>
 
-        <View style={styles.exportDivider} />
-        <Text style={s.label}>{t.exportPrivateKeyTitle}</Text>
-        <Text style={styles.exportWarn}>{t.exportPrivateKeyWarning}</Text>
-        <TouchableOpacity
-          style={styles.exportBtn}
-          onPress={handleOpenExport}
-          disabled={!identityReady}
-        >
-          <Text style={styles.exportBtnText}>{t.exportPrivateKeyButton}</Text>
-        </TouchableOpacity>
-
-        {onCheckUpdate && (
+        {advancedOpen && (
           <>
-            <View style={styles.exportDivider} />
-            <Text style={s.label}>{t.checkUpdateTitle ?? '应用更新'}</Text>
-            {t.checkUpdateHint && <Text style={styles.exportWarn}>{t.checkUpdateHint}</Text>}
-            <TouchableOpacity style={styles.exportBtn} onPress={onCheckUpdate}>
-              <Text style={styles.exportBtnText}>{t.checkUpdateButton ?? '检查更新'}</Text>
+            <Text style={s.label}>{t.transferTitle}</Text>
+            <TextInput
+              style={s.input}
+              value={transferTo}
+              onChangeText={setTransferTo}
+              placeholder={t.transferTo}
+              placeholderTextColor="#93a9d1"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isBusy}
+            />
+            <TextInput
+              style={s.input}
+              value={transferAmount}
+              onChangeText={setTransferAmount}
+              keyboardType="decimal-pad"
+              placeholder={t.transferAmount}
+              placeholderTextColor="#93a9d1"
+              editable={!isBusy}
+            />
+            <TouchableOpacity style={s.secondaryBtn} onPress={transferNativeToken} disabled={isBusy || !identityReady}>
+              <Text style={s.secondaryBtnText}>{t.sendTransfer}</Text>
             </TouchableOpacity>
-            {appVersion && (
-              <Text style={styles.versionText}>
-                {(t.appVersionLabel ?? '当前版本')}: {appVersion}
-              </Text>
+
+            <View style={styles.exportDivider} />
+            <Text style={s.label}>{t.exportPrivateKeyTitle}</Text>
+            <Text style={styles.exportWarn}>{t.exportPrivateKeyWarning}</Text>
+            <View style={styles.walletActionsRow}>
+              <TouchableOpacity style={styles.walletActionBtn} onPress={onImportWalletClick} disabled={!identityReady}>
+                <Text style={styles.walletActionBtnText}>{isZh ? '导入钱包' : 'Import Wallet'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.walletActionBtn}
+                onPress={handleOpenExport}
+                disabled={!identityReady}
+              >
+                <Text style={styles.walletActionBtnText}>{t.exportPrivateKeyButton}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {onCheckUpdate && (
+              <>
+                <View style={styles.exportDivider} />
+                <Text style={s.label}>{t.checkUpdateTitle ?? '应用更新'}</Text>
+                {t.checkUpdateHint && <Text style={styles.exportWarn}>{t.checkUpdateHint}</Text>}
+                <TouchableOpacity style={styles.exportBtn} onPress={onCheckUpdate}>
+                  <Text style={styles.exportBtnText}>{t.checkUpdateButton ?? '检查更新'}</Text>
+                </TouchableOpacity>
+                {appVersion && (
+                  <Text style={styles.versionText}>
+                    {(t.appVersionLabel ?? '当前版本')}: {appVersion}
+                  </Text>
+                )}
+              </>
             )}
           </>
         )}
@@ -1080,6 +1082,27 @@ const styles = StyleSheet.create({
   walletActionBtnText: {
     color: '#e8fbff',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  collapseHeaderBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  collapseHeaderTitle: {
+    color: '#e8fbff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  collapseHeaderHint: {
+    color: '#93a9d1',
+    fontSize: 12,
     fontWeight: '700',
   },
   modalCardLarge: {

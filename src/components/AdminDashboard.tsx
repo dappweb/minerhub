@@ -3,27 +3,27 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
-  addSwapLiquidityOnChain,
-  collectEcosystemFeeOnChain,
-  collectPlatformFeeOnChain,
-  getGlobalStatsOnChain,
-  getMinerInfoOnChain,
-  getMiningPoolAddress,
-  getMiningPoolAdminsOnChain,
-  getMiningPoolOwnerOnChain,
-  getSuperTokenAddress,
-  getSuperTokenStatsOnChain,
-  getSwapPoolStatsOnChain,
-  getSwapRouterAddress,
-  initializeSwapLiquidityOnChain,
-  mintSuperOnChain,
-  sendGasToAddressOnChain,
-  sendSuperToAddressOnChain,
-  startMiningOnChain,
-  type MiningPoolGlobalStats,
-  type MiningPoolMinerInfo,
-  type SuperTokenStats,
-  type SwapPoolStats
+    addSwapLiquidityOnChain,
+    collectEcosystemFeeOnChain,
+    collectPlatformFeeOnChain,
+    getGlobalStatsOnChain,
+    getMinerInfoOnChain,
+    getMiningPoolAddress,
+    getMiningPoolAdminsOnChain,
+    getMiningPoolOwnerOnChain,
+    getSuperTokenAddress,
+    getSuperTokenStatsOnChain,
+    getSwapPoolStatsOnChain,
+    getSwapRouterAddress,
+    initializeSwapLiquidityOnChain,
+    mintSuperOnChain,
+    sendGasToAddressOnChain,
+    sendSuperToAddressOnChain,
+    startMiningOnChain,
+    type MiningPoolGlobalStats,
+    type MiningPoolMinerInfo,
+    type SuperTokenStats,
+    type SwapPoolStats
 } from '../lib/blockchain';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import OwnerConsole from './OwnerConsole';
@@ -383,9 +383,13 @@ const SECTION_LABELS: Array<{ id: AdminSection; labelKey: TranslationKey; descKe
   { id: 'docs',      labelKey: 'admin.section.docs',      descKey: 'admin.section.docs.desc' },
 ];
 
+const BASIC_SECTION_IDS: AdminSection[] = ['overview', 'customers', 'records', 'system'];
+const ADVANCED_SECTION_IDS: AdminSection[] = ['owner', 'onchain', 'tokens', 'funding', 'docs'];
+
 export default function AdminDashboard({ fullScreen = false, adminWallet, signMessageAsync }: AdminDashboardProps) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState<AdminSection>('overview');
+  const [showAdvancedNav, setShowAdvancedNav] = useState<boolean>(false);
   const [globalStats, setGlobalStats] = useState<MiningPoolGlobalStats | null>(null);
   const [minerInfo, setMinerInfo] = useState<MiningPoolMinerInfo | null>(null);
   const [superStats, setSuperStats] = useState<SuperTokenStats | null>(null);
@@ -401,6 +405,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [exchangeRecords, setExchangeRecords] = useState<ExchangeRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState<boolean>(false);
   const [recordsError, setRecordsError] = useState<string>('');
+  const [showRecordsDetail, setShowRecordsDetail] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [backendLoading, setBackendLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
@@ -1725,6 +1730,29 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     return filtered;
   }, [customerInsights, customerSearch, customerSortBy, customerStatusFilter]);
 
+  const recordsSummary = useMemo(() => {
+    const pendingApprove = withdrawalRecords.filter(
+      (item) => item.source === 'exchange' && (item.status === 'manual_pending' || item.status === 'auto_processing')
+    ).length;
+    const pendingComplete = withdrawalRecords.filter(
+      (item) => item.source === 'exchange' && (item.status === 'approved' || item.status === 'auto_processing')
+    ).length;
+
+    return {
+      rechargeCount: rechargeRecords.length,
+      withdrawalCount: withdrawalRecords.length,
+      exchangeCount: exchangeRecords.length,
+      pendingApprove,
+      pendingComplete,
+    };
+  }, [exchangeRecords.length, rechargeRecords.length, withdrawalRecords]);
+
+  useEffect(() => {
+    if (showAdvancedNav) return;
+    if (!ADVANCED_SECTION_IDS.includes(section)) return;
+    setSection('overview');
+  }, [section, showAdvancedNav]);
+
   return (
     <section
       id="admin-dashboard"
@@ -1778,7 +1806,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </div>
             </div>
             <nav className="flex flex-wrap gap-2">
-              {SECTION_LABELS.map((item) => (
+              {SECTION_LABELS.filter((item) => BASIC_SECTION_IDS.includes(item.id)).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setSection(item.id)}
@@ -1791,7 +1819,34 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   {t(item.labelKey)}
                 </button>
               ))}
+              <button
+                onClick={() => setShowAdvancedNav((prev) => !prev)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                  showAdvancedNav
+                    ? 'bg-amber-500 text-slate-950 border-amber-400'
+                    : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                }`}
+              >
+                {showAdvancedNav ? (locale === 'zh' ? '收起高级' : 'Hide Advanced') : (locale === 'zh' ? '高级操作' : 'Advanced')}
+              </button>
             </nav>
+            {showAdvancedNav && (
+              <nav className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-800">
+                {SECTION_LABELS.filter((item) => ADVANCED_SECTION_IDS.includes(item.id)).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setSection(item.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                      section === item.id
+                        ? 'bg-amber-400/90 text-slate-950 border-amber-300'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    {t(item.labelKey)}
+                  </button>
+                ))}
+              </nav>
+            )}
           </div>
 
           {/* Main Content */}
@@ -1804,16 +1859,50 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             {/* Top Stats (Overview) */}
             {section === 'overview' && (
             <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {stats.map((stat, i) => (
-                <div key={i} className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-slate-400 text-sm mb-2">{stat.label}</div>
-                  <div className={`text-2xl font-bold ${stat.color} mb-1`}>{stat.value}</div>
-                  <div className="text-xs text-slate-500">{stat.trend}</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecordsDetail((prev) => !prev)}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-xs text-indigo-200 hover:bg-indigo-500/30"
+                  >
+                    {showRecordsDetail ? '收起明细' : '展开明细'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void loadRecords()}
+                    disabled={recordsLoading}
+                    className="px-3 py-1.5 rounded-lg bg-sky-500/20 border border-sky-500/40 text-xs text-sky-200 hover:bg-sky-500/30 disabled:opacity-50"
+                  >
+                    {recordsLoading ? '刷新中…' : '刷新'}
+                  </button>
                 </div>
-              ))}
             </div>
 
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="text-[11px] text-slate-400">充值订单</div>
+                  <div className="text-lg font-semibold text-indigo-200">{recordsSummary.rechargeCount}</div>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="text-[11px] text-slate-400">提现记录</div>
+                  <div className="text-lg font-semibold text-rose-200">{recordsSummary.withdrawalCount}</div>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="text-[11px] text-slate-400">兑换记录</div>
+                  <div className="text-lg font-semibold text-cyan-200">{recordsSummary.exchangeCount}</div>
+                </div>
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div className="text-[11px] text-amber-100/80">待批准</div>
+                  <div className="text-lg font-semibold text-amber-200">{recordsSummary.pendingApprove}</div>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="text-[11px] text-emerald-100/80">待完成</div>
+                  <div className="text-lg font-semibold text-emerald-200">{recordsSummary.pendingComplete}</div>
+                </div>
+              </div>
+
+              {showRecordsDetail && (
+              <>
             <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mb-8">
               <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-5">
                 <div className="flex items-center justify-between gap-3 mb-4">
@@ -2341,6 +2430,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </div>
             )}
 

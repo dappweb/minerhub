@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  AppState,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    AppState,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -25,40 +25,40 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-  acceptUserAgreement,
-  bindReferral,
-  createExchangeRequest,
-  createUser,
-  getAnnouncements,
-  getExchangeRequests,
-  getGasWalletBalance,
-  getReferralMembers,
-  getReferralSummary,
-  getSystemStatus,
-  getUser,
-  getUserByWallet,
-  getUserDetails,
-  isExchangeOrderPendingStatus,
-  markAnnouncementRead as markAnnouncementReadApi,
-  registerDevice,
-  reportDeviceHeartbeat,
-  type AnnouncementDto,
-  type ExchangeRequestDto,
-  type ReferralMemberDto,
-  type ReferralSummaryDto
+    acceptUserAgreement,
+    bindReferral,
+    createExchangeRequest,
+    createUser,
+    getAnnouncements,
+    getExchangeRequests,
+    getGasWalletBalance,
+    getReferralMembers,
+    getReferralSummary,
+    getSystemStatus,
+    getUser,
+    getUserByWallet,
+    getUserDetails,
+    isExchangeOrderPendingStatus,
+    markAnnouncementRead as markAnnouncementReadApi,
+    registerDevice,
+    reportDeviceHeartbeat,
+    type AnnouncementDto,
+    type ExchangeRequestDto,
+    type ReferralMemberDto,
+    type ReferralSummaryDto
 } from './services/api';
 import {
-  claimRewardOnChain,
-  getSwapPriceOnChain,
-  getWalletAddress,
-  getWalletBalances,
-  registerMinerOnChain,
-  sendNativeTokenOnChain,
+    claimRewardOnChain,
+    getSwapPriceOnChain,
+    getWalletAddress,
+    getWalletBalances,
+    registerMinerOnChain,
+    sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-  exportWalletPrivateKey,
-  importWalletPrivateKey
+    exportWalletPrivateKey,
+    importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -2039,7 +2039,6 @@ export default function App() {
   const bottomTabs: Array<{ key: BottomTab; label: string }> = [
     { key: 'home', label: t.tabHome },
     { key: 'earnings', label: t.tabEarnings },
-    { key: 'exchange', label: t.tabExchange },
     { key: 'device', label: t.tabDevice },
     { key: 'profile', label: t.tabProfile },
   ];
@@ -2165,32 +2164,42 @@ export default function App() {
           )}
 
           {activeTab === 'earnings' && (
-            <EarningsTab
-              marketTrend={marketTrend}
-              marketRisk={marketRisk}
-              marketHint={marketHint}
-              configuredRewardRateUsdtPerHour={configuredRewardRateUsdtPerHour}
-              effectiveRewardRateUsdtPerHour={effectiveRewardRateUsdtPerHour}
-              estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
-              totalRewardUsdt={totalRewardUsdt}
-              totalRewardSuper={totalRewardSuper}
-              todayRewardUsdt={todayRewardUsdt}
-              yesterdayRewardUsdt={yesterdayRewardUsdt}
-              claimableRewardUsdt={claimableRewardUsdt}
-              rewardTokenSymbol="SUPER"
-              lockCycleDays={lockCycleDays}
-              lockRemainingDays={lockRemainingDays}
-              lockStatusText={lockStatusText}
-              totalOnlineMinutes={totalOnlineMinutes}
-              monthProgressMinutes={monthProgressMinutes}
-              isBusy={isBusy}
-              identityReady={identityReady}
-              chartValues={chartValues}
-              chartMax={chartMax}
-              recentRewards={recentRewardItems}
-              claimReward={claimReward}
-              t={t}
-            />
+            <>
+              <View style={styles.inlineActionRow}>
+                <TouchableOpacity
+                  style={styles.inlineActionBtn}
+                  onPress={() => setActiveTab('exchange')}
+                >
+                  <Text style={styles.inlineActionBtnText}>{lang === 'zh' ? '前往兑换中心' : 'Go to Swap Center'}</Text>
+                </TouchableOpacity>
+              </View>
+              <EarningsTab
+                marketTrend={marketTrend}
+                marketRisk={marketRisk}
+                marketHint={marketHint}
+                configuredRewardRateUsdtPerHour={configuredRewardRateUsdtPerHour}
+                effectiveRewardRateUsdtPerHour={effectiveRewardRateUsdtPerHour}
+                estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
+                totalRewardUsdt={totalRewardUsdt}
+                totalRewardSuper={totalRewardSuper}
+                todayRewardUsdt={todayRewardUsdt}
+                yesterdayRewardUsdt={yesterdayRewardUsdt}
+                claimableRewardUsdt={claimableRewardUsdt}
+                rewardTokenSymbol="SUPER"
+                lockCycleDays={lockCycleDays}
+                lockRemainingDays={lockRemainingDays}
+                lockStatusText={lockStatusText}
+                totalOnlineMinutes={totalOnlineMinutes}
+                monthProgressMinutes={monthProgressMinutes}
+                isBusy={isBusy}
+                identityReady={identityReady}
+                chartValues={chartValues}
+                chartMax={chartMax}
+                recentRewards={recentRewardItems}
+                claimReward={claimReward}
+                t={t}
+              />
+            </>
           )}
 
           {activeTab === 'exchange' && (
@@ -3005,6 +3014,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginTop: 2,
+  },
+  inlineActionRow: {
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  inlineActionBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    backgroundColor: '#0a2f66',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  inlineActionBtnText: {
+    color: '#dbeafe',
+    fontSize: 13,
+    fontWeight: '700',
   },
   loadingText: {
     color: '#a9def9',
