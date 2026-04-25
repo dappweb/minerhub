@@ -188,8 +188,8 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
         COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS reward_rate_usdt_per_hour,
         COALESCE(cp.total_reward_usdt, '0') AS total_reward_usdt,
         COALESCE(cp.total_reward_super, '0') AS total_reward_super,
-        cp.last_seen_at, COALESCE(cp.online_status, 'offline') AS online_status,
-        cp.agreement_accepted_at, cp.offline_alerted_at, cp.notes
+        cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
+        cp.agreement_accepted_at AS agreementAcceptedAt, cp.offline_alerted_at AS offlineAlertedAt, cp.notes
       FROM users u
       LEFT JOIN customer_profiles cp ON cp.user_id = u.id
       LEFT JOIN referral_edges re ON re.invitee_user_id = u.id AND re.status = 'active'
@@ -241,7 +241,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       rewards: rewards.results ?? [],
       payoutWallets: wallets.results ?? [],
       agreementAcceptedVersion: acceptance?.version ?? null,
-      agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreement_accepted_at?: string | null }).agreement_accepted_at ?? null,
+      agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreementAcceptedAt?: string | null }).agreementAcceptedAt ?? null,
       lockSummary: {
         total: Number(lockSummary?.total ?? 0),
         pending: Number(lockSummary?.pending ?? 0),
