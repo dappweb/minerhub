@@ -1876,7 +1876,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     {recordsLoading ? '刷新中…' : '刷新'}
                   </button>
                 </div>
-            </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
@@ -1955,6 +1954,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 </div>
               </div>
             </div>
+            </>
+            )}
+
             </>
             )}
 
@@ -2430,8 +2432,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
               </div>
-              </>
-              )}
             </div>
             )}
 

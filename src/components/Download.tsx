@@ -1,6 +1,6 @@
 import { Clock3, Download, ExternalLink, HardDrive, QrCode, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
-import QRCode from 'qrcode';
+import * as QRCode from 'qrcode';
 import React from 'react';
 
 const DEFAULT_API_BASE_URL = 'https://api.coinplanets.net';
@@ -35,8 +35,13 @@ interface DownloadState {
 
 function buildFallbackState(): DownloadState {
   const androidEnvUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL;
+  const isLocalDev =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : '';
+  // Keep a deterministic local fallback so static Pages deployments can serve
+  // APK directly without requiring backend upload metadata first.
+  const androidUrl = androidEnvUrl && androidEnvUrl !== '#' ? androidEnvUrl : isLocalDev ? '/downloads/app-release.apk' : '/api/downloads/android';
 
   return {
     android: androidUrl ? { available: true, downloadUrl: androidUrl } : { available: false },
@@ -83,9 +88,12 @@ export default function DownloadSection() {
 
   React.useEffect(() => {
     let canceled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 7000);
+
     const fetchDownloads = async () => {
       try {
-        const res = await fetch(`${apiBase}/api/downloads`);
+        const res = await fetch(`${apiBase}/api/downloads`, { signal: controller.signal });
         if (res.ok) {
           const data = (await res.json()) as DownloadState;
           if (!canceled) {
@@ -102,11 +110,16 @@ export default function DownloadSection() {
           setState(mergeWithFallback(null));
         }
       } finally {
+        window.clearTimeout(timeout);
         if (!canceled) setLoading(false);
       }
     };
     void fetchDownloads();
-    return () => { canceled = true; };
+    return () => {
+      canceled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [apiBase]);
 
   const current = state.android;
@@ -115,31 +128,39 @@ export default function DownloadSection() {
     if (url.startsWith('http')) return url;
     return `${apiBase}${url}`;
   }, [apiBase]);
-  const resolvedDownloadUrl = React.useMemo(() => resolveUrl(current.downloadUrl), [current.downloadUrl, resolveUrl]);
+  const resolvedDownloadUrl = React.useMemo(() => resolveUrl(current.downloadUrl), [apiBase, current.downloadUrl]);
 
   React.useEffect(() => {
     let canceled = false;
-    if (!current.available || !resolvedDownloadUrl) {
-      setQrDataUrl('');
-      return;
-    }
+    const envQrCode = (import.meta.env.VITE_ANDROID_QR_CODE as string | undefined)?.trim();
 
-    QRCode.toDataURL(resolvedDownloadUrl, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 240,
-      color: {
-        dark: '#0f172a',
-        light: '#ffffff',
-      },
-    })
-      .then((dataUrl) => {
-        if (!canceled) setQrDataUrl(dataUrl);
-      })
-      .catch(() => {
-        if (!canceled) setQrDataUrl('');
-      });
+    const createQr = async () => {
+      if (!current.available || !resolvedDownloadUrl) {
+        setQrDataUrl('');
+        return;
+      }
 
+      try {
+        const dataUrl = await QRCode.toDataURL(resolvedDownloadUrl, {
+          margin: 1,
+          width: 240,
+          errorCorrectionLevel: 'M',
+          color: {
+            dark: '#020617ff',
+            light: '#ffffffff',
+          },
+        });
+        if (!canceled) {
+          setQrDataUrl(dataUrl);
+        }
+      } catch {
+        if (!canceled) {
+          setQrDataUrl(envQrCode || '');
+        }
+      }
+    };
+
+    void createQr();
     return () => {
       canceled = true;
     };
@@ -291,7 +312,7 @@ export default function DownloadSection() {
             </div>
 
             <div className="mt-2 text-xs text-slate-500">
-              官方下载地址：{resolvedDownloadUrl || '暂无可用下载地址'}
+              官方下载地址：<span className="break-all">{resolvedDownloadUrl || `${apiBase}/api/downloads/android`}</span>
             </div>
           </div>
 
@@ -306,7 +327,7 @@ export default function DownloadSection() {
                 {qrDataUrl ? (
                   <img
                     src={qrDataUrl}
-                    alt="android QR"
+                    alt="Android App 下载二维码"
                     className="h-52 w-52 rounded-lg"
                   />
                 ) : (
@@ -317,7 +338,7 @@ export default function DownloadSection() {
               <div className="mx-auto mb-4 flex h-56 w-56 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/70">
                 <div className="text-center">
                   <QrCode size={40} className="mx-auto mb-2 text-slate-500" />
-                  <p className="text-sm text-slate-300">{loading ? '读取中...' : '暂无下载'}</p>
+                  <p className="text-sm text-slate-300">{loading ? '读取中...' : current.available ? '二维码生成中...' : '暂无下载'}</p>
                 </div>
               </div>
             )}

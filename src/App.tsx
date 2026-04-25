@@ -4,6 +4,7 @@
  */
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Download as DownloadIcon, LayoutDashboard } from 'lucide-react';
 import React, { Suspense } from 'react';
 import type { Address } from 'viem';
 import { verifyMessage } from 'viem';
@@ -29,6 +30,13 @@ const Roadmap = React.lazy(() => import('./components/Roadmap'));
 const MobileQrLogin = React.lazy(() => import('./components/MobileQrLogin'));
 
 type ViewMode = 'website' | 'admin';
+
+const NAV_LINKS = [
+  { href: '#flow-steps', label: '开通流程' },
+  { href: '#download', label: 'APP 下载' },
+  { href: '#onchain-proof', label: '链上数据' },
+  { href: '#features', label: '核心功能' },
+];
 
 function formatWallet(address: string): string {
   if (!address || address.length < 12) {
@@ -312,6 +320,8 @@ export default function App() {
       {({ account, mounted, openConnectModal }) => {
         const ready = mounted;
         const connected = Boolean(ready && account);
+        const isAllowedAdmin = connected ? hasImmediateOwnerAccess(account.address) : false;
+        const buttonDisabled = isSignaturePending || (connected && !isAllowedAdmin);
 
         const label = !connected
           ? '连接钱包'
@@ -328,6 +338,10 @@ export default function App() {
         return (
           <button
             onClick={() => {
+              if (isSignaturePending) {
+                return;
+              }
+
               if (!connected) {
                 openConnectModal();
                 return;
@@ -346,9 +360,10 @@ export default function App() {
 
               void verifyOwnerSignatureAndEnter(account.address);
             }}
-            disabled={isSignaturePending}
-            className={className}
+            disabled={buttonDisabled}
+            className={`${className} disabled:cursor-not-allowed disabled:opacity-60`}
             type="button"
+            aria-busy={isSignaturePending}
           >
             {label}
           </button>
@@ -362,10 +377,16 @@ export default function App() {
       {({ account, mounted, openConnectModal }) => {
         const ready = mounted;
         const connected = Boolean(ready && account);
+        const canEnter = connected && hasImmediateOwnerAccess(account.address);
+        const label = isSignaturePending ? '验证中' : '数据面板';
 
         return (
           <button
             onClick={() => {
+              if (isSignaturePending) {
+                return;
+              }
+
               if (!connected) {
                 openConnectModal();
                 return;
@@ -384,11 +405,13 @@ export default function App() {
 
               void verifyOwnerSignatureAndEnter(account.address);
             }}
-            disabled={isSignaturePending}
-            className={className}
+            disabled={isSignaturePending || (connected && !canEnter)}
+            className={`${className} disabled:cursor-not-allowed disabled:opacity-60`}
             type="button"
+            aria-busy={isSignaturePending}
           >
-            数据面板
+            <LayoutDashboard size={16} aria-hidden="true" />
+            <span>{label}</span>
           </button>
         );
       }}
@@ -411,10 +434,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-cyan-500/30">
+    <div className={`min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-cyan-500/30 ${!isAdminView ? 'pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0' : ''}`}>
       {!isAdminView && (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <SuperLogo variant="mark" size={32} />
             <div className="flex flex-col leading-tight">
@@ -422,10 +445,24 @@ export default function App() {
               <span className="text-[10px] uppercase tracking-widest text-[#F0B90B]">SUPER on BNB Chain</span>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm font-medium text-slate-300">
+          <div className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-300">
+            {NAV_LINKS.map((item) => (
+              <a key={item.href} href={item.href} className="transition-colors hover:text-cyan-300">
+                {item.label}
+              </a>
+            ))}
+          </div>
+          <div className="hidden md:flex items-center gap-3 text-sm font-medium text-slate-300">
             <BscBadge className="hidden lg:inline-flex" />
+            <a
+              href="#download"
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 font-semibold text-cyan-200 transition-colors hover:bg-cyan-400/15"
+            >
+              <DownloadIcon size={16} aria-hidden="true" />
+              <span>下载</span>
+            </a>
             {renderOwnerDashboardEntry(
-              'px-4 py-2 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors',
+              'inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition-colors',
             )}
           </div>
         </div>
@@ -443,7 +480,15 @@ export default function App() {
             <OnchainProof />
             <section id="quick-entry" className="py-16 border-y border-slate-800/50 bg-slate-900/40">
               <div className="max-w-7xl mx-auto px-6">
-                <h2 className="text-3xl md:text-4xl font-bold mb-10">快速入口</h2>
+                <div className="mb-10 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h2 className="text-3xl md:text-4xl font-bold">快速入口</h2>
+                    <p className="mt-3 max-w-2xl text-slate-400">新用户先下载 App 完成设备开通，管理员使用钱包签名进入数据面板。</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-slate-300" aria-live="polite">
+                    {adminWallet ? `当前钱包：${formatWallet(adminWallet)} · ${adminLoginStatus}` : adminLoginStatus}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
                     <h3 className="text-2xl font-bold mb-3">后台管理系统</h3>
@@ -520,6 +565,21 @@ export default function App() {
           </a>
         </div>
       </footer>
+      )}
+
+      {!isAdminView && (
+        <div className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 grid grid-cols-2 gap-3 md:hidden">
+          <a
+            href="#download"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/40"
+          >
+            <DownloadIcon size={18} aria-hidden="true" />
+            <span>下载 App</span>
+          </a>
+          {renderOwnerDashboardEntry(
+            'inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/95 px-4 py-3 text-sm font-semibold text-slate-100 shadow-lg shadow-slate-950/50 backdrop-blur',
+          )}
+        </div>
       )}
     </div>
   );
