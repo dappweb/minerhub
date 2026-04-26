@@ -37,6 +37,9 @@
     "viem": "^2.37.2",
     "wagmi": "^2.19.5"
   },
+  "overrides": {
+    "axios": "1.15.2"
+  },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@types/qrcode": "^1.5.6",

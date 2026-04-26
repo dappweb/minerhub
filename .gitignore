@@ -10,3 +10,8 @@ coverage/
 .wrangler/
 backend/.wrangler/
 backend/dev.sqlite
+public/downloads/*.apk
+app-client/android/app/debug.keystore
+app-client/android/local.properties
+app-client/android/.gradle/
+app-client/android/app/build/
