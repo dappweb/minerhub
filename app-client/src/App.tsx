@@ -2396,7 +2396,7 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {!(identityReady && minerReady && hasActiveContract) && (
+          {!(identityReady && minerReady && hasActiveContract) && !(onboardingVisible && !onboardingMinimized) && (
             <GuideCard
               title={guideTitle}
               description={guideDescription}

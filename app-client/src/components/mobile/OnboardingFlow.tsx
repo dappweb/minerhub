@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -132,88 +132,111 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
   }
 
   return (
-    <View pointerEvents="box-none" style={styles.floatingWrap}>
-      <View style={styles.card}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.badge}>
-              {t.step} {step} {t.of} 3
-            </Text>
-            <Text style={styles.floatingTitle}>{t.floatingTitle}</Text>
-          </View>
-          <Pressable onPress={onMinimize} style={styles.headerAction}>
-            <Text style={styles.headerActionText}>{t.minimize}</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {step === 1 && (
-            <>
-              <Text style={styles.title}>{t.s1Title}</Text>
-              <Text style={styles.body}>{t.s1Body}</Text>
-              <Text style={styles.referralTitle}>{t.referralTitle}</Text>
-              <TextInput
-                style={styles.referralInput}
-                value={referralWallet}
-                onChangeText={(text) => {
-                  setReferralWallet(text);
-                  if (referralError) setReferralError('');
-                }}
-                placeholder={t.referralPlaceholder}
-                placeholderTextColor="#64748b"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Text style={styles.hint}>{t.s1Hint}</Text>
-              {referralError ? <Text style={styles.errorText}>{referralError}</Text> : null}
-              <Text style={styles.hint}>{t.s1Tip}</Text>
-            </>
-          )}
-
-          {step === 2 && (
-            <>
-              <Text style={styles.title}>{t.s2Title}</Text>
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText} selectable>
-                  {machineCode || '------'}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onMinimize}
+    >
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onMinimize} />
+        <View style={styles.expandedWrap}>
+          <View style={styles.card}>
+            <View style={styles.headerRow}>
+              <View style={styles.headerCopy}>
+                <Text style={styles.badge}>
+                  {t.step} {step} {t.of} 3
                 </Text>
+                <Text style={styles.floatingTitle}>{t.floatingTitle}</Text>
               </View>
-              <Text style={styles.body}>{t.s2Body}</Text>
-              <Text style={styles.hint}>{t.s2Hint}</Text>
-            </>
-          )}
+              <Pressable onPress={onMinimize} style={styles.headerAction}>
+                <Text style={styles.headerActionText}>{t.minimize}</Text>
+              </Pressable>
+            </View>
 
-          {step === 3 && (
-            <>
-              <Text style={styles.title}>{t.s3Title}</Text>
-              <Text style={styles.body}>{t.s3Body}</Text>
-              <View style={styles.bullets}>
-                <Text style={styles.bullet}>{t.s3Bullet1}</Text>
-                <Text style={styles.bullet}>{t.s3Bullet2}</Text>
-                <Text style={styles.bullet}>{t.s3Bullet3}</Text>
-              </View>
-            </>
-          )}
-        </ScrollView>
+            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+              {step === 1 && (
+                <>
+                  <Text style={styles.title}>{t.s1Title}</Text>
+                  <Text style={styles.body}>{t.s1Body}</Text>
+                  <Text style={styles.referralTitle}>{t.referralTitle}</Text>
+                  <TextInput
+                    style={styles.referralInput}
+                    value={referralWallet}
+                    onChangeText={(text) => {
+                      setReferralWallet(text);
+                      if (referralError) setReferralError('');
+                    }}
+                    placeholder={t.referralPlaceholder}
+                    placeholderTextColor="#64748b"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.hint}>{t.s1Hint}</Text>
+                  {referralError ? <Text style={styles.errorText}>{referralError}</Text> : null}
+                  <Text style={styles.hint}>{t.s1Tip}</Text>
+                </>
+              )}
 
-        <View style={styles.actions}>
-          {step > 1 ? (
-            <Pressable onPress={back} style={[styles.btn, styles.btnGhost]}>
-              <Text style={styles.btnGhostText}>{t.back}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.spacer} />
-          )}
-          <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
-            <Text style={styles.btnPrimaryText}>{step === 3 ? t.finish : t.next}</Text>
-          </Pressable>
+              {step === 2 && (
+                <>
+                  <Text style={styles.title}>{t.s2Title}</Text>
+                  <View style={styles.codeBox}>
+                    <Text style={styles.codeText} selectable>
+                      {machineCode || '------'}
+                    </Text>
+                  </View>
+                  <Text style={styles.body}>{t.s2Body}</Text>
+                  <Text style={styles.hint}>{t.s2Hint}</Text>
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <Text style={styles.title}>{t.s3Title}</Text>
+                  <Text style={styles.body}>{t.s3Body}</Text>
+                  <View style={styles.bullets}>
+                    <Text style={styles.bullet}>{t.s3Bullet1}</Text>
+                    <Text style={styles.bullet}>{t.s3Bullet2}</Text>
+                    <Text style={styles.bullet}>{t.s3Bullet3}</Text>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.actions}>
+              {step > 1 ? (
+                <Pressable onPress={back} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>{t.back}</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.spacer} />
+              )}
+              <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
+                <Text style={styles.btnPrimaryText}>{step === 3 ? t.finish : t.next}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.68)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 96,
+  },
+  expandedWrap: {
+    width: '100%',
+    maxWidth: 420,
+  },
   floatingWrap: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
@@ -229,8 +252,7 @@ const styles = StyleSheet.create({
     borderColor: '#225b98',
     padding: 16,
     width: '100%',
-    maxWidth: 420,
-    maxHeight: '48%',
+    maxHeight: '62%',
     shadowColor: '#020617',
     shadowOpacity: 0.35,
     shadowRadius: 20,
