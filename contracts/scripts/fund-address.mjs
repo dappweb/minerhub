@@ -26,7 +26,7 @@ if (!TO) {
 }
 
 const pk = process.env.DEPLOYER_PRIVATE_KEY;
-const rpc = process.env.BSC_TESTNET_RPC_URL || process.env.VITE_RPC_URL;
+const rpc = process.env.BSC_RPC_URL || process.env.VITE_RPC_URL;
 const superAddr = process.env.VITE_SUPER_ADDRESS;
 if (!pk || !rpc || !superAddr) {
   console.error('Missing DEPLOYER_PRIVATE_KEY / RPC / VITE_SUPER_ADDRESS in .env');
@@ -104,7 +104,7 @@ console.log('\n=== Recipient balances ===');
 console.log(`  BNB:   ${formatEther(bnbAfter)}`);
 console.log(`  ${symbol}: ${formatUnits(superAfter, decimals)}`);
 console.log('\nExplorer:');
-console.log(`  https://testnet.bscscan.com/tx/${tx1.hash}`);
-console.log(`  https://testnet.bscscan.com/tx/${tx2.hash}`);
-console.log(`  https://testnet.bscscan.com/address/${TO}`);
+console.log(`  https://bscscan.com/tx/${tx1.hash}`);
+console.log(`  https://bscscan.com/tx/${tx2.hash}`);
+console.log(`  https://bscscan.com/address/${TO}`);
 

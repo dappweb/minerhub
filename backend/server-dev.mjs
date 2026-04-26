@@ -304,7 +304,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/health
   if (scope === 'health' && req.method === 'GET') {
-    return sendJson(res, { status: 'healthy', chainId: '97', timestamp: nowIso() });
+    return sendJson(res, { status: 'healthy', chainId: '56', timestamp: nowIso() });
   }
 
   // ── /api/users ──────────────────────────────────────────────────────────────

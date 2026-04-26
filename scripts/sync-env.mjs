@@ -42,7 +42,7 @@ const adminAddresses = Array.from(new Set([ownerAddress, ...chainAdmins].filter(
 const missing = Object.entries(contracts).filter(([, v]) => !v);
 if (missing.length > 0) {
   console.error('❌ Missing contract addresses:', missing.map(([k]) => k).join(', '));
-  console.error('   Run: cd contracts && npx hardhat run scripts/deploy.ts --network bscTestnet');
+  console.error('   Run: cd contracts && npx hardhat run scripts/deploy.ts --network bsc');
   process.exit(1);
 }
 

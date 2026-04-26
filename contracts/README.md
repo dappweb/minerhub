@@ -7,7 +7,7 @@
 | 鍚堢害             | 鍔熻兘                                    | 琛屾暟 |
 | ------------------ | ----------------------------------------- | ------ |
 | **SUPER.sol**      | ERC20 浠ｅ竵锛屾敮鎸侀摳閫犲拰閿 € 姣?    | ~150   |
-| **USDT_Mock.sol**  | BSC Testnet 娴嬭瘯缃戞 ā 鎷?USDT          | ~30    |
+| **USDT_Mock.sol**  | 鏈湴闆嗘垚/婕旂ず鐢ㄦā鎷?USDT          | ~30    |
 | **MiningPool.sol** | 鏍稿績鎸栫熆閫昏緫锛屽  鍔辫  绠楀垎閰? | ~400   |
 | **SwapRouter.sol** | AMM 娴佸姩鎬 т 氦鎹?(SUPER 鈫?USDT)       | ~500   |
 
@@ -29,7 +29,7 @@ npm install
 鍒涘缓 `.env` 鏂囦欢锛?
 
 ```env
-BSC_TESTNET_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
+BSC_RPC_URL=https://bsc-dataseed.binance.org/
 DEPLOYER_PRIVATE_KEY=0x...
 DEPLOY_ADMIN_ADDRESSES=0xAdmin1,0xAdmin2
 ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY (鍙€?
@@ -39,7 +39,7 @@ ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY (鍙€?
 
 **鑾峰彇杩欎簺鍊硷細**
 
-- **BSC_TESTNET_RPC_URL**锛氳  闂?[Infura](https://www.infura.io/) 鎴?[Alchemy](https://www.alchemy.com/) 鑾峰彇鍏嶈垂 API Key
+- **BSC_RPC_URL**锛氫娇鐢?BSC Mainnet RPC锛屼緥濡?https://bsc-dataseed.binance.org/
 - **DEPLOYER_PRIVATE_KEY**锛氫粠 MetaMask 瀵煎嚭绉侀挜锛堥渶瑕佹湁 tBNB 浣欓  锛?
 - **ETHERSCAN_API_KEY**锛氳  闂?[Etherscan](https://etherscan.io/apis) 鑾峰彇 (鐢ㄤ簬鍚堢害楠岃瘉)
 
@@ -73,10 +73,10 @@ Coin Planet Contracts
     ...
 ```
 
-### 5. 閮ㄧ讲鍒?BSC Testnet
+### 5. 閮ㄧ讲鍒?BSC Mainnet
 
 ```bash
-npm run deploy:bscTestnet
+npm run deploy:bsc
 ```
 
 杈撳嚭锛?
@@ -287,10 +287,10 @@ npm run verify -- 0x1234567890123456789012345678901234567890 "0x0000000000000000
 
 ### 鏌ョ湅鍚堢害
 
-閮ㄧ讲鍚庯紝璁块棶浠ヤ笅閾炬帴鍦?BSC Testnet 娴忚  鍣ㄦ煡鐪嬶細
+閮ㄧ讲鍚庯紝璁块棶浠ヤ笅閾炬帴鍦?BSC Mainnet 娴忚鍣ㄦ煡鐪嬶細
 
 ```
-https://testnet.bscscan.com/address/0x{CONTRACT_ADDRESS}
+https://bscscan.com/address/0x{CONTRACT_ADDRESS}
 ```
 
 ---
@@ -344,7 +344,7 @@ https://testnet.bscscan.com/address/0x{CONTRACT_ADDRESS}
 
 - [ ] 缂栬瘧鎵 € 鏈夊悎绾︽垚鍔?
 - [ ] 鎵 € 鏈夋祴璇曢 € 氳繃
-- [ ] BSC Testnet 閮ㄧ讲鎴愬姛
+- [ ] BSC Mainnet 閮ㄧ讲鎴愬姛
 - [ ] 娴佸姩鎬 ф 睜鍒濆  鍖?
 - [ ] 姊呮潈闄愰厤缃  畬鎴?
 - [ ] Etherscan 楠岃瘉鎴愬姛
@@ -415,10 +415,7 @@ Swap 姹犱腑娴佸姩鎬 т 笉瓒筹紝绋嶅悗閲嶈瘯鎴栧  鍔犳祦
 
 ### 閮ㄧ讲澶辫触 "Insufficient funds"
 
-Deployer 璐︽埛 tBNB 浣欓  涓嶈冻銆備粠姘撮緳澶磋幏鍙?tBNB 锛?
-
-- https://www.alchemy.com/faucets/BSC Testnet
-- https://testnet.bnbchain.org/faucet-smart
+Deployer 璐︽埛 BNB 浣欓 涓嶈冻銆傝鍚戜富缃戦挶鍖呭厖鍊?BNB 鎴栦粠浜ゆ槗鎵€杞叆锛?
 
 ---
 

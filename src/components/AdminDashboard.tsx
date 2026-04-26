@@ -3,27 +3,27 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
-  addSwapLiquidityOnChain,
-  collectEcosystemFeeOnChain,
-  collectPlatformFeeOnChain,
-  getGlobalStatsOnChain,
-  getMinerInfoOnChain,
-  getMiningPoolAddress,
-  getMiningPoolAdminsOnChain,
-  getMiningPoolOwnerOnChain,
-  getSuperTokenAddress,
-  getSuperTokenStatsOnChain,
-  getSwapPoolStatsOnChain,
-  getSwapRouterAddress,
-  initializeSwapLiquidityOnChain,
-  mintSuperOnChain,
-  sendGasToAddressOnChain,
-  sendSuperToAddressOnChain,
-  startMiningOnChain,
-  type MiningPoolGlobalStats,
-  type MiningPoolMinerInfo,
-  type SuperTokenStats,
-  type SwapPoolStats
+    addSwapLiquidityOnChain,
+    collectEcosystemFeeOnChain,
+    collectPlatformFeeOnChain,
+    getGlobalStatsOnChain,
+    getMinerInfoOnChain,
+    getMiningPoolAddress,
+    getMiningPoolAdminsOnChain,
+    getMiningPoolOwnerOnChain,
+    getSuperTokenAddress,
+    getSuperTokenStatsOnChain,
+    getSwapPoolStatsOnChain,
+    getSwapRouterAddress,
+    initializeSwapLiquidityOnChain,
+    mintSuperOnChain,
+    sendGasToAddressOnChain,
+    sendSuperToAddressOnChain,
+    startMiningOnChain,
+    type MiningPoolGlobalStats,
+    type MiningPoolMinerInfo,
+    type SuperTokenStats,
+    type SwapPoolStats
 } from '../lib/blockchain';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import OwnerConsole from './OwnerConsole';

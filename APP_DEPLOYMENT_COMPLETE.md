@@ -28,8 +28,8 @@ EXPO_PUBLIC_WALLET_PRIVATE_KEY=0x1234567890...
 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链网络
-EXPO_PUBLIC_CHAIN_ID=97
-EXPO_PUBLIC_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
+EXPO_PUBLIC_CHAIN_ID=56
+EXPO_PUBLIC_RPC_URL=https://bsc-dataseed.binance.org/
 
 # 智能合约（部署后配置）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...
@@ -62,7 +62,7 @@ EXPO_PUBLIC_SWAP_ROUTER_ADDRESS=0x...
 | 签名认证 | ✅ 集成 | 后端验证完成 |
 | 交易管理 | ✅ 集成 | Hook 已实现 |
 | 后台 API | ⏳ 待启动 | `npm run dev` in backend/ |
-| 链上合约 | ⏳ 待部署 | `npm run deploy:bscTestnet` in contracts/ |
+| 链上合约 | ⏳ 待部署 | `npm run deploy:bsc` in contracts/ |
 | 管理平台 | ✅ 编译通过 | 可用 `npm run dev` 启动 |
 
 ---
@@ -101,10 +101,10 @@ npm run deploy:local
 
 ## 📝 下一步任务清单
 
-1. **部署智能合约到 BSC Testnet**
+1. **部署智能合约到 BSC Mainnet**
    ```bash
    cd contracts
-   npm run deploy:bscTestnet
+   npm run deploy:bsc
    # 记录deployment.json中的合约地址
    ```
 
@@ -273,7 +273,7 @@ http://localhost:5173
 
 下一步可以：
 1. 启动完整的后台系统
-2. 部署合约到 BSC Testnet 测试网
+2. 部署合约到 BSC Mainnet
 3. 测试完整的挖矿流程
 4. 准备生产部署
 

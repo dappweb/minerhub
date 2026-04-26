@@ -129,8 +129,8 @@ APP已配置的环境变量（`app-client/.env.local`）：
 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8788
 
 # 区块链
-EXPO_PUBLIC_CHAIN_ID=97
-EXPO_PUBLIC_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
+EXPO_PUBLIC_CHAIN_ID=56
+EXPO_PUBLIC_RPC_URL=https://bsc-dataseed.binance.org/
 
 # 合约地址（部署后更新）
 EXPO_PUBLIC_MINING_POOL_ADDRESS=0x...
@@ -221,10 +221,10 @@ adb logcat --pid=$(adb shell pidof com.coinplanet.mobile)
 
 一旦APP在模拟器上运行成功：
 
-1. **部署合约到BSC Testnet**
+1. **部署合约到 BSC Mainnet**
    ```bash
    cd contracts
-   npm run deploy:bscTestnet
+   npm run deploy:bsc
    ```
 
 2. **更新合约地址到`.env.local`**

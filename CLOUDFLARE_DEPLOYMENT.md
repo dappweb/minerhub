@@ -45,7 +45,8 @@ minerhub/
 [vars]
 JWT_SECRET = "YzQ0ODY2OTAtMGIyZi00NzAxLWE4YjItYWRkMjEyYmVmNzhiMmQ5M2QwMDEtYjk0Yy00NmI0LWIyNDEtNDU0ZGZmNWIwM2M1"
 CHAIN_ID = "97"
-RPC_URL = "https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq"
+CHAIN_ID = "56"
+RPC_URL = "https://bsc-dataseed.binance.org/"
 SUPER_TOKEN_ADDRESS = "0xE64c4FebF70aa1e0F8beF194270734fAd4d58357"
 MINING_POOL_ADDRESS = "0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE"
 SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
@@ -55,8 +56,8 @@ SWAP_ROUTER_ADDRESS = "0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435"
 
 ```env
 VITE_API_BASE_URL=https://api.coinplanets.net
-VITE_CHAIN_ID=97
-VITE_RPC_URL=https://bnb-testnet.g.alchemy.com/v2/-cW8UkZo81RRCpEn-8iLq
+VITE_CHAIN_ID=56
+VITE_RPC_URL=https://bsc-dataseed.binance.org/
 VITE_MINING_POOL_ADDRESS=0xb2fC7507c37BBDcddBE668EF65F19534E7493eeE
 VITE_SWAP_ROUTER_ADDRESS=0xA198d2917f97AD850c2Ea6C57cf9f5dCdFc43435
 ```
@@ -76,7 +77,7 @@ curl -I https://7246abcb.minerhub.pages.dev
 
 ```bash
 curl https://api.coinplanets.net/api/health
-# 预期: {"status":"healthy","chainId":"97","timestamp":"..."}
+# 预期: {"status":"healthy","chainId":"56","timestamp":"..."}
 ```
 
 ### 3. 数据库连接

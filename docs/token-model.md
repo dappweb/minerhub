@@ -246,25 +246,25 @@ App鐢ㄦ埛 鈫?娉ㄥ唽閽卞寘 鈫?MinerRegistry.registerMiner()
 
 ### 閮ㄧ讲缃戠粶
 - **涓荤綉**锛欱ase Mainnet (Chainid: 8453)
-- **娴嬭瘯缃?*锛歋epolia (Chainid: 97) - 鍒濇湡娴嬭瘯
+- **BSC Mainnet**锛?Chainid: 56
 
 ### 閮ㄧ讲鑴氭湰鍏抽敭姝ラ
 
 ```bash
 # 1. 閮ㄧ讲 SUPER 浠ｅ竵
-npx hardhat run scripts/deploy-SUPER-token.js --network bscTestnet
+npx hardhat run scripts/deploy-SUPER-token.js --network bsc
 
 # 2. 閮ㄧ讲鐭垮伐娉ㄥ唽琛?
-npx hardhat run scripts/deploy-miner-registry.js --network bscTestnet
+npx hardhat run scripts/deploy-miner-registry.js --network bsc
 
 # 3. 閮ㄧ讲鎸栫熆濂栧姳姹?
-npx hardhat run scripts/deploy-mining-pool.js --network bscTestnet
+npx hardhat run scripts/deploy-mining-pool.js --network bsc
 
 # 4. 閮ㄧ讲 Swap 璺敱
-npx hardhat run scripts/deploy-swap-router.js --network bscTestnet
+npx hardhat run scripts/deploy-swap-router.js --network bsc
 
 # 5. 鍒濆鍖栨祦鍔ㄦ€?
-npx hardhat run scripts/init-liquidity.js --network bscTestnet
+npx hardhat run scripts/init-liquidity.js --network bsc
 ```
 
 ---

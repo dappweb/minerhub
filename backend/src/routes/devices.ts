@@ -25,6 +25,31 @@ async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string)
   return Boolean(row?.id);
 }
 
+async function upsertMachineCodeForUser(env: Env, userId: string, machineCodeRaw: string, updatedAt: string): Promise<void> {
+  const machineCode = machineCodeRaw.trim();
+  if (!machineCode) return;
+
+  const conflict = await env.DB.prepare(
+    `SELECT user_id FROM customer_profiles
+     WHERE TRIM(COALESCE(machine_code, '')) = ? AND user_id <> ?
+     LIMIT 1`
+  )
+    .bind(machineCode, userId)
+    .first<{ user_id: string }>();
+
+  if (conflict?.user_id) {
+    throw new Error("machine code already in use");
+  }
+
+  await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET machine_code = ?, updated_at = ?
+     WHERE user_id = ?`
+  )
+    .bind(machineCode, updatedAt, userId)
+    .run();
+}
+
 async function accrueHourlyReward(env: Env, userId: string, deviceId: string): Promise<void> {
   const device = await env.DB.prepare(
     `SELECT id, hashrate, updated_at FROM devices WHERE user_id = ? AND device_id = ?`
@@ -173,13 +198,14 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
       .run();
 
     if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-      await env.DB.prepare(
-        `UPDATE customer_profiles
-         SET machine_code = COALESCE(NULLIF(TRIM(machine_code), ''), ?), updated_at = ?
-         WHERE user_id = ?`
-      )
-        .bind(body.machineCode.trim(), now, body.userId)
-        .run();
+      try {
+        await upsertMachineCodeForUser(env, body.userId, body.machineCode, now);
+      } catch (error) {
+        if (error instanceof Error && error.message === "machine code already in use") {
+          return json({ error: "Machine code already in use" }, 409);
+        }
+        throw error;
+      }
     }
 
     return json({ id: existingDevice?.id ?? id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: "active" }, existingDevice ? 200 : 201);

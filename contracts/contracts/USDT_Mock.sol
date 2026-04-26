@@ -6,23 +6,23 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
 /**
  * @title USDT Mock
- * @notice BSC Testnet 测试网上的模拟 USDT，用于测试 Swap 功能
+ * @notice Mock USDT for local integration, demos, and non-mainnet use.
  */
 contract USDT_Mock is ERC20, ERC20Burnable {
     constructor() ERC20("USDT", "USDT") {
-        // 初始铸造 1000 万 USDT 给部署者
+        // Mint initial supply to the deployer.
         _mint(msg.sender, 10_000_000 * 10 ** 18);
     }
     
     /**
-     * @notice 任何人可以申领测试 USDT
+     * @notice Faucet for test balances.
      */
     function faucet() external {
         _mint(msg.sender, 1000 * 10 ** 18);  // 1000 USDT
     }
     
     /**
-     * @notice USDT 的小数点（18 位）
+     * @notice USDT decimals.
      */
     function decimals() public pure override returns (uint8) {
         return 18;

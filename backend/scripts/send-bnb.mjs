@@ -26,7 +26,7 @@ if (!TO || !AMOUNT) {
 }
 
 const pk = process.env.DEPLOYER_PRIVATE_KEY;
-const rpc = process.env.BSC_TESTNET_RPC_URL || process.env.VITE_RPC_URL;
+const rpc = process.env.BSC_RPC_URL || process.env.VITE_RPC_URL;
 if (!pk) {
   console.error('Missing DEPLOYER_PRIVATE_KEY in .env');
   process.exit(1);
@@ -54,4 +54,4 @@ console.log(`Confirmed in block ${receipt.blockNumber}, status=${receipt.status}
 
 const balanceAfter = await provider.getBalance(TO);
 console.log(`Recipient balance: ${formatEther(balanceAfter)} BNB`);
-console.log(`Explorer: https://testnet.bscscan.com/tx/${tx.hash}`);
+console.log(`Explorer: https://bscscan.com/tx/${tx.hash}`);

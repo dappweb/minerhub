@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  AppState,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    AppState,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -25,40 +25,40 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-  acceptUserAgreement,
-  bindReferral,
-  createExchangeRequest,
-  createUser,
-  getAnnouncements,
-  getExchangeRequests,
-  getGasWalletBalance,
-  getReferralMembers,
-  getReferralSummary,
-  getSystemStatus,
-  getUser,
-  getUserByWallet,
-  getUserDetails,
-  isExchangeOrderPendingStatus,
-  markAnnouncementRead as markAnnouncementReadApi,
-  registerDevice,
-  reportDeviceHeartbeat,
-  type AnnouncementDto,
-  type ExchangeRequestDto,
-  type ReferralMemberDto,
-  type ReferralSummaryDto
+    acceptUserAgreement,
+    bindReferral,
+    createExchangeRequest,
+    createUser,
+    getAnnouncements,
+    getExchangeRequests,
+    getGasWalletBalance,
+    getReferralMembers,
+    getReferralSummary,
+    getSystemStatus,
+    getUser,
+    getUserByWallet,
+    getUserDetails,
+    isExchangeOrderPendingStatus,
+    markAnnouncementRead as markAnnouncementReadApi,
+    registerDevice,
+    reportDeviceHeartbeat,
+    type AnnouncementDto,
+    type ExchangeRequestDto,
+    type ReferralMemberDto,
+    type ReferralSummaryDto
 } from './services/api';
 import {
-  claimRewardOnChain,
-  getSwapPriceOnChain,
-  getWalletAddress,
-  getWalletBalances,
-  registerMinerOnChain,
-  sendNativeTokenOnChain,
+    claimRewardOnChain,
+    getSwapPriceOnChain,
+    getWalletAddress,
+    getWalletBalances,
+    registerMinerOnChain,
+    sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-  exportWalletPrivateKey,
-  importWalletPrivateKey
+    exportWalletPrivateKey,
+    importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -71,10 +71,12 @@ type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
 const LANG_KEY = 'coinplanet.lang';
 const DEVICE_ID_KEY = 'coinplanet.device_id';
+const DEVICE_INSTALL_SEED_KEY = 'coinplanet.device_install_seed_v1';
 const MINER_READY_KEY = 'coinplanet.miner_ready';
 const USER_ID_KEY = 'coinplanet.user_id';
 const AGREEMENT_ACCEPTED_KEY = 'coinplanet.agreement_accepted_version';
 const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
+const ONBOARDING_MINIMIZED_KEY = 'coinplanet.onboarding_minimized_v1';
 const ANNOUNCEMENT_READ_KEY = 'coinplanet.announcements.read_ids';
 const REFERRAL_WALLET_KEY = 'coinplanet.referral_wallet';
 const SWAP_FEE_RATE = 0.005;
@@ -142,6 +144,7 @@ const translations = {
     guideReadyTitle: 'Daily Console Ready',
     guideDescInit: 'Complete identity sync and bind inviter wallet first, then unlock miner operations.',
     guideDescMine: 'Send machine code to support to activate monthly card, then setup miner (admin gas top-up if needed).',
+    guideDescOnboarding: 'Finish inviter wallet and machine-code setup first. You can minimize the floating setup card and resume anytime.',
     guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/swap.',
     guideStepIdentity: 'Identity Sync',
     guideStepMiner: 'Miner Activation',
@@ -156,6 +159,7 @@ const translations = {
     guideEyebrow: 'Current Task',
     guideFocusLabel: 'Do this next',
     guideDescActivate: 'Miner registered. Now send your machine code to support to activate the monthly card, then rewards will start accruing.',
+    guideCtaOnboarding: 'Continue Setup',
     guideCtaActivate: 'Already Activated – Setup Miner',
     agreementModalTitle: 'User Agreement',
     agreementModalSubtitle: 'Please read and accept the agreement to continue using Coin Planet.',
@@ -373,6 +377,7 @@ const translations = {
     guideReadyTitle: '日常控制台已就绪',
     guideDescInit: '先完成身份同步并绑定推荐人钱包，再解锁后续矿机操作。',
     guideDescMine: '将机器码提供给客服开通月卡后，再执行矿机设置（如缺 Gas 请联系管理员充值）。',
+    guideDescOnboarding: '请先完成推荐人钱包和机器码配置。悬浮框可收起，稍后继续。',
     guideDescReady: '矿机激活后保持手机在线，收益会按在线时长累计，可在底部菜单领取与兑换。',
     guideStepIdentity: '身份同步',
     guideStepMiner: '矿机激活',
@@ -387,6 +392,7 @@ const translations = {
     guideEyebrow: '当前任务',
     guideFocusLabel: '现在最值得先完成',
     guideDescActivate: '矿机已注册。请将机器码提供给客服申请开通月卡，激活后收益将自动开始累计。',
+    guideCtaOnboarding: '继续配置',
     guideCtaActivate: '已开通月卡 → 继续矿机设置',
     agreementModalTitle: '用户协议',
     agreementModalSubtitle: '请阅读并同意协议，方可继续使用 Coin Planet。',
@@ -565,11 +571,42 @@ function createDeviceIdFromSeed(seed: string) {
   return `mobile-${hex}`;
 }
 
+function isInvalidAndroidId(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === 'unknown') return true;
+  if (normalized === '9774d56d682e549c') return true;
+  if (/^0+$/.test(normalized)) return true;
+  if (/^f+$/.test(normalized)) return true;
+  return false;
+}
+
+function createInstallSeed(): string {
+  const partA = Math.random().toString(36).slice(2, 10);
+  const partB = Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${partA}-${partB}`;
+}
+
+async function getOrCreateInstallSeed(): Promise<string> {
+  try {
+    const existing = await AsyncStorage.getItem(DEVICE_INSTALL_SEED_KEY);
+    if (existing && existing.trim()) {
+      return existing.trim();
+    }
+
+    const created = createInstallSeed();
+    await AsyncStorage.setItem(DEVICE_INSTALL_SEED_KEY, created);
+    return created;
+  } catch {
+    return createInstallSeed();
+  }
+}
+
 async function resolveStableDeviceId(): Promise<string> {
   try {
     const androidId = await Application.getAndroidId();
-    if (androidId) {
-      return createDeviceIdFromSeed(`android:${androidId}`);
+    if (androidId && !isInvalidAndroidId(androidId)) {
+      return createDeviceIdFromSeed(`android:${androidId.trim().toLowerCase()}`);
     }
   } catch {
     // ignore and try next source
@@ -579,6 +616,15 @@ async function resolveStableDeviceId(): Promise<string> {
     const iosId = await Application.getIosIdForVendorAsync();
     if (iosId) {
       return createDeviceIdFromSeed(`ios:${iosId}`);
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  try {
+    const installSeed = await getOrCreateInstallSeed();
+    if (installSeed) {
+      return createDeviceIdFromSeed(`install:${installSeed}`);
     }
   } catch {
     // ignore and fallback
@@ -677,6 +723,7 @@ export default function App() {
   const [localAgreementVersion, setLocalAgreementVersion] = useState<string | null>(null);
   const [agreementSubmitting, setAgreementSubmitting] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [onboardingMinimized, setOnboardingMinimized] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
   const [inviterUser, setInviterUser] = useState<Awaited<ReturnType<typeof getUser>> | null>(null);
@@ -1220,10 +1267,12 @@ export default function App() {
       try {
         const done = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         const savedReferralWallet = await AsyncStorage.getItem(REFERRAL_WALLET_KEY);
+        const savedMinimized = await AsyncStorage.getItem(ONBOARDING_MINIMIZED_KEY);
         if (cancelled) return;
         if (savedReferralWallet) {
           setPendingReferralWallet(savedReferralWallet);
         }
+        setOnboardingMinimized(savedMinimized === '1');
         setOnboardingChecked(true);
         if (!done) {
           setOnboardingVisible(true);
@@ -1241,11 +1290,24 @@ export default function App() {
   const handleOnboardingComplete = async (referralWallet: string) => {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
+      await AsyncStorage.removeItem(ONBOARDING_MINIMIZED_KEY);
       const normalized = referralWallet.trim().toLowerCase();
       await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
       setPendingReferralWallet(normalized);
     } catch {}
+    setOnboardingMinimized(false);
     setOnboardingVisible(false);
+  };
+
+  const handleMinimizeOnboarding = () => {
+    setOnboardingMinimized(true);
+    void AsyncStorage.setItem(ONBOARDING_MINIMIZED_KEY, '1').catch(() => null);
+  };
+
+  const handleExpandOnboarding = () => {
+    setOnboardingVisible(true);
+    setOnboardingMinimized(false);
+    void AsyncStorage.setItem(ONBOARDING_MINIMIZED_KEY, '0').catch(() => null);
   };
 
   useEffect(() => {
@@ -2178,29 +2240,35 @@ export default function App() {
   };
 
   const guideTitle = identityReady && minerReady ? t.guideReadyTitle : t.guideTitle;
-  const guideDescription = !identityReady
-    ? t.guideDescInit
-    : !minerReady
-      ? t.guideDescMine
-      : pendingActivation
-        ? t.guideDescActivate
-        : contractExpired
-          ? t.contractExpiredBody
-          : t.guideDescReady;
-  const guideCtaLabel = !identityReady
-    ? t.syncIdentity
-    : !minerReady
-      ? t.setupMiner
-      : pendingActivation
-        ? t.guideCtaActivate
-        : t.claimReward;
-  const guideAction = !identityReady
-    ? initializeAccount
-    : !minerReady
-      ? startMining
-      : pendingActivation
-        ? startMining  // retry miner setup after admin activates
-        : claimReward;
+  const guideDescription = onboardingVisible
+    ? t.guideDescOnboarding
+    : !identityReady
+      ? t.guideDescInit
+      : !minerReady
+        ? t.guideDescMine
+        : pendingActivation
+          ? t.guideDescActivate
+          : contractExpired
+            ? t.contractExpiredBody
+            : t.guideDescReady;
+  const guideCtaLabel = onboardingVisible
+    ? t.guideCtaOnboarding
+    : !identityReady
+      ? t.syncIdentity
+      : !minerReady
+        ? t.setupMiner
+        : pendingActivation
+          ? t.guideCtaActivate
+          : t.claimReward;
+  const guideAction = onboardingVisible
+    ? handleExpandOnboarding
+    : !identityReady
+      ? initializeAccount
+      : !minerReady
+        ? startMining
+        : pendingActivation
+          ? startMining  // retry miner setup after admin activates
+          : claimReward;
   const guideSteps = [
     {
       key: 'identity',
@@ -2308,9 +2376,13 @@ export default function App() {
       <StatusBar barStyle="light-content" />
       <OnboardingFlow
         visible={onboardingChecked && onboardingVisible}
+        minimized={onboardingMinimized}
         lang={lang}
         machineCode={machineCode}
+        initialReferralWallet={pendingReferralWallet}
         onComplete={handleOnboardingComplete}
+        onMinimize={handleMinimizeOnboarding}
+        onExpand={handleExpandOnboarding}
       />
       <View style={styles.mainShell}>
         <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>

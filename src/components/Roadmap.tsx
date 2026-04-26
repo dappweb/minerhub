@@ -1,5 +1,5 @@
+import { Flag, Globe, Rocket } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Flag, Rocket, Globe } from 'lucide-react';
 
 export default function Roadmap() {
   const milestones = [

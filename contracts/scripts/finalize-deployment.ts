@@ -60,7 +60,7 @@ async function main() {
   }
 
   const deploymentInfo = {
-    network: 'bscTestnet',
+    network: 'bsc',
     timestamp: new Date().toISOString(),
     deployer: deployer.address,
     contracts: {

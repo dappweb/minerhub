@@ -1,6 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
-import { isOwnerWallet, requireOwnerAuth } from "../lib/ownerAuth";
+import { requireOwnerAuth } from "../lib/ownerAuth";
 import { badRequest, json, notFound, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -141,16 +141,12 @@ async function requireOwnerRead(request: Request, env: Env): Promise<Response | 
 }
 
 async function requireOwner(request: Request, env: Env): Promise<Response | null> {
-  const auth = await extractAndVerifyAuth(request, env);
-  if (!auth.valid) {
-    return unauthorized(auth.error || "Signature verification failed");
-  }
-
-  if (!(await isOwnerWallet(env, auth.wallet ?? null))) {
-    return unauthorized("Owner wallet required");
-  }
-
-  return null;
+  // Accepts Bearer JWT (issued via /api/owner/login) or legacy signature headers.
+  // The admin dashboard sends Bearer tokens for all writes, so we must not require
+  // a fresh wallet signature here, otherwise actions like publish/unpublish/delete
+  // would always fail with 401.
+  const auth = await requireOwnerAuth(request, env);
+  return auth.ok ? null : auth.response;
 }
 
 function normalizeLevel(value: unknown): AnnouncementLevel {

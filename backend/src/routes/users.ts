@@ -89,6 +89,29 @@ async function bindReferralRelation(env: Env, inviteeId: string, inviteeWallet: 
     .run();
 }
 
+async function upsertMachineCodeForUser(env: Env, userId: string, machineCodeRaw: string): Promise<void> {
+  const machineCode = machineCodeRaw.trim();
+  if (!machineCode) return;
+
+  const conflict = await env.DB.prepare(
+    `SELECT user_id FROM customer_profiles
+     WHERE TRIM(COALESCE(machine_code, '')) = ? AND user_id <> ?
+     LIMIT 1`
+  )
+    .bind(machineCode, userId)
+    .first<{ user_id: string }>();
+
+  if (conflict?.user_id) {
+    throw new Error("machine code already in use");
+  }
+
+  await env.DB.prepare(
+    "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
+  )
+    .bind(machineCode, nowIso(), userId)
+    .run();
+}
+
 export async function handleUsers(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
     if (await isMaintenanceEnabled(env)) {
@@ -116,13 +139,14 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     if (existing) {
       await ensureCustomerProfile(env, existing.id);
       if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-        await env.DB.prepare(
-          `UPDATE customer_profiles
-           SET machine_code = COALESCE(NULLIF(TRIM(machine_code), ''), ?), updated_at = ?
-           WHERE user_id = ?`
-        )
-          .bind(body.machineCode.trim(), nowIso(), existing.id)
-          .run();
+        try {
+          await upsertMachineCodeForUser(env, existing.id, body.machineCode);
+        } catch (error) {
+          if (error instanceof Error && error.message === "machine code already in use") {
+            return json({ error: "Machine code already in use" }, 409);
+          }
+          throw error;
+        }
       }
       return json({ id: existing.id, wallet: existing.wallet, email: existing.email ?? null });
     }
@@ -149,11 +173,14 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
 
     await ensureCustomerProfile(env, id);
     if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-      await env.DB.prepare(
-        "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
-      )
-        .bind(body.machineCode.trim(), nowIso(), id)
-        .run();
+      try {
+        await upsertMachineCodeForUser(env, id, body.machineCode);
+      } catch (error) {
+        if (error instanceof Error && error.message === "machine code already in use") {
+          return json({ error: "Machine code already in use" }, 409);
+        }
+        throw error;
+      }
     }
     if (typeof body.referralWallet === "string" && body.referralWallet.trim()) {
       await bindReferralRelation(env, id, normalizedWallet, body.referralWallet);

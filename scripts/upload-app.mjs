@@ -7,7 +7,7 @@
  *   node scripts/upload-app.mjs ios <testflight-or-appstore-url>
  *
  * Requires:
- *   OWNER_ADDRESS  — env var or set in .env.local
+ *   OWNER_ADDRESS or VITE_OWNER_ADDRESS — env var or set in .env.local
  *   VITE_API_BASE_URL — API base URL (e.g. https://api.coinplanets.net)
  *
  * Example:
@@ -48,14 +48,14 @@ loadEnv();
 // Config
 // ──────────────────────────────────────────
 const API_BASE = process.env.VITE_API_BASE_URL;
-const OWNER   = process.env.OWNER_ADDRESS;
+const OWNER   = process.env.OWNER_ADDRESS || process.env.VITE_OWNER_ADDRESS;
 
 if (!API_BASE) {
   console.error('❌ VITE_API_BASE_URL is not set');
   process.exit(1);
 }
 if (!OWNER) {
-  console.error('❌ OWNER_ADDRESS is not set');
+  console.error('❌ OWNER_ADDRESS / VITE_OWNER_ADDRESS is not set');
   process.exit(1);
 }
 
