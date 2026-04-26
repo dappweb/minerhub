@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "deploy:cf": "npm run build && wrangler pages deploy dist",
     "deploy:api": "npm --prefix backend run deploy",
-    "deploy:contracts": "npm --prefix contracts run deploy:bsc",
+    "deploy:contracts": "npm --prefix contracts run deploy:mainnet",
     "sync-env": "node scripts/sync-env.mjs",
     "sync-env:dry": "node scripts/sync-env.mjs --dry-run",
     "sync-eas-links": "node scripts/sync-eas-links.mjs",

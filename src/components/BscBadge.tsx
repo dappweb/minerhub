@@ -3,7 +3,7 @@ import { coinPlanetChain } from '../lib/wallet';
 
 interface BscBadgeProps {
   className?: string;
-  /** Show chain id suffix, e.g. "· Chain 97". Default true. */
+  /** Show chain id suffix, e.g. "· Chain 56". Default true. */
   showChainId?: boolean;
   /** Compact variant without label, only chip + dot. */
   compact?: boolean;

@@ -20,7 +20,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     bsc: {
-      url: process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org/",
+      url: process.env.RPC_URL || process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org/",
       accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
       chainId: 56
     },

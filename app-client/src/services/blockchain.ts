@@ -35,10 +35,10 @@ const chain = defineChain({
 
 const miningPoolAddress =
   (process.env.EXPO_PUBLIC_MINING_POOL_ADDRESS as Address | undefined) ??
-  ('0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54' as Address);
+  (process.env.EXPO_PUBLIC_MINER_CONTRACT_ADDRESS as Address | undefined);
 const swapRouterAddress =
   (process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  ('0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B' as Address);
+  (process.env.EXPO_PUBLIC_SWAP_CONTRACT_ADDRESS as Address | undefined);
 const GAS_BUFFER_NUMERATOR = 12n;
 const GAS_BUFFER_DENOMINATOR = 10n;
 
@@ -438,8 +438,7 @@ export async function getBNBBalance(): Promise<string> {
 export async function getSUPERBalance(): Promise<string> {
   const superTokenAddress =
     (process.env.EXPO_PUBLIC_SUPER_ADDRESS as Address | undefined) ??
-    (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined) ??
-    ('0x427cf0ddFA97cf7a10F009810e07D8F935e5ec4e' as Address);
+    (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined);
 
   try {
     const address = await getWalletAddress();
@@ -464,8 +463,7 @@ export async function getSUPERBalance(): Promise<string> {
 export async function getUSDTBalance(): Promise<string> {
   const usdtTokenAddress =
     (process.env.EXPO_PUBLIC_USDT_ADDRESS as Address | undefined) ??
-    (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined) ??
-    ('0x55d398326f99059fF775485246999027B3197955' as Address);
+    (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined);
 
   try {
     const address = await getWalletAddress();

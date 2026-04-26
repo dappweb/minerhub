@@ -7,10 +7,13 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "coverage": "hardhat coverage",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network bsc",
     "deploy:bsc": "hardhat run scripts/deploy.ts --network bsc",
     "deploy:finalize": "hardhat run scripts/finalize-deployment.ts",
+    "seed:mainnet": "hardhat run scripts/seed.ts --network bsc",
     "seed:bsc": "hardhat run scripts/seed.ts --network bsc",
     "deploy:local": "hardhat run scripts/deploy.ts --network hardhat",
+    "verify:mainnet": "hardhat verify --network bsc",
     "verify": "hardhat verify --network bsc",
     "clean": "hardhat clean",
     "node": "hardhat node"

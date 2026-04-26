@@ -379,9 +379,11 @@ const adminAbi = [
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 56);
 const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://bsc-dataseed.binance.org/';
+const proxyRpcUrl = (import.meta.env.VITE_RPC_PROXY_URL as string | undefined) ?? 'https://api.coinplanets.net/api/rpc/bsc';
 const rpcHttpUrls = Array.from(
   new Set(
     [
+      proxyRpcUrl,
       rpcUrl,
       'https://bsc-dataseed1.defibit.io/',
       'https://bsc-dataseed1.ninicoin.io/',
@@ -406,15 +408,12 @@ const chain = defineChain({
 
 const minerContractAddress =
   (import.meta.env.VITE_MINING_POOL_ADDRESS as Address | undefined) ??
-  (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined) ??
-  ('0xf275de50784AEbE13a5C86eEEbB96ef83CC01F54' as Address);
+  (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined);
 const swapContractAddress =
   (import.meta.env.VITE_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined) ??
-  ('0x3E9305BEca013582BC484d78C8dA7a82e8b47a1B' as Address);
+  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined);
 const superTokenAddress =
-  (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined) ??
-  ('0x427cf0ddFA97cf7a10F009810e07D8F935e5ec4e' as Address);
+  (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined);
 
 function getWalletClient() {
   if (!window.ethereum) {

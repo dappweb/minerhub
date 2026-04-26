@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 9088;
+const CHAIN_ID = process.env.CHAIN_ID || '56';
 
 // ─── 数据库初始化 ──────────────────────────────────────────────────────────────
 const dbPath = join(__dirname, 'dev.sqlite');
@@ -304,7 +305,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/health
   if (scope === 'health' && req.method === 'GET') {
-    return sendJson(res, { status: 'healthy', chainId: '56', timestamp: nowIso() });
+    return sendJson(res, { status: 'healthy', chainId: CHAIN_ID, timestamp: nowIso() });
   }
 
   // ── /api/users ──────────────────────────────────────────────────────────────
