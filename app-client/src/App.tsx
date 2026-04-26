@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    AppState,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  AppState,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -26,41 +26,41 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-    acceptContractAgreement,
-    acceptUserAgreement,
-    bindReferral,
-    createExchangeRequest,
-    createUser,
-    getAnnouncements,
-    getExchangeRequests,
-    getGasWalletBalance,
-    getReferralMembers,
-    getReferralSummary,
-    getSystemStatus,
-    getUser,
-    getUserByWallet,
-    getUserDetails,
-    isExchangeOrderPendingStatus,
-    markAnnouncementRead as markAnnouncementReadApi,
-    registerDevice,
-    reportDeviceHeartbeat,
-    type AnnouncementDto,
-    type ExchangeRequestDto,
-    type ReferralMemberDto,
-    type ReferralSummaryDto
+  acceptContractAgreement,
+  acceptUserAgreement,
+  bindReferral,
+  createExchangeRequest,
+  createUser,
+  getAnnouncements,
+  getExchangeRequests,
+  getGasWalletBalance,
+  getReferralMembers,
+  getReferralSummary,
+  getSystemStatus,
+  getUser,
+  getUserByWallet,
+  getUserDetails,
+  isExchangeOrderPendingStatus,
+  markAnnouncementRead as markAnnouncementReadApi,
+  registerDevice,
+  reportDeviceHeartbeat,
+  type AnnouncementDto,
+  type ExchangeRequestDto,
+  type ReferralMemberDto,
+  type ReferralSummaryDto
 } from './services/api';
 import {
-    claimRewardOnChain,
-    getSwapPriceOnChain,
-    getWalletAddress,
-    getWalletBalances,
-    registerMinerOnChain,
-    sendNativeTokenOnChain,
+  claimRewardOnChain,
+  getSwapPriceOnChain,
+  getWalletAddress,
+  getWalletBalances,
+  registerMinerOnChain,
+  sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-    exportWalletPrivateKey,
-    importWalletPrivateKey
+  exportWalletPrivateKey,
+  importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
