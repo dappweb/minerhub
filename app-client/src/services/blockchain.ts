@@ -42,6 +42,13 @@ const swapRouterAddress =
 const GAS_BUFFER_NUMERATOR = 12n;
 const GAS_BUFFER_DENOMINATOR = 10n;
 
+function requireAddress(value: Address | undefined, envName: string): Address {
+  if (!value) {
+    throw new Error(`Missing ${envName}.`);
+  }
+  return value;
+}
+
 function withGasBuffer(gas: bigint): bigint {
   return (gas * GAS_BUFFER_NUMERATOR) / GAS_BUFFER_DENOMINATOR;
 }
@@ -441,10 +448,11 @@ export async function getSUPERBalance(): Promise<string> {
     (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined);
 
   try {
+    const tokenAddress = requireAddress(superTokenAddress, 'EXPO_PUBLIC_SUPER_ADDRESS');
     const address = await getWalletAddress();
     const { publicClient } = await getWalletClients();
     const balance = await publicClient.readContract({
-      address: superTokenAddress,
+      address: tokenAddress,
       abi: erc20Abi,
       functionName: 'balanceOf',
       args: [address],
@@ -466,10 +474,11 @@ export async function getUSDTBalance(): Promise<string> {
     (process.env.EXPO_PUBLIC_USDT_TOKEN_ADDRESS as Address | undefined);
 
   try {
+    const tokenAddress = requireAddress(usdtTokenAddress, 'EXPO_PUBLIC_USDT_ADDRESS');
     const address = await getWalletAddress();
     const { publicClient } = await getWalletClients();
     const balance = await publicClient.readContract({
-      address: usdtTokenAddress,
+      address: tokenAddress,
       abi: erc20Abi,
       functionName: 'balanceOf',
       args: [address],
