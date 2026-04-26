@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -140,8 +140,10 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
       onRequestClose={onMinimize}
     >
       <View style={styles.modalBackdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onMinimize} />
-        <View style={styles.expandedWrap}>
+        <TouchableWithoutFeedback onPress={onMinimize}>
+          <View style={StyleSheet.absoluteFillObject} />
+        </TouchableWithoutFeedback>
+        <View style={styles.expandedWrap} pointerEvents="box-none">
           <View style={styles.card}>
             <View style={styles.headerRow}>
               <View style={styles.headerCopy}>
@@ -155,7 +157,7 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
               </Pressable>
             </View>
 
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
               {step === 1 && (
                 <>
                   <Text style={styles.title}>{t.s1Title}</Text>
