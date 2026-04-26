@@ -503,6 +503,12 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [agreementTitleEn, setAgreementTitleEn] = useState<string>('User Agreement');
   const [agreementContentZh, setAgreementContentZh] = useState<string>('');
   const [agreementContentEn, setAgreementContentEn] = useState<string>('');
+  const [contractRequired, setContractRequired] = useState<boolean>(false);
+  const [contractVersion, setContractVersion] = useState<string>('1.0.0');
+  const [contractTitleZh, setContractTitleZh] = useState<string>('用户挖矿合同');
+  const [contractTitleEn, setContractTitleEn] = useState<string>('Mining Contract');
+  const [contractContentZh, setContractContentZh] = useState<string>('');
+  const [contractContentEn, setContractContentEn] = useState<string>('');
   const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
   const [systemSettingsDirty, setSystemSettingsDirty] = useState<boolean>(false);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -1047,6 +1053,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setAgreementContentZh(systemStatus.userAgreement.contentZh ?? '');
       setAgreementContentEn(systemStatus.userAgreement.contentEn ?? '');
     }
+    if (systemStatus.contract) {
+      setContractRequired(Boolean(systemStatus.contract.required));
+      setContractVersion(systemStatus.contract.version ?? '1.0.0');
+      setContractTitleZh(systemStatus.contract.titleZh ?? '用户挖矿合同');
+      setContractTitleEn(systemStatus.contract.titleEn ?? 'Mining Contract');
+      setContractContentZh(systemStatus.contract.contentZh ?? '');
+      setContractContentEn(systemStatus.contract.contentEn ?? '');
+    }
     setSupportContacts(
       Array.isArray(systemStatus.supportContacts)
         ? systemStatus.supportContacts.map((item) => ({
@@ -1433,6 +1447,28 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       userAgreementTitleEn: agreementTitleEn,
       userAgreementContentZh: agreementContentZh,
       userAgreementContentEn: agreementContentEn,
+    });
+  };
+
+  const handleSaveContract = async () => {
+    await saveSystemSettings({
+      contractRequired: contractRequired,
+      contractVersion: contractVersion.trim() || '1.0.0',
+      contractTitleZh: contractTitleZh,
+      contractTitleEn: contractTitleEn,
+      contractContentZh: contractContentZh,
+      contractContentEn: contractContentEn,
+    });
+  };
+
+  const handleToggleContract = async () => {
+    await saveSystemSettings({
+      contractRequired: !contractRequired,
+      contractVersion: contractVersion.trim() || '1.0.0',
+      contractTitleZh: contractTitleZh,
+      contractTitleEn: contractTitleEn,
+      contractContentZh: contractContentZh,
+      contractContentEn: contractContentEn,
     });
   };
 
@@ -2323,6 +2359,69 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-semibold text-slate-950"
                 >
                   {adminActionLoading === 'systemSettings' ? '保存中...' : '保存用户协议'}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 xl:col-span-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm font-semibold text-cyan-200">挖矿合同设置</div>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span>强制同意</span>
+                    <button
+                      type="button"
+                      onClick={handleToggleContract}
+                      disabled={adminActionLoading === 'systemSettings'}
+                      className={`px-3 py-1 rounded-full border text-xs ${contractRequired ? 'bg-cyan-500/80 text-slate-950 border-cyan-400' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+                    >
+                      {contractRequired ? '开启' : '关闭'}
+                    </button>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-400 mb-3">
+                  开启后，用户激活挖矿账户后需要阅读并同意当前版本的合同才能获得收益。修改版本号会触发所有活跃用户重新同意。
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                  <input
+                    value={contractVersion}
+                    onChange={(event) => { markSystemSettingsDirty(); setContractVersion(event.target.value); }}
+                    placeholder="版本号 (如 1.0.0)"
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                  />
+                  <input
+                    value={contractTitleZh}
+                    onChange={(event) => { markSystemSettingsDirty(); setContractTitleZh(event.target.value); }}
+                    placeholder="合同标题（中文）"
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                  />
+                  <input
+                    value={contractTitleEn}
+                    onChange={(event) => { markSystemSettingsDirty(); setContractTitleEn(event.target.value); }}
+                    placeholder="Contract title (EN)"
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <textarea
+                    value={contractContentZh}
+                    onChange={(event) => { markSystemSettingsDirty(); setContractContentZh(event.target.value); }}
+                    placeholder="合同正文（中文）"
+                    rows={8}
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400 font-mono"
+                  />
+                  <textarea
+                    value={contractContentEn}
+                    onChange={(event) => { markSystemSettingsDirty(); setContractContentEn(event.target.value); }}
+                    placeholder="Contract content (EN)"
+                    rows={8}
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400 font-mono"
+                  />
+                </div>
+                <button
+                  onClick={handleSaveContract}
+                  disabled={adminActionLoading === 'systemSettings'}
+                  className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-semibold text-slate-950"
+                >
+                  {adminActionLoading === 'systemSettings' ? '保存中...' : '保存合同设置'}
                 </button>
               </div>
 

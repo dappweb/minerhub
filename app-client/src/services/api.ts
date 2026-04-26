@@ -582,6 +582,10 @@ export async function acceptUserAgreement(userId: string, version: string, walle
   return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/agreement`, 'POST', { version, wallet });
 }
 
+export async function acceptContractAgreement(userId: string, version: string, wallet: string): Promise<{ ok: boolean; version: string; acceptedAt: string }> {
+  return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/contract-agreement`, 'POST', { version, wallet });
+}
+
 export interface AppDownloadInfo {
   android: {
     available: boolean;

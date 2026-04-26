@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
+import ContractModal from './components/mobile/ContractModal';
 import DeviceTab from './components/mobile/DeviceTab';
 import EarningsTab from './components/mobile/EarningsTab';
 import ExchangeTab from './components/mobile/ExchangeTab';
@@ -25,6 +26,7 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
+    acceptContractAgreement,
     acceptUserAgreement,
     bindReferral,
     createExchangeRequest,
@@ -736,6 +738,8 @@ export default function App() {
   const [referralMembersError, setReferralMembersError] = useState('');
   const [agreementDeclined, setAgreementDeclined] = useState(false);
   const [agreementError, setAgreementError] = useState('');
+  const [contractSubmitting, setContractSubmitting] = useState(false);
+  const [localContractAcceptedVersion, setLocalContractAcceptedVersion] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementDto[]>([]);
   const [announcementReadIds, setAnnouncementReadIds] = useState<string[]>([]);
   const [announcementVisible, setAnnouncementVisible] = useState(false);
@@ -776,6 +780,14 @@ export default function App() {
     && userAgreement
     && acceptedAgreementVersion !== userAgreement.version;
   const hasActiveContract = Boolean(userDetails?.contractActive) && !contractExpired;
+  
+  const contract = systemStatus?.contract;
+  const contractRequired = Boolean(contract?.required && contract?.version);
+  const acceptedContractVersion = userDetails?.contractAgreementAcceptedVersion ?? localContractAcceptedVersion ?? null;
+  const contractNeedsAcceptance = contractRequired
+    && contract
+    && hasActiveContract
+    && acceptedContractVersion !== contract.version;
   const announcementReadSet = useMemo(() => new Set(announcementReadIds), [announcementReadIds]);
   const visibleAnnouncements = useMemo(
     () => announcements.filter((item) => item.target === 'all' || hasActiveContract),
@@ -1469,6 +1481,26 @@ export default function App() {
     setAgreementDeclined(true);
   };
 
+  const handleAcceptContract = async () => {
+    if (!contract || !contract.version) return;
+    if (contractSubmitting) return;
+    setContractSubmitting(true);
+    try {
+      if (!userId || !walletAddress) {
+        setLocalContractAcceptedVersion(contract.version);
+        return;
+      }
+      await acceptContractAgreement(userId, contract.version, walletAddress);
+      setLocalContractAcceptedVersion(contract.version);
+      const details = await getUserDetails(userId);
+      setUserDetails(details);
+    } catch {
+      // silent — user can retry by closing and reopening
+    } finally {
+      setContractSubmitting(false);
+    }
+  };
+
   // If accepted locally before identity was ready, sync to backend once it becomes ready.
   useEffect(() => {
     if (!userAgreement?.required || !userAgreement.version) return;
@@ -1645,10 +1677,6 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      if (!pendingReferralWallet.trim()) {
-        throw new Error(lang === 'zh' ? '请先绑定推荐人地址后再完成注册。' : 'Please bind an inviter wallet before registration.');
-      }
-
       let user = await createUser(address, pendingReferralWallet || undefined, machineCodeForUpload).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
@@ -2383,6 +2411,16 @@ export default function App() {
         onComplete={handleOnboardingComplete}
         onMinimize={handleMinimizeOnboarding}
         onExpand={handleExpandOnboarding}
+      />
+      <ContractModal
+        visible={contractNeedsAcceptance && contract !== null}
+        lang={lang}
+        title={(lang === 'zh' ? contract?.titleZh : contract?.titleEn) || 'Contract'}
+        content={(lang === 'zh' ? contract?.contentZh : contract?.contentEn) || ''}
+        onAccept={handleAcceptContract}
+        onReject={() => {
+          // User can close the modal later; contract acceptance is required for continued mining rewards
+        }}
       />
       <View style={styles.mainShell}>
         <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>

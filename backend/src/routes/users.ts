@@ -269,6 +269,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       payoutWallets: wallets.results ?? [],
       agreementAcceptedVersion: acceptance?.version ?? null,
       agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreementAcceptedAt?: string | null }).agreementAcceptedAt ?? null,
+      contractAgreementAcceptedVersion: (user as { contract_agreement_accepted_version?: string | null }).contract_agreement_accepted_version ?? null,
       lockSummary: {
         total: Number(lockSummary?.total ?? 0),
         pending: Number(lockSummary?.pending ?? 0),
@@ -322,6 +323,42 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     const activated = await activatePendingLocksOnAgreement(env, userId, version, now);
 
     return json({ ok: true, version, acceptedAt: now, activatedLocks: activated.activated });
+  }
+
+  // POST /api/users/:id/contract-agreement — record user's contract agreement acceptance
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "contract-agreement") {
+    const userId = pathParts[0];
+
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { version?: string; wallet?: string } | null;
+    if (!body?.version || typeof body.version !== "string") {
+      return badRequest("version is required");
+    }
+
+    const user = await env.DB.prepare("SELECT id, wallet FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ id: string; wallet: string }>();
+    if (!user) return json({ error: "User not found" }, 404);
+
+    if (authResult.wallet && user.wallet && authResult.wallet.toLowerCase() !== user.wallet.toLowerCase()) {
+      return unauthorized("Wallet does not match user");
+    }
+
+    await ensureCustomerProfile(env, userId);
+
+    const now = nowIso();
+    const version = body.version.trim();
+    await env.DB.prepare(
+      "UPDATE customer_profiles SET contract_agreement_accepted_version = ?, updated_at = ? WHERE user_id = ?"
+    )
+      .bind(version, now, userId)
+      .run();
+
+    return json({ ok: true, version, acceptedAt: now });
   }
 
   // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)

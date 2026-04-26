@@ -114,7 +114,13 @@ INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES
   ('user_agreement_title_en', 'User Agreement', datetime('now')),
   ('user_agreement_content_zh', '欢迎使用本应用。使用本服务即表示您已阅读并同意平台的服务条款、隐私政策以及相关的风险提示。管理员可随时更新本协议内容。', datetime('now')),
   ('user_agreement_content_en', 'Welcome. By using this service you acknowledge that you have read and agreed to the platform terms of service, privacy policy and related risk disclosures. The administrator may update this agreement at any time.', datetime('now')),
-  ('support_contacts_json', '[]', datetime('now'));
+  ('support_contacts_json', '[]', datetime('now')),
+  ('contract_required', '1', datetime('now')),
+  ('contract_version', '1.0.0', datetime('now')),
+  ('contract_title_zh', '用户挖矿合同', datetime('now')),
+  ('contract_title_en', 'Mining Contract', datetime('now')),
+  ('contract_content_zh', '感谢您购买我们的服务。本合同约定：\n\n1. 您已购买月卡并支付相关费用\n2. 激活后，您的账户开始累计挖矿收益\n3. 合同期限为所购周期（默认1095天）\n4. 期间保持设备在线以持续累计收益\n5. 合同到期后收益停止累计\n6. 本条款由平台管理方解释', datetime('now')),
+  ('contract_content_en', 'Thank you for purchasing our service. This contract stipulates:\n\n1. You have purchased a monthly card and paid the relevant fees\n2. After activation, your account begins to accrue mining rewards\n3. The contract term is the purchased period (default 1095 days)\n4. During this period, keep the device online to continue accruing rewards\n5. After the contract expires, reward accrual stops\n6. This clause is interpreted by the platform administrator', datetime('now'));
 
 CREATE TABLE IF NOT EXISTS user_agreement_acceptances (
   user_id TEXT NOT NULL,
@@ -163,6 +169,7 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   monthly_card_days INTEGER NOT NULL DEFAULT 30,
   contract_active INTEGER NOT NULL DEFAULT 0,
   agreement_accepted_at TEXT,
+  contract_agreement_accepted_version TEXT,
   activation_status TEXT NOT NULL DEFAULT 'pending',
   exchange_auto_enabled INTEGER NOT NULL DEFAULT 1,
   payout_wallets_json TEXT NOT NULL DEFAULT '[]',

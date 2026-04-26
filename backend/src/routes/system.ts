@@ -18,6 +18,15 @@ type UserAgreement = {
   contentEn: string;
 };
 
+type Contract = {
+  required: boolean;
+  version: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+};
+
 type SupportContact = {
   id: string;
   type: string;
@@ -38,7 +47,19 @@ type SystemStatus = {
   swapPriceSuperPerUsdt: number;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
   userAgreement: UserAgreement;
+  contract: Contract;
   supportContacts: SupportContact[];
+};
+
+const DEFAULT_CONTRACT: Contract = {
+  required: true,
+  version: "1.0.0",
+  titleZh: "用户挖矿合同",
+  titleEn: "Mining Contract",
+  contentZh:
+    "感谢您购买我们的服务。本合同约定：\n\n1. 您已购买月卡并支付相关费用\n2. 激活后，您的账户开始累计挖矿收益\n3. 合同期限为所购周期（默认1095天）\n4. 期间请保持设备在线以持续累计收益\n5. 合同到期后收益停止累计\n6. 本条款由平台管理方解释",
+  contentEn:
+    "Thank you for purchasing our service. This contract stipulates:\n\n1. You have purchased a monthly card and paid the relevant fees\n2. After activation, your account begins to accrue mining rewards\n3. The contract term is the purchased period (default 1095 days)\n4. During this period, keep the device online to continue accruing rewards\n5. After the contract expires, reward accrual stops\n6. This clause is interpreted by the platform administrator",
 };
 
 const DEFAULT_AGREEMENT: UserAgreement = {
@@ -153,6 +174,14 @@ async function readStatus(env: Env): Promise<SystemStatus> {
 
   const maintenanceEnabled = (settings.get("maintenance_enabled") ?? "0") === "1";
   const exchangeAutoEnabled = (settings.get("exchange_auto_enabled") ?? "1") === "1";
+  const contract: Contract = {
+    required: (settings.get("contract_required") ?? "1") === "1",
+    version: settings.get("contract_version") ?? DEFAULT_CONTRACT.version,
+    titleZh: settings.get("contract_title_zh") ?? DEFAULT_CONTRACT.titleZh,
+    titleEn: settings.get("contract_title_en") ?? DEFAULT_CONTRACT.titleEn,
+    contentZh: settings.get("contract_content_zh") ?? DEFAULT_CONTRACT.contentZh,
+    contentEn: settings.get("contract_content_en") ?? DEFAULT_CONTRACT.contentEn,
+  };
   const userAgreement: UserAgreement = {
     required: (settings.get("user_agreement_required") ?? "0") === "1",
     version: settings.get("user_agreement_version") ?? DEFAULT_AGREEMENT.version,
@@ -175,6 +204,7 @@ async function readStatus(env: Env): Promise<SystemStatus> {
     rewardRateUsdtPerHour: Number(settings.get("reward_rate_usdt_per_hour") ?? DEFAULT_STATUS.rewardRateUsdtPerHour),
     swapPriceSuperPerUsdt: Number(settings.get("swap_price_super_per_usdt") ?? DEFAULT_STATUS.swapPriceSuperPerUsdt),
     payoutWallets,
+    contract,
     userAgreement,
     supportContacts,
   };
@@ -208,6 +238,7 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     ["maintenanceEnabled", "maintenance_enabled"],
     ["exchangeAutoEnabled", "exchange_auto_enabled"],
     ["userAgreementRequired", "user_agreement_required"],
+    ["contractRequired", "contract_required"],
   ];
   for (const [sourceKey, targetKey] of booleanFields) {
     if (!(sourceKey in body)) continue;
@@ -227,6 +258,7 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     ["rewardRateUsdtPerHour", "reward_rate_usdt_per_hour"],
     ["swapPriceSuperPerUsdt", "swap_price_super_per_usdt"],
     ["userAgreementVersion", "user_agreement_version"],
+    ["contractVersion", "contract_version"],
   ];
   for (const [sourceKey, targetKey] of nonEmptyStringFields) {
     if (!(sourceKey in body)) continue;
@@ -248,6 +280,10 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
     ["userAgreementTitleEn", "user_agreement_title_en"],
     ["userAgreementContentZh", "user_agreement_content_zh"],
     ["userAgreementContentEn", "user_agreement_content_en"],
+    ["contractTitleZh", "contract_title_zh"],
+    ["contractTitleEn", "contract_title_en"],
+    ["contractContentZh", "contract_content_zh"],
+    ["contractContentEn", "contract_content_en"],
   ];
   for (const [sourceKey, targetKey] of textFields) {
     if (!(sourceKey in body)) continue;

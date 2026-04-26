@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
@@ -23,22 +23,20 @@ const COPY = {
     minimize: 'Later',
     resume: 'Continue Setup',
     finish: 'Start Earning',
-    s1Title: 'Bind Inviter Wallet',
-    s1Body: 'Use inviter wallet address to complete registration. After activation, keep phone online to accrue rewards.',
-    s1Hint: 'Required. Use inviter wallet address (0x...).',
-    s1Tip: 'Tip: support/admin manages monthly-card activation and contract duration.',
-    s2Title: 'Your Machine Code',
-    s2Body:
+    s1Title: 'Your Machine Code',
+    s1Body:
       'Send this code to our support when you purchase a monthly card. It binds your phone to your contract.',
-    s2Hint: 'You can also find this code in the Home tab.',
-    s3Title: 'Ready to Configure Miner',
-    s3Body: 'Identity config is complete. Next, ask support to activate the monthly card, then return to finish miner setup.',
-    s3Bullet1: '• Keep this floating guide available from any tab',
-    s3Bullet2: '• Finish monthly-card activation with your machine code',
-    s3Bullet3: '• After activation, tap Setup Miner from the home guide',
-    referralTitle: 'Inviter Wallet Address',
-    referralPlaceholder: '0x... inviter wallet',
-    referralInvalid: 'Please enter a valid wallet address.',
+    s1Hint: 'You can also find this code in the Home tab.',
+    s2Title: 'Ready to Configure Miner',
+    s2Body: 'Identity config is complete. Next, ask support to activate the monthly card, then return to finish miner setup.',
+    s2Bullet1: '• Keep this floating guide available from any tab',
+    s2Bullet2: '• Finish monthly-card activation with your machine code',
+    s2Bullet3: '• After activation, tap Setup Miner from the home guide',
+    s3Title: 'Bind Referrer (Optional)',
+    s3Body: 'Enter the wallet address of your referrer if you have one. This can be added later from the profile page.',
+    s3Placeholder: 'Referrer wallet address (0x...)',
+    s3Optional: 'Optional: Leave empty to continue',
+    s3Invalid: 'Invalid wallet address',
     floatingTitle: 'Registration Setup',
   },
   zh: {
@@ -49,36 +47,32 @@ const COPY = {
     minimize: '稍后',
     resume: '继续配置',
     finish: '开始挖矿',
-    s1Title: '绑定推荐人钱包',
-    s1Body: '请输入推荐人钱包地址完成注册。开通后请保持手机在线，以便持续累计收益。',
-    s1Hint: '必填，请输入推荐人的钱包地址（0x...）。',
-    s1Tip: '提示：月卡开通与合同周期由客服/管理员统一管理。',
-    s2Title: '您的机器码',
-    s2Body: '购买月卡时请将此机器码告知客服，用于将本机绑定到您的合同。',
-    s2Hint: '您也可以在"首页"随时查看此机器码。',
-    s3Title: '准备配置矿机',
-    s3Body: '注册配置已完成。下一步请联系客服用机器码开通月卡，随后返回首页完成矿机设置。',
-    s3Bullet1: '• 这个悬浮引导可在任意页面继续打开',
-    s3Bullet2: '• 用机器码联系客户完成月卡激活',
-    s3Bullet3: '• 激活完成后，回到首页点击“矿机设置”',
-    referralTitle: '推荐人钱包地址',
-    referralPlaceholder: '输入推荐人钱包地址 0x...',
-    referralInvalid: '请输入有效的钱包地址。',
+    s1Title: '您的机器码',
+    s1Body: '购买月卡时请将此机器码告知客服，用于将本机绑定到您的合同。',
+    s1Hint: '您也可以在"首页"随时查看此机器码。',
+    s2Title: '准备配置矿机',
+    s2Body: '注册配置已完成。下一步请联系客服用机器码开通月卡，随后返回首页完成矿机设置。',
+    s2Bullet1: '• 这个悬浮引导可在任意页面继续打开',
+    s2Bullet2: '• 用机器码联系客服完成月卡激活',
+    s2Bullet3: '• 激活完成后，回到首页点击"矿机设置"',
+    s3Title: '绑定推荐人（可选）',
+    s3Body: '输入您的推荐人钱包地址，如果您有的话。也可以稍后在个人页面添加。',
+    s3Placeholder: '推荐人钱包地址（0x...）',
+    s3Optional: '可选：留空可继续',
+    s3Invalid: '无效的钱包地址',
     floatingTitle: '注册配置',
   },
 } as const;
+
+function isValidEthereumAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
 
 export default function OnboardingFlow({ visible, minimized, lang, machineCode, initialReferralWallet = '', onComplete, onMinimize, onExpand }: OnboardingFlowProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [referralWallet, setReferralWallet] = useState(initialReferralWallet);
   const [referralError, setReferralError] = useState('');
   const t = COPY[lang];
-
-  useEffect(() => {
-    if (initialReferralWallet && !referralWallet) {
-      setReferralWallet(initialReferralWallet);
-    }
-  }, [initialReferralWallet, referralWallet]);
 
   const stepSummary = useMemo(() => {
     if (step === 1) return t.s1Title;
@@ -88,31 +82,32 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
 
   const next = () => {
     if (step === 1) {
-      const normalized = referralWallet.trim().toLowerCase();
-      const isValidWallet = /^0x[a-f0-9]{40}$/.test(normalized);
-      if (!isValidWallet) {
-        setReferralError(t.referralInvalid);
-        return;
-      }
-
-      setReferralWallet(normalized);
-      setReferralError('');
       setStep(2);
       return;
     }
-
-    if (step < 3) {
-      setStep((step + 1) as 1 | 2 | 3);
+    if (step === 2) {
+      setStep(3);
       return;
     }
-
+    // Step 3: Validate referral wallet (optional, can be empty)
     const normalized = referralWallet.trim().toLowerCase();
-    setReferralError('');
+    if (normalized && !isValidEthereumAddress(normalized)) {
+      setReferralError(t.s3Invalid);
+      return;
+    }
     onComplete(normalized);
   };
 
   const back = () => {
-    if (step > 1) setStep((step - 1) as 1 | 2 | 3);
+    if (step > 1) {
+      setReferralError('');
+      setStep((step - 1) as 1 | 2 | 3);
+    }
+  };
+
+  const handleReferralChange = (text: string) => {
+    setReferralWallet(text);
+    setReferralError('');
   };
 
   if (!visible) return null;
@@ -161,36 +156,25 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
               {step === 1 && (
                 <>
                   <Text style={styles.title}>{t.s1Title}</Text>
+                  <View style={styles.codeBox}>
+                    <Text style={styles.codeText} selectable>
+                      {machineCode || '------'}
+                    </Text>
+                  </View>
                   <Text style={styles.body}>{t.s1Body}</Text>
-                  <Text style={styles.referralTitle}>{t.referralTitle}</Text>
-                  <TextInput
-                    style={styles.referralInput}
-                    value={referralWallet}
-                    onChangeText={(text) => {
-                      setReferralWallet(text);
-                      if (referralError) setReferralError('');
-                    }}
-                    placeholder={t.referralPlaceholder}
-                    placeholderTextColor="#64748b"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
                   <Text style={styles.hint}>{t.s1Hint}</Text>
-                  {referralError ? <Text style={styles.errorText}>{referralError}</Text> : null}
-                  <Text style={styles.hint}>{t.s1Tip}</Text>
                 </>
               )}
 
               {step === 2 && (
                 <>
                   <Text style={styles.title}>{t.s2Title}</Text>
-                  <View style={styles.codeBox}>
-                    <Text style={styles.codeText} selectable>
-                      {machineCode || '------'}
-                    </Text>
-                  </View>
                   <Text style={styles.body}>{t.s2Body}</Text>
-                  <Text style={styles.hint}>{t.s2Hint}</Text>
+                  <View style={styles.bullets}>
+                    <Text style={styles.bullet}>{t.s2Bullet1}</Text>
+                    <Text style={styles.bullet}>{t.s2Bullet2}</Text>
+                    <Text style={styles.bullet}>{t.s2Bullet3}</Text>
+                  </View>
                 </>
               )}
 
@@ -198,11 +182,17 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
                 <>
                   <Text style={styles.title}>{t.s3Title}</Text>
                   <Text style={styles.body}>{t.s3Body}</Text>
-                  <View style={styles.bullets}>
-                    <Text style={styles.bullet}>{t.s3Bullet1}</Text>
-                    <Text style={styles.bullet}>{t.s3Bullet2}</Text>
-                    <Text style={styles.bullet}>{t.s3Bullet3}</Text>
-                  </View>
+                  <Text style={styles.referralTitle}>{t.s3Optional}</Text>
+                  <TextInput
+                    style={styles.referralInput}
+                    placeholder={t.s3Placeholder}
+                    placeholderTextColor="#64748b"
+                    value={referralWallet}
+                    onChangeText={handleReferralChange}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {referralError && <Text style={styles.errorText}>{referralError}</Text>}
                 </>
               )}
             </ScrollView>
