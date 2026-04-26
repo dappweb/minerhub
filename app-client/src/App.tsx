@@ -64,7 +64,7 @@ import {
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.6';
 
 type Lang = 'en' | 'zh';
 

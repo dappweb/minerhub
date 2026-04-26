@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -112,6 +112,30 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
 
   if (!visible) return null;
 
+  const { cardWidth, cardMaxHeight, scrollMaxHeight, paddingBottom, screenWidth } = getResponsiveDimensions();
+  
+  // 动态样式（根据屏幕尺寸）
+  const dynamicStyles = {
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(2, 6, 23, 0.68)',
+      justifyContent: 'flex-end' as const,
+      alignItems: 'center' as const,
+      paddingHorizontal: Math.max(12, screenWidth * 0.05),
+      paddingBottom,
+    },
+    expandedWrap: {
+      width: cardWidth,
+      maxWidth: cardWidth,
+    },
+    card: {
+      maxHeight: cardMaxHeight,
+    },
+    scroll: {
+      maxHeight: scrollMaxHeight,
+    },
+  };
+
   if (minimized) {
     return (
       <View pointerEvents="box-none" style={styles.floatingWrap}>
@@ -134,12 +158,12 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
       statusBarTranslucent
       onRequestClose={onMinimize}
     >
-      <View style={styles.modalBackdrop}>
+      <View style={[styles.modalBackdrop, dynamicStyles.modalBackdrop]}>
         <TouchableWithoutFeedback onPress={onMinimize}>
           <View style={StyleSheet.absoluteFillObject} />
         </TouchableWithoutFeedback>
-        <View style={styles.expandedWrap} pointerEvents="box-none">
-          <View style={styles.card}>
+        <View style={[styles.expandedWrap, dynamicStyles.expandedWrap]} pointerEvents="box-none">
+          <View style={[styles.card, dynamicStyles.card]}>
             <View style={styles.headerRow}>
               <View style={styles.headerCopy}>
                 <Text style={styles.badge}>
@@ -152,7 +176,7 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
               </Pressable>
             </View>
 
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
+            <ScrollView style={[styles.scroll, dynamicStyles.scroll]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
               {step === 1 && (
                 <>
                   <Text style={styles.title}>{t.s1Title}</Text>
@@ -216,6 +240,26 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
   );
 }
 
+// 响应式尺寸计算
+const getResponsiveDimensions = () => {
+  const { width, height } = Dimensions.get('window');
+  const isLandscape = width > height;
+  
+  return {
+    screenWidth: width,
+    screenHeight: height,
+    isLandscape,
+    // 弹窗宽度：屏幕宽度的 90%，但最大 520px，最小 280px
+    cardWidth: Math.min(Math.max(width * 0.9, 280), 520),
+    // 弹窗最大高度：屏幕高度的 85%（横屏）或 75%（竖屏）
+    cardMaxHeight: isLandscape ? height * 0.85 : height * 0.75,
+    // ScrollView 高度：动态计算
+    scrollMaxHeight: isLandscape ? height * 0.5 : height * 0.4,
+    // 底部间距：在竖屏模式下固定96，横屏模式下为20
+    paddingBottom: isLandscape ? 20 : 96,
+  };
+};
+
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
@@ -227,7 +271,7 @@ const styles = StyleSheet.create({
   },
   expandedWrap: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 520,
   },
   floatingWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -242,9 +286,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#225b98',
-    padding: 16,
+    padding: 18,
     width: '100%',
-    maxHeight: '62%',
+    maxHeight: '85%',
     shadowColor: '#020617',
     shadowOpacity: 0.35,
     shadowRadius: 20,
@@ -264,7 +308,7 @@ const styles = StyleSheet.create({
   },
   floatingTitle: {
     color: '#dbeafe',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   headerAction: {
@@ -290,52 +334,53 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  scroll: { maxHeight: 320 },
-  scrollContent: { paddingBottom: 8 },
-  title: { color: '#f1f5f9', fontSize: 22, fontWeight: '700', marginBottom: 10 },
-  body: { color: '#cbd5e1', fontSize: 14, lineHeight: 20, marginBottom: 10 },
-  hint: { color: '#64748b', fontSize: 12, marginTop: 8 },
-  errorText: { color: '#fda4af', fontSize: 12, marginTop: 8 },
-  referralTitle: { color: '#cbd5e1', fontSize: 13, marginTop: 6, marginBottom: 8, fontWeight: '600' },
+  scroll: { maxHeight: 400 },
+  scrollContent: { paddingBottom: 12 },
+  title: { color: '#f1f5f9', fontSize: 24, fontWeight: '700', marginBottom: 12 },
+  body: { color: '#cbd5e1', fontSize: 15, lineHeight: 22, marginBottom: 12 },
+  hint: { color: '#64748b', fontSize: 13, marginTop: 10 },
+  errorText: { color: '#fda4af', fontSize: 13, marginTop: 10 },
+  referralTitle: { color: '#cbd5e1', fontSize: 14, marginTop: 8, marginBottom: 10, fontWeight: '600' },
   referralInput: {
-    height: 44,
+    height: 48,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#334155',
     backgroundColor: '#0b1224',
     color: '#e2e8f0',
-    paddingHorizontal: 12,
-    marginBottom: 4,
+    paddingHorizontal: 14,
+    marginBottom: 6,
+    fontSize: 15,
   },
-  bullets: { marginTop: 8 },
-  bullet: { color: '#e2e8f0', fontSize: 14, lineHeight: 24 },
+  bullets: { marginTop: 10 },
+  bullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 26 },
   codeBox: {
     backgroundColor: '#1e293b',
     borderRadius: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    marginVertical: 14,
+    marginVertical: 16,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  codeText: { color: '#22d3ee', fontSize: 22, fontWeight: '700', letterSpacing: 2 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  codeText: { color: '#22d3ee', fontSize: 24, fontWeight: '700', letterSpacing: 2 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 18 },
   spacer: { flex: 1 },
-  btn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  btn: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   btnPrimary: { backgroundColor: '#a78bfa' },
-  btnPrimaryText: { color: '#0f172a', fontWeight: '700', fontSize: 15 },
+  btnPrimaryText: { color: '#0f172a', fontWeight: '700', fontSize: 16 },
   btnGhost: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
-  btnGhostText: { color: '#cbd5e1', fontWeight: '600', fontSize: 15 },
+  btnGhostText: { color: '#cbd5e1', fontWeight: '600', fontSize: 16 },
   minimizedPill: {
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 380,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#225b98',
     backgroundColor: 'rgba(8, 39, 84, 0.96)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -352,16 +397,16 @@ const styles = StyleSheet.create({
   },
   minimizedTitle: {
     color: '#e0f2fe',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   minimizedHint: {
     color: '#93c5fd',
-    fontSize: 11,
+    fontSize: 12,
   },
   minimizedAction: {
     color: '#67e8f9',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
 });
