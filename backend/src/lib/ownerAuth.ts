@@ -84,8 +84,7 @@ export async function isReferrerWallet(env: Env, wallet: string | null | undefin
 export async function isSubAdminWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
   if (!wallet) return false;
   const configured = await getConfiguredSubAdminWallets(env);
-  if (configured.has(wallet.toLowerCase())) return true;
-  return isReferrerWallet(env, wallet);
+  return configured.has(wallet.toLowerCase());
 }
 
 export async function getAdminActorRole(env: Env, wallet: string | null | undefined): Promise<AdminActorRole | null> {

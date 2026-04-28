@@ -710,7 +710,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
           {subAdminMsg && <p className="text-cyan-300 break-all">{subAdminMsg}</p>}
 
           <Card title="SubAdmin 管理（仅 Owner）">
-            <p className="text-xs text-slate-400">SubAdmin 登录后只能看到其推荐关系下的用户与设备列表。</p>
+            <p className="text-xs text-slate-400">添加 SubAdmin 时必须指定可使用的合同类型，保存后不可修改；SubAdmin 只能在其推荐关系下使用已指定的合同类型。</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <input
                 className={inputCls}
@@ -724,9 +724,31 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
                 value={subAdminNote}
                 onChange={(e) => setSubAdminNote(e.target.value)}
               />
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+              <div className="mb-2 text-xs font-medium text-slate-300">允许使用的合同类型</div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                {CONTRACT_TYPE_OPTIONS.map((option) => (
+                  <label key={option.id} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={subAdminContractTypes.includes(option.id)}
+                      onChange={(e) => {
+                        setSubAdminContractTypes((current) => {
+                          if (e.target.checked) return Array.from(new Set([...current, option.id]));
+                          return current.filter((item) => item !== option.id);
+                        });
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={addSubAdmin}
-                disabled={subAdminLoading || !subAdminWallet.trim()}
+                disabled={subAdminLoading || !subAdminWallet.trim() || subAdminContractTypes.length === 0}
                 className={btnCls}
               >
                 {subAdminLoading ? '处理中...' : '添加 SubAdmin'}
@@ -748,6 +770,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
                   <tr>
                     <th className="text-left py-1 pr-2">钱包</th>
                     <th className="text-left pr-2">来源</th>
+                    <th className="text-left pr-2">合同类型</th>
                     <th className="text-left pr-2">备注</th>
                     <th className="text-left pr-2">更新时间</th>
                     <th className="text-left pr-2">操作</th>
@@ -758,6 +781,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
                     <tr key={`${item.source}-${item.wallet}`} className="border-t border-slate-800 align-top">
                       <td className="py-2 pr-2 font-mono text-slate-200 break-all">{item.wallet}</td>
                       <td className="pr-2 text-slate-400">{item.source === 'database' ? '数据库' : '环境变量'}</td>
+                      <td className="pr-2 text-slate-400">{formatContractTypes(item.allowedContractTypes)}</td>
                       <td className="pr-2 text-slate-400">{item.note || '--'}</td>
                       <td className="pr-2 text-slate-400">{item.updatedAt ? new Date(item.updatedAt).toLocaleString('zh-CN') : '--'}</td>
                       <td className="pr-2">
@@ -773,7 +797,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
                   ))}
                   {subAdmins.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-4 text-slate-500">暂无 SubAdmin 记录</td>
+                      <td colSpan={6} className="py-4 text-slate-500">暂无 SubAdmin 记录</td>
                     </tr>
                   )}
                 </tbody>

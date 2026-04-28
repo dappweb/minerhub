@@ -80,9 +80,7 @@ export async function isSubAdminWallet(env, wallet) {
     if (!wallet)
         return false;
     const configured = await getConfiguredSubAdminWallets(env);
-    if (configured.has(wallet.toLowerCase()))
-        return true;
-    return isReferrerWallet(env, wallet);
+    return configured.has(wallet.toLowerCase());
 }
 export async function getAdminActorRole(env, wallet) {
     if (await isOwnerWallet(env, wallet))

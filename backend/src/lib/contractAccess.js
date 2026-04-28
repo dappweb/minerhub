@@ -148,9 +148,9 @@ export async function getSubAdminContractScope(env, wallet) {
         row = null;
     }
     if (!row) {
-        // Environment-configured subadmins predate this setting; keep them unrestricted
-        // until they are moved into the DB-backed owner console.
-        return null;
+        // Environment-configured SubAdmins must be added in the owner console before
+        // they can use any contract type for customer service actions.
+        return [];
     }
     return parseAllowedContractTypes(row.allowed_contract_types_json);
 }

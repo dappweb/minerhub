@@ -733,8 +733,8 @@ async function handleSubAdminList(env) {
             items.set(wallet, {
                 wallet,
                 source: "environment",
-                note: "from env",
-                allowedContractTypes: null,
+                note: "from env; add in owner console to assign contract types",
+                allowedContractTypes: [],
                 contractTypesLocked: false,
                 createdAt: null,
                 updatedAt: null,
