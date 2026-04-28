@@ -8,6 +8,8 @@ coverage/
 !.env.example
 .dev.vars
 .wrangler/
+.codex_runtime/
+.codex_video_frames/
 backend/.wrangler/
 backend/dev.sqlite
 public/downloads/*.apk
