@@ -45,6 +45,28 @@ async function findUserById(env: Env, userId: string): Promise<UserRow | null> {
     .first<UserRow>();
 }
 
+async function ensureReferrerUser(env: Env, walletRaw: string): Promise<UserRow> {
+  const wallet = walletRaw.trim().toLowerCase();
+  if (!wallet) {
+    throw new Error("Referral wallet is required");
+  }
+
+  const existing = await findUserByWallet(env, wallet);
+  if (existing) {
+    return existing;
+  }
+
+  const now = nowIso();
+  const id = createId("usr");
+  await env.DB.prepare(
+    "INSERT INTO users (id, wallet, email, created_at, updated_at) VALUES (?, ?, NULL, ?, ?)"
+  )
+    .bind(id, wallet, now, now)
+    .run();
+
+  return { id, wallet };
+}
+
 async function bindReferral(env: Env, invitee: UserRow, inviter: UserRow): Promise<void> {
   if (invitee.id === inviter.id) {
     throw new Error("Cannot bind self referral");
@@ -222,8 +244,13 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     const invitee = await findUserByWallet(env, body.wallet);
     if (!invitee) return json({ error: "Invitee user not found" }, 404);
 
-    const inviter = await findUserByWallet(env, body.referralWallet);
-    if (!inviter) return badRequest("Referral wallet does not exist");
+    let inviter: UserRow;
+    try {
+      inviter = await ensureReferrerUser(env, body.referralWallet);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid referral wallet";
+      return badRequest(message);
+    }
 
     try {
       await bindReferral(env, invitee, inviter);

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { Activity, ArrowRightLeft, Battery, Signal, Wallet, Wifi } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Battery, Wifi, Signal, Activity, ArrowRightLeft, Wallet } from 'lucide-react';
+import { useState } from 'react';
 
 export default function AppPreview() {
   const [miningStatus, setMiningStatus] = useState<string>('产品预览区不会发起真实钱包或链上交易。');
@@ -134,7 +134,7 @@ export default function AppPreview() {
                   </button>
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={() => handlePreviewAction('请在 App 内完成机器码开通与设备激活后开始累计收益。')}
+                      onClick={() => handlePreviewAction('请在 App 内完成账号开通与设备激活后开始累计收益。')}
                       disabled={pendingAction}
                       className="py-3 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors disabled:opacity-60"
                     >

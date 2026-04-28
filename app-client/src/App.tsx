@@ -2,18 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  AppState,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    AppState,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import type { Address } from 'viem';
 import BottomNav, { type BottomTab } from './components/mobile/BottomNav';
@@ -26,41 +26,41 @@ import HomeTab from './components/mobile/HomeTab';
 import OnboardingFlow from './components/mobile/OnboardingFlow';
 import ProfileTab from './components/mobile/ProfileTab';
 import {
-  acceptContractAgreement,
-  acceptUserAgreement,
-  bindReferral,
-  createExchangeRequest,
-  createUser,
-  getAnnouncements,
-  getExchangeRequests,
-  getGasWalletBalance,
-  getReferralMembers,
-  getReferralSummary,
-  getSystemStatus,
-  getUser,
-  getUserByWallet,
-  getUserDetails,
-  isExchangeOrderPendingStatus,
-  markAnnouncementRead as markAnnouncementReadApi,
-  registerDevice,
-  reportDeviceHeartbeat,
-  type AnnouncementDto,
-  type ExchangeRequestDto,
-  type ReferralMemberDto,
-  type ReferralSummaryDto
+    acceptContractAgreement,
+    acceptUserAgreement,
+    bindReferral,
+    createExchangeRequest,
+    createUser,
+    getAnnouncements,
+    getExchangeRequests,
+    getGasWalletBalance,
+    getReferralMembers,
+    getReferralSummary,
+    getSystemStatus,
+    getUser,
+    getUserByWallet,
+    getUserDetails,
+    isExchangeOrderPendingStatus,
+    markAnnouncementRead as markAnnouncementReadApi,
+    registerDevice,
+    reportDeviceHeartbeat,
+    type AnnouncementDto,
+    type ExchangeRequestDto,
+    type ReferralMemberDto,
+    type ReferralSummaryDto
 } from './services/api';
 import {
-  claimRewardOnChain,
-  getSwapPriceOnChain,
-  getWalletAddress,
-  getWalletBalances,
-  registerMinerOnChain,
-  sendNativeTokenOnChain,
+    claimRewardOnChain,
+    getSwapPriceOnChain,
+    getWalletAddress,
+    getWalletBalances,
+    registerMinerOnChain,
+    sendNativeTokenOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
-  exportWalletPrivateKey,
-  importWalletPrivateKey
+    exportWalletPrivateKey,
+    importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
@@ -93,7 +93,7 @@ const translations = {
     appTitle: 'Coin Planet',
     subtitle: 'Device Center · BNB Smart Chain',
     flow1: 'Finish identity sync and inviter binding first',
-    flow2: 'Submit machine code for monthly-card activation, then setup miner',
+    flow2: 'Contact support to activate monthly card, then setup miner',
     flow3: 'Keep device online to accrue rewards; claim and swap anytime',
     profileId: 'ID',
     profileVip: 'VIP',
@@ -145,8 +145,8 @@ const translations = {
     guideTitle: 'Getting Started',
     guideReadyTitle: 'Daily Console Ready',
     guideDescInit: 'Complete identity sync and bind inviter wallet first, then unlock miner operations.',
-    guideDescMine: 'Send machine code to support to activate monthly card, then setup miner (admin gas top-up if needed).',
-    guideDescOnboarding: 'Finish inviter wallet and machine-code setup first. You can minimize the floating setup card and resume anytime.',
+    guideDescMine: 'Contact support to activate monthly card, then setup miner (admin gas top-up if needed).',
+    guideDescOnboarding: 'Finish inviter wallet setup first. You can minimize the floating setup card and resume anytime.',
     guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/swap.',
     guideStepIdentity: 'Identity Sync',
     guideStepMiner: 'Miner Activation',
@@ -155,12 +155,12 @@ const translations = {
     guideStepTodo: 'Next',
     guideStepLocked: 'Locked',
     guideStepActivation: 'Monthly Card Activation',
-    guideStepActivationStatus: 'Send machine code to support to activate',
+    guideStepActivationStatus: 'Contact support for monthly-card activation',
     guideStepActivationDone: 'Activated',
     guideContactSupport: '📞 Contact Support',
     guideEyebrow: 'Current Task',
     guideFocusLabel: 'Do this next',
-    guideDescActivate: 'Miner registered. Now send your machine code to support to activate the monthly card, then rewards will start accruing.',
+    guideDescActivate: 'Miner registered. Contact support to activate the monthly card, then rewards will start accruing.',
     guideCtaOnboarding: 'Continue Setup',
     guideCtaActivate: 'Already Activated – Setup Miner',
     agreementModalTitle: 'User Agreement',
@@ -268,8 +268,6 @@ const translations = {
     copyAddress: 'Copy',
     copied: 'Copied',
     copyFailed: 'Copy failed',
-    machineCodeTitle: 'Machine Code',
-    machineCodeHint: 'Please tell our support this code when purchasing a monthly card.',
     agreementTitleFallback: 'User Agreement',
     agreementIntro: 'Please read and accept the agreement to continue.',
     agreementAccept: 'I have read and agree',
@@ -326,7 +324,7 @@ const translations = {
     appTitle: 'Coin Planet',
     subtitle: '设备中心 · BNB 智能链',
     flow1: '请先完成身份同步并绑定推荐人钱包',
-    flow2: '提交机器码开通月卡后再进行矿机设置',
+    flow2: '联系客服开通月卡后再进行矿机设置',
     flow3: '保持手机在线累计收益，随时可领取与兑换',
     profileId: 'ID',
     profileVip: 'VIP',
@@ -378,8 +376,8 @@ const translations = {
     guideTitle: '启动引导',
     guideReadyTitle: '日常控制台已就绪',
     guideDescInit: '先完成身份同步并绑定推荐人钱包，再解锁后续矿机操作。',
-    guideDescMine: '将机器码提供给客服开通月卡后，再执行矿机设置（如缺 Gas 请联系管理员充值）。',
-    guideDescOnboarding: '请先完成推荐人钱包和机器码配置。悬浮框可收起，稍后继续。',
+    guideDescMine: '联系客服开通月卡后，再执行矿机设置（如缺 Gas 请联系管理员充值）。',
+    guideDescOnboarding: '请先完成推荐人钱包配置。悬浮框可收起，稍后继续。',
     guideDescReady: '矿机激活后保持手机在线，收益会按在线时长累计，可在底部菜单领取与兑换。',
     guideStepIdentity: '身份同步',
     guideStepMiner: '矿机激活',
@@ -388,12 +386,12 @@ const translations = {
     guideStepTodo: '下一步',
     guideStepLocked: '待解锁',
     guideStepActivation: '月卡激活',
-    guideStepActivationStatus: '将机器码提交给客服开通月卡',
+    guideStepActivationStatus: '联系客服开通月卡',
     guideStepActivationDone: '已激活',
     guideContactSupport: '📞 联系客服',
     guideEyebrow: '当前任务',
     guideFocusLabel: '现在最值得先完成',
-    guideDescActivate: '矿机已注册。请将机器码提供给客服申请开通月卡，激活后收益将自动开始累计。',
+    guideDescActivate: '矿机已注册。请联系客服申请开通月卡，激活后收益将自动开始累计。',
     guideCtaOnboarding: '继续配置',
     guideCtaActivate: '已开通月卡 → 继续矿机设置',
     agreementModalTitle: '用户协议',
@@ -501,8 +499,6 @@ const translations = {
     copyAddress: '复制',
     copied: '已复制',
     copyFailed: '复制失败',
-    machineCodeTitle: '机器码',
-    machineCodeHint: '请将此机器码告知客服以购买月卡。',
     agreementTitleFallback: '用户协议',
     agreementIntro: '请阅读并同意以下协议后继续使用。',
     agreementAccept: '我已阅读并同意',
@@ -639,17 +635,6 @@ function isStableDeviceIdFormat(deviceId: string): boolean {
   return /^mobile-[0-9a-f]{8}$/.test(deviceId.trim());
 }
 
-function deriveMachineCode(seed: string): string {
-  if (!seed) return '--------';
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash ^= seed.charCodeAt(i);
-    hash = (hash * 0x01000193) >>> 0;
-  }
-  const hex = hash.toString(16).toUpperCase().padStart(8, '0');
-  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
-}
-
 function shortHash(hash: string) {
   return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 }
@@ -730,7 +715,6 @@ export default function App() {
   const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
   const [inviterUser, setInviterUser] = useState<Awaited<ReturnType<typeof getUser>> | null>(null);
   const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
-  const [referralMode, setReferralMode] = useState<'direct' | 'team'>('direct');
   const [referralMembers, setReferralMembers] = useState<ReferralMemberDto[]>([]);
   const [referralMembersTotal, setReferralMembersTotal] = useState(0);
   const [referralMembersPage, setReferralMembersPage] = useState(1);
@@ -751,7 +735,6 @@ export default function App() {
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementAutoShownRef = useRef(false);
-  const machineCodeSyncedRef = useRef<string>('');
 
   const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
@@ -764,6 +747,9 @@ export default function App() {
   const serverDeviceId = (typeof userDetails?.devices?.[0]?.device_id === 'string' && userDetails.devices[0].device_id.trim())
     ? userDetails.devices[0].device_id.trim()
     : deviceId;
+  const serverHasRegisteredMiner = Boolean(
+    userDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
+  );
   const effectiveDeviceId = (serverDeviceId || deviceId).trim();
   const identityReady = Boolean(walletAddress && userId && effectiveDeviceId);
   const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
@@ -851,7 +837,6 @@ export default function App() {
     const raw = error instanceof Error ? error.message : '';
     const normalized = extractKnownErrorText(raw);
     const msg = normalized.toLowerCase();
-
     if (msg.includes('insufficient bnb') || msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
       return t.errInsufficientBnb;
     }
@@ -911,7 +896,6 @@ export default function App() {
       msg.includes('failed to fetch') ||
       msg.includes('timeout') ||
       msg.includes('api unavailable')
-    ) {
       return t.errNetwork;
     }
 
@@ -919,7 +903,6 @@ export default function App() {
       return t.errNetwork;
     }
 
-    return normalized;
   };
 
   const shortAddress = useMemo(() => {
@@ -927,7 +910,6 @@ export default function App() {
     return `${serverWalletAddress.slice(0, 6)}...${serverWalletAddress.slice(-4)}`;
   }, [serverWalletAddress, t.notInit]);
 
-  const handleCopyAddress = async () => {
     if (!walletAddress) return;
     const ok = await copyToClipboard(walletAddress);
     setCopyState(ok ? 'copied' : 'failed');
@@ -945,21 +927,6 @@ export default function App() {
     if (!serverUserId) return '----';
     return serverUserId.replace(/[^0-9]/g, '').slice(0, 4).padEnd(4, '0');
   }, [serverUserId]);
-
-  const machineCode = useMemo(() => {
-    const fromServer = (userDetails as { machineCode?: string | null } | null)?.machineCode;
-    if (fromServer && typeof fromServer === 'string' && fromServer.trim()) {
-      return fromServer.trim();
-    }
-    return deriveMachineCode(effectiveDeviceId || '');
-  }, [userDetails, effectiveDeviceId]);
-
-  const machineCodeForUpload = useMemo(() => {
-    if (!isStableDeviceIdFormat(effectiveDeviceId)) {
-      return undefined;
-    }
-    return machineCode;
-  }, [effectiveDeviceId, machineCode]);
 
   const expireDate = useMemo(() => {
     if (!userDetails?.contractEndAt) {
@@ -1073,6 +1040,11 @@ export default function App() {
   }, [rewardRows, systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
 
   const totalOnlineMinutes = useMemo(() => {
+    const serverTotalSeconds = Number(userDetails?.totalOnlineSeconds ?? NaN);
+    if (Number.isFinite(serverTotalSeconds) && serverTotalSeconds > 0) {
+      return Math.max(0, Math.floor(serverTotalSeconds / 60));
+    }
+
     const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
     const systemRate = Number(systemStatus?.rewardRateUsdtPerHour ?? 0);
     const defaultRate = profileRate > 0 ? profileRate : Number.isFinite(systemRate) && systemRate > 0 ? systemRate : 0.084;
@@ -1084,7 +1056,7 @@ export default function App() {
       minutes += (row.rewardUsdt / rate) * 60;
     }
     return Math.max(0, Math.floor(minutes));
-  }, [rewardRows, systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
+  }, [rewardRows, systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour, userDetails?.totalOnlineSeconds]);
 
   const onlineState = identityReady && (userDetails?.onlineStatus ?? 'offline') === 'online' ? t.online : t.offline;
 
@@ -1571,13 +1543,12 @@ export default function App() {
 
   const refreshReferralMembers = async (
     nextUserId: string,
-    mode: 'direct' | 'team',
     page: number,
   ) => {
     if (!nextUserId) return;
     setReferralMembersLoading(true);
     setReferralMembersError('');
-    const result = await getReferralMembers(nextUserId, mode, page, REFERRAL_PAGE_SIZE);
+    const result = await getReferralMembers(nextUserId, 'direct', page, REFERRAL_PAGE_SIZE);
     if (!result) {
       setReferralMembers([]);
       setReferralMembersTotal(0);
@@ -1677,7 +1648,7 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      let user = await createUser(address, pendingReferralWallet || undefined, machineCodeForUpload).catch(async (err) => {
+      let user = await createUser(address, pendingReferralWallet || undefined).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1742,25 +1713,14 @@ export default function App() {
   }, [serverDeviceId, deviceId]);
 
   useEffect(() => {
-    if (!walletAddress || !userId || !machineCodeForUpload) return;
-    const syncKey = `${walletAddress.toLowerCase()}|${machineCodeForUpload}`;
-    if (machineCodeSyncedRef.current === syncKey) return;
-
-    let cancelled = false;
-    void createUser(walletAddress, undefined, machineCodeForUpload)
-      .then(() => {
-        if (!cancelled) {
-          machineCodeSyncedRef.current = syncKey;
-        }
-      })
-      .catch(() => {
-        // Ignore transient sync errors; next polling cycle will retry.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [walletAddress, userId, machineCodeForUpload]);
+    if (!serverHasRegisteredMiner) return;
+    if (!minerReady) {
+      void markMinerReady();
+    }
+    if (status.startsWith(t.minerRecoverFail) || status.startsWith(t.minerFail)) {
+      setStatus(t.minerRecovered);
+    }
+  }, [minerReady, serverHasRegisteredMiner, status, t.minerFail, t.minerRecoverFail, t.minerRecovered]);
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -1949,8 +1909,8 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
-    void refreshReferralMembers(userId, referralMode, referralMembersPage);
-  }, [userId, referralMode, referralMembersPage, t.referralMembersError]);
+    void refreshReferralMembers(userId, referralMembersPage);
+  }, [userId, referralMembersPage, t.referralMembersError]);
 
   const startMining = async () => {
     if (!identityReady) {
@@ -1980,7 +1940,6 @@ export default function App() {
         deviceId: effectiveDeviceId,
         hashrate: finalHashrate,
         wallet: walletAddress,
-        machineCode: machineCodeForUpload,
       });
 
       await markMinerReady();
@@ -2009,12 +1968,45 @@ export default function App() {
             deviceId: effectiveDeviceId,
             hashrate: finalHashrate,
             wallet: walletAddress,
-            machineCode: machineCodeForUpload,
           });
           await markMinerReady();
           setStatus(t.minerRecovered);
         } catch (fallbackError) {
+          const fallbackRaw = fallbackError instanceof Error ? fallbackError.message : '';
           const fallbackMsg = toFriendlyErrorMessage(fallbackError);
+          const fallbackCombined = `${fallbackRaw} ${fallbackMsg}`.toLowerCase();
+          const needsIdentityRecovery =
+            fallbackCombined.includes('user does not belong to signed wallet')
+            || fallbackCombined.includes('wallet mismatch')
+            || fallbackMsg === t.errAuthInvalid;
+
+          if (needsIdentityRecovery) {
+            try {
+              const currentWallet = await getWalletAddress();
+              const currentUser = await getUserByWallet(currentWallet);
+
+              if (currentUser) {
+                setUserId(currentUser.id);
+                await AsyncStorage.setItem(USER_ID_KEY, currentUser.id).catch(() => null);
+
+                await registerDevice({
+                  userId: currentUser.id,
+                  deviceId: effectiveDeviceId,
+                  hashrate: finalHashrate,
+                  wallet: currentWallet,
+                });
+
+                const details = await getUserDetails(currentUser.id);
+                setUserDetails(details);
+                await markMinerReady();
+                setStatus(t.minerRecovered);
+                return;
+              }
+            } catch {
+              // fall through to the original recovery error below
+            }
+          }
+
           setStatus(`${t.minerRecoverFail}${fallbackMsg}`);
         }
       } else {
@@ -2406,7 +2398,6 @@ export default function App() {
         visible={onboardingChecked && onboardingVisible}
         minimized={onboardingMinimized}
         lang={lang}
-        machineCode={machineCode}
         initialReferralWallet={pendingReferralWallet}
         onComplete={handleOnboardingComplete}
         onMinimize={handleMinimizeOnboarding}
@@ -2504,7 +2495,6 @@ export default function App() {
               setActiveTab={setActiveTab}
               onCopyAddress={handleCopyAddress}
               copyState={copyState}
-              machineCode={machineCode}
               bnbBalance={bnbBalance}
               superBalance={superBalance}
               usdtBalance={usdtBalance}
@@ -2600,7 +2590,6 @@ export default function App() {
               walletAddress={serverWalletAddress}
               expireDate={expireDate}
               contractExpired={contractExpired}
-              machineCode={machineCode}
               transferTo={transferTo}
               setTransferTo={setTransferTo}
               transferAmount={transferAmount}
@@ -2624,16 +2613,11 @@ export default function App() {
               } : null}
               referralSummary={referralSummary}
               referralMembers={referralMembers}
-              referralMembersMode={referralMode}
               referralMembersTotal={referralMembersTotal}
               referralMembersPage={referralMembersPage}
               referralMembersPageSize={REFERRAL_PAGE_SIZE}
               referralMembersLoading={referralMembersLoading}
               referralMembersError={referralMembersError}
-              onReferralModeChange={(mode) => {
-                setReferralMode(mode);
-                setReferralMembersPage(1);
-              }}
               onReferralPageChange={(nextPage) => setReferralMembersPage(nextPage)}
               onCheckUpdate={() => {
                 void manualCheckForUpdateFull(APP_VERSION, lang);

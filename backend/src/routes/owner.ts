@@ -2,7 +2,7 @@ import { getAddress, isAddress } from "ethers";
 import { writeOwnerAudit } from "../lib/audit";
 import { createId, nowIso } from "../lib/id";
 import { refreshUserContractStateFromLocks } from "../lib/locks";
-import { getPrimaryOwnerWallet, isOwnerWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
+import { getAdminActorRole, getPrimaryOwnerWallet, isAdminActorWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json, notFound, unauthorized } from "../lib/response";
 import { readSystemStatus } from "../lib/system";
@@ -20,6 +20,20 @@ async function parseJson<T = Record<string, unknown>>(request: Request): Promise
   } catch {
     return null;
   }
+}
+
+async function ensureSubAdminTable(env: Env): Promise<void> {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS owner_sub_admins (
+      wallet TEXT PRIMARY KEY,
+      note TEXT,
+      created_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1
+    )`
+  ).run();
 }
 
 function normalizeAddr(addr: string): string | null {
@@ -48,7 +62,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   if (!body?.wallet || !body?.signature || !body?.nonce || body?.ts === undefined) {
     return badRequest("wallet, signature, nonce, ts required");
   }
-  if (!(await isOwnerWallet(env, body.wallet))) return unauthorized("Not owner wallet");
+  if (!(await isAdminActorWallet(env, body.wallet))) return unauthorized("Not admin wallet");
 
   // Nonce uniqueness (reuse KV)
   const kvKey = `owner-login-nonce:${body.nonce}`;
@@ -56,6 +70,9 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
   const v = verifyLoginSignature(body.wallet, body.signature, body.nonce, body.ts);
   if (!v.valid) return unauthorized(v.error || "Signature invalid");
+
+  const role = await getAdminActorRole(env, body.wallet);
+  if (!role) return unauthorized("Not admin wallet");
 
   await env.CACHE.put(kvKey, "1", { expirationTtl: 600 });
 
@@ -76,7 +93,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     .run();
 
   await writeOwnerAudit(env, { action: "auth.login", actorWallet: body.wallet, request });
-  return json({ token, expiresAt, wallet: body.wallet.toLowerCase() });
+  return json({ token, expiresAt, wallet: body.wallet.toLowerCase(), role });
 }
 
 // ---- Overview ----
@@ -756,6 +773,137 @@ async function handleOwnershipTransfer(request: Request, env: Env, actorWallet: 
   return json({ ok: true, previousOwner: currentOwner.toLowerCase(), newOwnerWallet: nextOwner, updatedAt: now });
 }
 
+// ---- SubAdmin management (owner-only) ----
+
+type SubAdminItem = {
+  wallet: string;
+  source: "database" | "environment";
+  note: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  canRemove: boolean;
+};
+
+async function handleSubAdminList(env: Env): Promise<Response> {
+  await ensureSubAdminTable(env);
+  const dbRows = await env.DB.prepare(
+    `SELECT wallet, note, created_at, updated_at
+     FROM owner_sub_admins
+     WHERE enabled = 1
+     ORDER BY updated_at DESC`
+  ).all<{ wallet: string; note: string | null; created_at: string; updated_at: string }>();
+
+  const items = new Map<string, SubAdminItem>();
+  for (const row of dbRows.results ?? []) {
+    const wallet = row.wallet.toLowerCase();
+    items.set(wallet, {
+      wallet,
+      source: "database",
+      note: row.note,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      canRemove: true,
+    });
+  }
+
+  const envWallets = [env.SUB_ADMIN_ADDRESSES, env.ADMIN_ADDRESSES]
+    .filter(Boolean)
+    .join(",")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const wallet of envWallets) {
+    if (!items.has(wallet)) {
+      items.set(wallet, {
+        wallet,
+        source: "environment",
+        note: "from env",
+        createdAt: null,
+        updatedAt: null,
+        canRemove: false,
+      });
+    }
+  }
+
+  return json({ items: Array.from(items.values()) });
+}
+
+async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string): Promise<Response> {
+  await ensureSubAdminTable(env);
+  const body = await parseJson<{ wallet?: string; note?: string }>(request);
+  if (!body?.wallet) return badRequest("wallet required");
+
+  const wallet = normalizeAddr(body.wallet);
+  if (!wallet) return badRequest("Invalid wallet");
+
+  const ownerWallet = await getPrimaryOwnerWallet(env);
+  if (ownerWallet && wallet.toLowerCase() === ownerWallet.toLowerCase()) {
+    return badRequest("Owner wallet cannot be added as subadmin");
+  }
+
+  const now = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO owner_sub_admins (wallet, note, created_by, updated_by, created_at, updated_at, enabled)
+     VALUES (?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT(wallet) DO UPDATE SET
+       note = excluded.note,
+       updated_by = excluded.updated_by,
+       updated_at = excluded.updated_at,
+       enabled = 1`
+  )
+    .bind(wallet, body.note?.trim() || null, actorWallet.toLowerCase(), actorWallet.toLowerCase(), now, now)
+    .run();
+
+  await env.DB.prepare(
+    `INSERT INTO users (id, wallet, email, role, created_at, updated_at)
+     VALUES (?, ?, NULL, 'subadmin', ?, ?)
+     ON CONFLICT(wallet) DO UPDATE SET role='subadmin', updated_at=excluded.updated_at`
+  )
+    .bind(createId("usr"), wallet, now, now)
+    .run();
+
+  await writeOwnerAudit(env, {
+    action: "subadmin.add",
+    actorWallet,
+    targetWallet: wallet,
+    payload: { note: body.note?.trim() || null },
+    request,
+  });
+
+  return json({ ok: true, wallet });
+}
+
+async function handleSubAdminRemove(request: Request, env: Env, actorWallet: string, walletParam: string): Promise<Response> {
+  await ensureSubAdminTable(env);
+  const wallet = normalizeAddr(decodeURIComponent(walletParam));
+  if (!wallet) return badRequest("Invalid wallet");
+
+  const ownerWallet = await getPrimaryOwnerWallet(env);
+  if (ownerWallet && wallet.toLowerCase() === ownerWallet.toLowerCase()) {
+    return badRequest("Owner wallet cannot be removed");
+  }
+
+  const now = nowIso();
+  const update = await env.DB.prepare(
+    `UPDATE owner_sub_admins
+     SET enabled = 0, updated_by = ?, updated_at = ?
+     WHERE wallet = ? AND enabled = 1`
+  )
+    .bind(actorWallet.toLowerCase(), now, wallet)
+    .run();
+
+  await writeOwnerAudit(env, {
+    action: "subadmin.remove",
+    actorWallet,
+    targetWallet: wallet,
+    payload: { changed: Number(update.meta?.changes ?? 0) > 0 },
+    request,
+  });
+
+  return json({ ok: true, wallet, removed: Number(update.meta?.changes ?? 0) > 0 });
+}
+
 // ---- Router ----
 
 export async function handleOwner(request: Request, env: Env, pathParts: string[]): Promise<Response> {
@@ -769,6 +917,8 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
   const a = await auth(request, env, sensitive);
   if (!a.ok) return a.response;
   const actor = a.wallet;
+  const primaryOwner = await getPrimaryOwnerWallet(env);
+  const isPrimaryOwner = !primaryOwner || actor.toLowerCase() === primaryOwner.toLowerCase();
 
   if (pathParts[0] === "auth" && pathParts[1] === "logout" && request.method === "POST") {
     await env.DB.prepare(
@@ -776,6 +926,10 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
     ).bind(actor).run();
     await writeOwnerAudit(env, { action: "auth.logout", actorWallet: actor, request });
     return json({ ok: true });
+  }
+
+  if (!isPrimaryOwner) {
+    return unauthorized("Only primary owner can access owner console APIs");
   }
 
   if (pathParts[0] === "overview" && request.method === "GET") return handleOverview(env);
@@ -819,6 +973,12 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
 
   if (pathParts[0] === "ownership" && pathParts[1] === "transfer" && request.method === "POST") {
     return handleOwnershipTransfer(request, env, actor);
+  }
+
+  if (pathParts[0] === "subadmins") {
+    if (request.method === "GET" && pathParts.length === 1) return handleSubAdminList(env);
+    if (request.method === "POST" && pathParts.length === 1) return handleSubAdminAdd(request, env, actor);
+    if (request.method === "DELETE" && pathParts.length === 2) return handleSubAdminRemove(request, env, actor, pathParts[1]);
   }
 
   if (pathParts[0] === "audit" && request.method === "GET") return handleAuditList(request, env);

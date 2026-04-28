@@ -14,6 +14,7 @@
     "cf:bootstrap": "node ./scripts/bootstrap-cloudflare.mjs",
     "db:migrate": "wrangler d1 execute coin-planet-db --file=./db/schema.sql",
     "db:migrate:local": "wrangler d1 execute coin-planet-db --local --file=./db/schema.sql",
+    "db:clean-dirty": "node ./scripts/clean-dirty-data.mjs",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"

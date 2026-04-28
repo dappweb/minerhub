@@ -18,20 +18,8 @@ CREATE TABLE IF NOT EXISTS devices (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS claims (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  amount TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  tx_hash TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
 CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet);
 CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
-CREATE INDEX IF NOT EXISTS idx_claims_user_id ON claims(user_id);
 
 CREATE TABLE IF NOT EXISTS gas_quotes (
   id TEXT PRIMARY KEY,
@@ -177,23 +165,15 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   total_reward_usdt TEXT NOT NULL DEFAULT '0',
   total_reward_super TEXT NOT NULL DEFAULT '0',
   last_seen_at TEXT,
+  last_heartbeat_at TEXT,
+  last_reward_accrued_at TEXT,
+  total_online_seconds INTEGER NOT NULL DEFAULT 0,
   online_status TEXT NOT NULL DEFAULT 'offline',
   offline_alerted_at TEXT,
   notes TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS sub_accounts (
-  id TEXT PRIMARY KEY,
-  owner_user_id TEXT NOT NULL,
-  child_user_id TEXT NOT NULL,
-  label TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (owner_user_id) REFERENCES users(id),
-  FOREIGN KEY (child_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS payout_wallets (
@@ -236,10 +216,12 @@ CREATE TABLE IF NOT EXISTS reward_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_parent_user_id ON customer_profiles(parent_user_id);
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_contract_active ON customer_profiles(contract_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_profiles_machine_code_normalized
+  ON customer_profiles(LOWER(TRIM(machine_code)))
+  WHERE TRIM(COALESCE(machine_code, '')) <> '';
 CREATE INDEX IF NOT EXISTS idx_announcements_publish_at ON announcements(publish_at);
 CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published, is_pinned);
 CREATE INDEX IF NOT EXISTS idx_announcement_reads_user_id ON announcement_reads(user_id);
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_owner_user_id ON sub_accounts(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_payout_wallets_user_id ON payout_wallets(user_id);
 CREATE INDEX IF NOT EXISTS idx_device_status_history_device_id ON device_status_history(device_id);
 CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_id ON reward_ledger(user_id);
@@ -408,6 +390,18 @@ CREATE TABLE IF NOT EXISTS owner_mint_counters (
   total_super TEXT NOT NULL DEFAULT '0',
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS owner_sub_admins (
+  wallet TEXT PRIMARY KEY,
+  note TEXT,
+  created_by TEXT,
+  updated_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sub_admins_enabled ON owner_sub_admins(enabled);
 
 -- === Referral system ===
 CREATE TABLE IF NOT EXISTS referral_edges (

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-abstract contract AdminAccess is Ownable {
+abstract contract AdminAccess is Initializable, OwnableUpgradeable {
     mapping(address => bool) private admins;
     mapping(address => uint256) private adminIndexPlusOne;
     address[] private adminList;
@@ -16,8 +17,12 @@ abstract contract AdminAccess is Ownable {
         _;
     }
 
-    constructor() {
-        _addAdmin(_msgSender(), address(0));
+    function __AdminAccess_init(address initialOwner) internal onlyInitializing {
+        __Ownable_init();
+        if (initialOwner != _msgSender()) {
+            _transferOwnership(initialOwner);
+        }
+        _addAdmin(initialOwner, address(0));
     }
 
     function isAdmin(address account) public view returns (bool) {

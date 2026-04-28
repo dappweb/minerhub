@@ -14,12 +14,29 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 9088;
 const CHAIN_ID = process.env.CHAIN_ID || '56';
+const HEARTBEAT_CONTINUITY_MS = 90_000;
+const MAX_HEARTBEAT_REWARD_MS = 90_000;
 
 // ─── 数据库初始化 ──────────────────────────────────────────────────────────────
 const dbPath = join(__dirname, 'dev.sqlite');
 const db = new Database(dbPath);
 const schema = readFileSync(join(__dirname, 'db', 'schema.sql'), 'utf8');
 db.exec(schema);
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((row) => row.name === column)) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
+function ensureHeartbeatColumns() {
+  ensureColumn('customer_profiles', 'last_heartbeat_at', 'TEXT');
+  ensureColumn('customer_profiles', 'last_reward_accrued_at', 'TEXT');
+  ensureColumn('customer_profiles', 'total_online_seconds', 'INTEGER NOT NULL DEFAULT 0');
+}
+
+ensureHeartbeatColumns();
 
 // ─── 工具函数 ──────────────────────────────────────────────────────────────────
 function createId(prefix) {
@@ -87,13 +104,14 @@ function findUserById(userId) {
 }
 
 function ensureCustomerProfile(userId, machineCode = null) {
+  ensureHeartbeatColumns();
   const now = nowIso();
   db.prepare(
     `INSERT OR IGNORE INTO customer_profiles (
       user_id, machine_code, contract_term_days, monthly_card_days, contract_active,
       activation_status, exchange_auto_enabled, reward_rate_usdt_per_hour,
-      total_reward_usdt, total_reward_super, online_status, created_at, updated_at
-    ) VALUES (?, ?, 1095, 30, 0, 'pending', 1, '0.084', '0', '0', 'offline', ?, ?)`
+      total_reward_usdt, total_reward_super, total_online_seconds, online_status, created_at, updated_at
+    ) VALUES (?, ?, 1095, 30, 0, 'pending', 1, '0.084', '0', '0', 0, 'offline', ?, ?)`
   ).run(userId, machineCode, now, now);
 
   if (machineCode) {
@@ -245,6 +263,7 @@ function getUserDetails(userId) {
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
+      COALESCE(cp.total_online_seconds, 0) AS totalOnlineSeconds,
       cp.last_seen_at AS lastSeenAt,
       COALESCE(cp.online_status, 'offline') AS onlineStatus,
       cp.agreement_accepted_at AS agreementAcceptedAt,
@@ -274,6 +293,128 @@ function getUserDetails(userId) {
     payoutWallets,
     agreementAcceptedVersion: null,
   };
+}
+
+function updateHeartbeatPresence(userId, deviceId, deviceRecordId, hashrate, heartbeatAt, note) {
+  db.prepare(
+    `UPDATE customer_profiles
+     SET last_seen_at = ?,
+         last_heartbeat_at = ?,
+         last_reward_accrued_at = ?,
+         online_status = 'online',
+         updated_at = ?
+     WHERE user_id = ?`
+  ).run(heartbeatAt, heartbeatAt, heartbeatAt, heartbeatAt, userId);
+
+  if (deviceRecordId) {
+    db.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
+      .run(heartbeatAt, deviceRecordId);
+  }
+
+  db.prepare(
+    `INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
+     VALUES (?, ?, ?, 'active', ?, ?, ?)`
+  ).run(createId('dst'), deviceId, userId, Number(hashrate ?? 0), heartbeatAt, note);
+}
+
+function accrueHeartbeatReward(userId, deviceId, heartbeatAt) {
+  ensureCustomerProfile(userId);
+  const device = db.prepare('SELECT id, hashrate FROM devices WHERE user_id = ? AND device_id = ?')
+    .get(userId, deviceId);
+
+  if (!device) {
+    db.prepare(
+      `UPDATE customer_profiles
+       SET last_seen_at = ?, last_heartbeat_at = ?, online_status = 'online', updated_at = ?
+       WHERE user_id = ?`
+    ).run(heartbeatAt, heartbeatAt, heartbeatAt, userId);
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: 'device_not_found' };
+  }
+
+  const profile = db.prepare(
+    `SELECT contract_active, contract_end_at, reward_rate_usdt_per_hour, last_heartbeat_at
+     FROM customer_profiles WHERE user_id = ?`
+  ).get(userId);
+
+  const heartbeatMs = new Date(heartbeatAt).getTime();
+  const previousHeartbeatMs = profile?.last_heartbeat_at ? new Date(profile.last_heartbeat_at).getTime() : NaN;
+  if (!profile?.last_heartbeat_at || Number.isNaN(previousHeartbeatMs)) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:first_seen');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: 'first_heartbeat' };
+  }
+
+  const heartbeatGapMs = Math.max(0, heartbeatMs - previousHeartbeatMs);
+  if (heartbeatGapMs <= 0) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:duplicate');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'duplicate_heartbeat' };
+  }
+
+  if (heartbeatGapMs > HEARTBEAT_CONTINUITY_MS) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:reconnected');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: 'reconnected_after_gap' };
+  }
+
+  if (Number(profile.contract_active ?? 0) !== 1) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:contract_inactive');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'contract_inactive' };
+  }
+
+  if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < heartbeatMs) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:contract_expired');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'contract_expired' };
+  }
+
+  const accruedMs = Math.min(heartbeatGapMs, MAX_HEARTBEAT_REWARD_MS);
+  const accruedSeconds = Math.max(0, Math.floor(accruedMs / 1000));
+  const rate = Number(profile.reward_rate_usdt_per_hour ?? 0.084);
+  const hashrateFactor = Math.max(1, Number(device.hashrate ?? 0) / 1000);
+  const rewardUsdt = (accruedMs / 3_600_000) * rate * hashrateFactor;
+  if (!Number.isFinite(rewardUsdt) || rewardUsdt <= 0) {
+    updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:no_reward');
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'no_reward' };
+  }
+
+  const rewardSuper = 0;
+  db.prepare(
+    `INSERT INTO reward_ledger (
+      id, user_id, device_id, reward_usdt, reward_super, rate_usdt_per_hour,
+      accrued_from, accrued_to, source, note, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'heartbeat', ?, ?, ?)`
+  ).run(
+    createId('rwd'),
+    userId,
+    deviceId,
+    rewardUsdt.toFixed(6),
+    rewardSuper.toFixed(6),
+    String(rate),
+    profile.last_heartbeat_at,
+    heartbeatAt,
+    `continuous heartbeat reward (${accruedSeconds}s, hashrate=${device.hashrate})`,
+    heartbeatAt,
+    heartbeatAt,
+  );
+
+  db.prepare(
+    `UPDATE customer_profiles
+     SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
+         total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) + ?, 6) AS TEXT),
+         last_seen_at = ?,
+         last_heartbeat_at = ?,
+         last_reward_accrued_at = ?,
+         total_online_seconds = COALESCE(total_online_seconds, 0) + ?,
+         online_status = 'online',
+         updated_at = ?
+     WHERE user_id = ?`
+  ).run(rewardUsdt, rewardSuper, heartbeatAt, heartbeatAt, heartbeatAt, accruedSeconds, heartbeatAt, userId);
+
+  db.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
+    .run(heartbeatAt, device.id);
+  db.prepare(
+    `INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
+     VALUES (?, ?, ?, 'active', ?, ?, ?)`
+  ).run(createId('dst'), deviceId, userId, Number(device.hashrate ?? 0), heartbeatAt, 'heartbeat:reward');
+
+  return { rewardUsdt, rewardSuper, accruedSeconds, continuous: true, reason: 'reward_accrued' };
 }
 
 // ─── HTTP 服务 ─────────────────────────────────────────────────────────────────
@@ -423,12 +564,51 @@ const server = http.createServer(async (req, res) => {
       try {
         const id = createId('dev');
         const now = nowIso();
-        db.prepare('INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(id, body.userId, body.deviceId, body.hashrate, 'active', now, now);
-        return sendJson(res, { id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: 'active' }, 201);
+        ensureCustomerProfile(body.userId);
+        const existing = db.prepare('SELECT id FROM devices WHERE user_id = ? AND device_id = ?')
+          .get(body.userId, body.deviceId);
+        if (existing) {
+          db.prepare("UPDATE devices SET hashrate = ?, status = 'active', updated_at = ? WHERE id = ?")
+            .run(body.hashrate, now, existing.id);
+        } else {
+          db.prepare('INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(id, body.userId, body.deviceId, body.hashrate, 'active', now, now);
+        }
+        db.prepare(
+          `UPDATE customer_profiles
+           SET last_seen_at = ?, online_status = 'online', updated_at = ?
+           WHERE user_id = ?`
+        ).run(now, now, body.userId);
+        return sendJson(res, { id: existing?.id ?? id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: 'active' }, existing ? 200 : 201);
       } catch (e) {
         return sendJson(res, { error: e.message }, 500);
       }
+    }
+    if (req.method === 'POST' && pathParts.length === 2 && pathParts[1] === 'heartbeat') {
+      const body = await readBody(req);
+      const auth = verifyAuth(req.headers, url.pathname, body);
+      if (!auth.valid) return sendJson(res, { error: auth.error }, 401);
+      if (!body?.userId) return sendJson(res, { error: 'userId is required' }, 400);
+      const user = findUserById(body.userId);
+      if (!user) return sendJson(res, { error: 'User not found' }, 404);
+      if (user.wallet.toLowerCase() !== auth.wallet.toLowerCase()) {
+        return sendJson(res, { error: 'User does not belong to signed wallet' }, 401);
+      }
+      if (body.wallet && body.wallet.toLowerCase() !== auth.wallet.toLowerCase()) {
+        return sendJson(res, { error: 'Wallet mismatch' }, 400);
+      }
+
+      const heartbeatAt = nowIso();
+      const reward = accrueHeartbeatReward(body.userId, pathParts[0], heartbeatAt);
+      if (typeof body.status === 'string') {
+        const device = db.prepare('SELECT id FROM devices WHERE user_id = ? AND device_id = ?')
+          .get(body.userId, pathParts[0]);
+        if (device) {
+          db.prepare('UPDATE devices SET status = ?, updated_at = ? WHERE id = ?')
+            .run(body.status, heartbeatAt, device.id);
+        }
+      }
+      return sendJson(res, { ok: true, deviceId: pathParts[0], userId: body.userId, heartbeatAt, reward });
     }
     if (req.method === 'GET' && pathParts.length === 1) {
       const items = db.prepare('SELECT id, user_id, device_id, hashrate, status FROM devices WHERE user_id = ? ORDER BY created_at DESC')
@@ -441,31 +621,16 @@ const server = http.createServer(async (req, res) => {
   // ── /api/claims ─────────────────────────────────────────────────────────────
   if (scope === 'claims') {
     if (req.method === 'POST' && pathParts.length === 0) {
-      const body = await readBody(req);
-      const auth = verifyAuth(req.headers, url.pathname, body);
-      if (!auth.valid) return sendJson(res, { error: auth.error }, 401);
-      if (!body?.userId || !body.amount) {
-        return sendJson(res, { error: 'userId and amount are required' }, 400);
-      }
-      try {
-        const id = createId('clm');
-        const now = nowIso();
-        db.prepare('INSERT INTO claims (id, user_id, amount, status, tx_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(id, body.userId, body.amount, 'pending', null, now, now);
-        return sendJson(res, { id, userId: body.userId, amount: body.amount, status: 'pending' }, 201);
-      } catch (e) {
-        return sendJson(res, { error: e.message }, 500);
-      }
+      return sendJson(res, {
+        error: 'Deprecated endpoint. Use /api/claims/reward-withdraw or /api/claims/exchange-request instead.',
+        code: 'CLAIMS_LEGACY_DEPRECATED',
+      }, 410);
     }
-    if (req.method === 'GET' && pathParts.length === 1) {
-      const claim = db.prepare('SELECT id, user_id, amount, status, tx_hash FROM claims WHERE id = ?').get(pathParts[0]);
-      if (!claim) return sendJson(res, { error: 'Claim not found' }, 404);
-      return sendJson(res, claim);
-    }
-    if (req.method === 'GET' && pathParts.length === 2 && pathParts[0] === 'user') {
-      const items = db.prepare('SELECT id, user_id, amount, status, tx_hash FROM claims WHERE user_id = ? ORDER BY created_at DESC')
-        .all(pathParts[1]);
-      return sendJson(res, { items });
+    if (req.method === 'GET') {
+      return sendJson(res, {
+        error: 'Legacy claims history has been retired. Use reward-withdraw or exchange-request records instead.',
+        code: 'CLAIMS_HISTORY_RETIRED',
+      }, 410);
     }
     return sendJson(res, { error: 'Unsupported claims route' }, 404);
   }

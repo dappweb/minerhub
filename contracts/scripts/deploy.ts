@@ -1,5 +1,5 @@
 ﻿import * as fs from "fs";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import * as path from "path";
 
 function parseAdminAddresses(raw: string | undefined): string[] {
@@ -30,10 +30,15 @@ async function main() {
 
 	console.log("Deploying SUPER Token...");
 	const SuperTokenFactory = await ethers.getContractFactory("SUPER");
-	const superToken = await SuperTokenFactory.deploy();
+	const superToken = await upgrades.deployProxy(SuperTokenFactory, [deployer.address], {
+		initializer: "initialize",
+		kind: "uups",
+	});
 	await superToken.waitForDeployment();
 	const superAddress = await superToken.getAddress();
+	const superImplementation = await upgrades.erc1967.getImplementationAddress(superAddress);
 	console.log("SUPER Token deployed:", superAddress);
+	console.log("SUPER implementation:", superImplementation);
 
 	const initialSuperMint = ethers.parseEther("600000000");
 	const mintTx = await superToken.mint(deployer.address, initialSuperMint);
@@ -57,17 +62,27 @@ async function main() {
 
 	console.log("\nDeploying MiningPool...");
 	const MiningPool = await ethers.getContractFactory("MiningPool");
-	const miningPool = await MiningPool.deploy(superAddress);
+	const miningPool = await upgrades.deployProxy(MiningPool, [superAddress, deployer.address], {
+		initializer: "initialize",
+		kind: "uups",
+	});
 	await miningPool.waitForDeployment();
 	const miningPoolAddress = await miningPool.getAddress();
+	const miningPoolImplementation = await upgrades.erc1967.getImplementationAddress(miningPoolAddress);
 	console.log("MiningPool deployed:", miningPoolAddress);
+	console.log("MiningPool implementation:", miningPoolImplementation);
 
 	console.log("\nDeploying SwapRouter...");
 	const SwapRouter = await ethers.getContractFactory("SwapRouter");
-	const swapRouter = await SwapRouter.deploy(superAddress, usdtAddress);
+	const swapRouter = await upgrades.deployProxy(SwapRouter, [superAddress, usdtAddress, deployer.address], {
+		initializer: "initialize",
+		kind: "uups",
+	});
 	await swapRouter.waitForDeployment();
 	const swapRouterAddress = await swapRouter.getAddress();
+	const swapRouterImplementation = await upgrades.erc1967.getImplementationAddress(swapRouterAddress);
 	console.log("SwapRouter deployed:", swapRouterAddress);
+	console.log("SwapRouter implementation:", swapRouterImplementation);
 
 	console.log("\nSetting up contract permissions...");
 	await (await superToken.addMinter(miningPoolAddress)).wait();
@@ -108,6 +123,11 @@ async function main() {
 			USDT_Mock: usdtAddress,
 			MiningPool: miningPoolAddress,
 			SwapRouter: swapRouterAddress,
+		},
+		implementations: {
+			SUPER: superImplementation,
+			MiningPool: miningPoolImplementation,
+			SwapRouter: swapRouterImplementation,
 		},
 		initialization: {
 			liquiditySuper: ethers.formatEther(initialLiquiditySuper),

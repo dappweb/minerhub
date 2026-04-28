@@ -34,6 +34,8 @@ type AdminDashboardProps = {
   signMessageAsync: (walletAddress: string, message: string) => Promise<string>;
 };
 
+type AdminSessionRole = 'owner' | 'subadmin';
+
 const HASHRATE_UNIT = 1000;
 
 function formatHashrate(hashrate: bigint): string {
@@ -81,6 +83,17 @@ function shortWallet(wallet: string): string {
   if (!wallet) return '--';
   if (wallet.length <= 18) return wallet;
   return `${wallet.slice(0, 10)}...${wallet.slice(-6)}`;
+}
+
+function isWalletSignRejected(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('user rejected')
+    || message.includes('user denied')
+    || message.includes('rejected the request')
+    || message.includes('cancelled')
+    || message.includes('canceled')
+  );
 }
 
 type SupportContact = {
@@ -226,6 +239,28 @@ type CustomerRecommendation = {
   missingMachineCode: boolean;
   inactiveDevice: boolean;
   rewardTotal: number;
+};
+
+type CustomerDetail = CustomerItem & {
+  contractTermDays: number;
+  rewardRateUsdtPerHour: string;
+  parentUserId: string | null;
+  agreementAcceptedAt: string | null;
+  offlineAlertedAt: string | null;
+  notes: string | null;
+};
+
+type CustomerDetailFormState = {
+  nickname: string;
+  notes: string;
+  rewardRateUsdtPerHour: string;
+  monthlyCardDays: string;
+  devices: Array<{
+    id: string;
+    deviceId: string;
+    hashrate: string;
+    status: string;
+  }>;
 };
 
 function getMinerRegisterBadge(customer: CustomerItem): { text: string; className: string } {
@@ -443,6 +478,7 @@ const SECTION_LABELS: Array<{ id: AdminSection; labelKey: TranslationKey; descKe
 
 const BASIC_SECTION_IDS: AdminSection[] = ['overview', 'customers', 'records', 'system'];
 const ADVANCED_SECTION_IDS: AdminSection[] = ['owner', 'onchain', 'tokens', 'funding', 'docs'];
+const OWNER_ONLY_SECTION_IDS = new Set<AdminSection>(['owner', 'tokens', 'funding', 'records', 'system']);
 
 export default function AdminDashboard({ fullScreen = false, adminWallet, signMessageAsync }: AdminDashboardProps) {
   const { t, locale, setLocale } = useI18n();
@@ -490,6 +526,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [customerSortBy, setCustomerSortBy] = useState<'recommend' | 'expiry' | 'reward' | 'rate'>('recommend');
   const [bulkRate, setBulkRate] = useState<string>('0.084');
   const [extendDays, setExtendDays] = useState<string>('30');
+  const [selectedCustomerDetailId, setSelectedCustomerDetailId] = useState<string>('');
+  const [customerDetailLoading, setCustomerDetailLoading] = useState<boolean>(false);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetail | null>(null);
+  const [customerDetailForm, setCustomerDetailForm] = useState<CustomerDetailFormState | null>(null);
   const [activateMachineCode, setActivateMachineCode] = useState<string>('');
   const [activateTermYears, setActivateTermYears] = useState<'1' | '2' | '3'>('3');
   const [maintenanceMessageZh, setMaintenanceMessageZh] = useState<string>('系统维护中，请稍后再试。');
@@ -532,6 +572,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [deviceDetailForm, setDeviceDetailForm] = useState<DeviceDetailFormState | null>(null);
   const [ownerSessionToken, setOwnerSessionToken] = useState<string>(() => sessionStorage.getItem('ownerJwt') || '');
   const [ownerSessionExpiresAt, setOwnerSessionExpiresAt] = useState<string>(() => sessionStorage.getItem('ownerJwtExp') || '');
+  const [ownerSessionRole, setOwnerSessionRole] = useState<AdminSessionRole | ''>(() => {
+    const raw = sessionStorage.getItem('ownerJwtRole');
+    return raw === 'owner' || raw === 'subadmin' ? raw : '';
+  });
+  const [ownerSessionAutoLoginPaused, setOwnerSessionAutoLoginPaused] = useState(false);
   const ownerLoginPromiseRef = useRef<Promise<string> | null>(null);
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
@@ -548,24 +593,35 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     setSystemSettingsDirty(true);
   }, []);
 
-  const persistOwnerSession = useCallback((token: string, expiresAt: string) => {
+  const persistOwnerSession = useCallback((token: string, expiresAt: string, role?: AdminSessionRole) => {
     sessionStorage.setItem('ownerJwt', token);
     sessionStorage.setItem('ownerJwtExp', expiresAt);
+    if (role === 'owner' || role === 'subadmin') {
+      sessionStorage.setItem('ownerJwtRole', role);
+      setOwnerSessionRole(role);
+    }
     setOwnerSessionToken(token);
     setOwnerSessionExpiresAt(expiresAt);
+    setOwnerSessionAutoLoginPaused(false);
   }, []);
 
   const clearOwnerSession = useCallback(() => {
     sessionStorage.removeItem('ownerJwt');
     sessionStorage.removeItem('ownerJwtExp');
     sessionStorage.removeItem('ownerJwtWallet');
+    sessionStorage.removeItem('ownerJwtRole');
     setOwnerSessionToken('');
     setOwnerSessionExpiresAt('');
+    setOwnerSessionRole('');
   }, []);
 
-  const ensureOwnerSession = useCallback(async (): Promise<string> => {
+  const ensureOwnerSession = useCallback(async (opts?: { force?: boolean }): Promise<string> => {
     if (hasValidOwnerSession()) {
       return ownerSessionToken;
+    }
+
+    if (ownerSessionAutoLoginPaused && !opts?.force) {
+      throw new Error('管理员会话已暂停自动签名，请点击“重新钱包登录”后重试。');
     }
 
     if (ownerLoginPromiseRef.current) {
@@ -587,8 +643,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         throw new Error((await response.text()) || `Owner login failed: ${response.status}`);
       }
 
-      const data = (await response.json()) as { token: string; expiresAt: string };
-      persistOwnerSession(data.token, data.expiresAt);
+      const data = (await response.json()) as { token: string; expiresAt: string; role?: AdminSessionRole };
+      persistOwnerSession(data.token, data.expiresAt, data.role);
       return data.token;
     })();
 
@@ -596,12 +652,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     try {
       return await loginPromise;
     } catch (error) {
+      if (isWalletSignRejected(error)) {
+        setOwnerSessionAutoLoginPaused(true);
+      }
       clearOwnerSession();
       throw error;
     } finally {
       ownerLoginPromiseRef.current = null;
     }
-  }, [adminWallet, apiBaseUrl, clearOwnerSession, hasValidOwnerSession, ownerSessionToken, persistOwnerSession, signMessageAsync]);
+  }, [adminWallet, apiBaseUrl, clearOwnerSession, hasValidOwnerSession, ownerSessionAutoLoginPaused, ownerSessionToken, persistOwnerSession, signMessageAsync]);
 
   const buildSignedHeaders = useCallback(async (path: string, body: Record<string, unknown>) => {
     const nonce = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
@@ -626,16 +685,18 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [adminWallet, hasValidOwnerSession, ownerSessionToken, signMessageAsync]);
 
   const signedRequest = useCallback(async <T,>(path: string, method: string, body: Record<string, unknown> = {}): Promise<T> => {
-    let token = await ensureOwnerSession();
-    const makeHeaders = (t: string): Record<string, string> => ({
-      'content-type': 'application/json',
-      authorization: `Bearer ${t}`,
-    });
+    let token = await ensureOwnerSession({ force: true });
+    const makeHeaders = async (t: string): Promise<Record<string, string>> => {
+      const signedBody = method === 'GET' || method === 'HEAD' ? {} : body;
+      const headers = await buildSignedHeaders(path, signedBody);
+      headers.authorization = `Bearer ${t}`;
+      return headers;
+    };
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const requestInit: RequestInit = {
         method,
-        headers: makeHeaders(token),
+        headers: await makeHeaders(token),
       };
       if (method !== 'GET' && method !== 'HEAD') {
         requestInit.body = JSON.stringify(body);
@@ -644,7 +705,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
       if (response.status === 401 && attempt === 0) {
         clearOwnerSession();
-        token = await ensureOwnerSession();
+        token = await ensureOwnerSession({ force: true });
         continue;
       }
 
@@ -656,10 +717,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
 
     throw new Error('Owner write retry exhausted');
-  }, [apiBaseUrl, clearOwnerSession, ensureOwnerSession]);
+  }, [apiBaseUrl, buildSignedHeaders, clearOwnerSession, ensureOwnerSession]);
 
   const ownerReadRequest = useCallback(async <T,>(path: string): Promise<T> => {
-    let token = await ensureOwnerSession();
+    if (!hasValidOwnerSession()) {
+      throw new Error('管理数据未登录，请点击“重新钱包登录”。');
+    }
+
+    let token = ownerSessionToken;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -672,8 +737,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
       if (response.status === 401 && attempt === 0) {
         clearOwnerSession();
-        token = await ensureOwnerSession();
-        continue;
+        setOwnerSessionAutoLoginPaused(true);
+        throw new Error('管理会话已过期，请点击“重新钱包登录”。');
       }
 
       if (!response.ok) {
@@ -685,10 +750,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
 
     throw new Error('Owner read retry exhausted');
-  }, [apiBaseUrl, clearOwnerSession, ensureOwnerSession]);
+  }, [apiBaseUrl, clearOwnerSession, hasValidOwnerSession, ownerSessionToken]);
 
   const loadBackendData = useCallback(async () => {
     if (!adminWallet) return;
+    if (!hasValidOwnerSession()) {
+      setBackendLoading(false);
+      setBackendError('管理数据未登录，请点击右上角“重新钱包登录”。');
+      return;
+    }
+
     try {
       setBackendError('');
       setBackendLoading(true);
@@ -724,7 +795,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           return null;
         }),
         ownerReadRequest<MachineCodeConflictResponse>('/api/admin/machine-code-conflicts?limit=30').catch((err: unknown) => {
-          warnings.push(`机器码冲突同步失败: ${err instanceof Error ? err.message : String(err)}`);
+          warnings.push(`设备标识冲突同步失败: ${err instanceof Error ? err.message : String(err)}`);
           return null;
         }),
       ]);
@@ -743,10 +814,30 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setBackendLoading(false);
     }
-  }, [adminWallet, apiBaseUrl, announcementFilter, ownerReadRequest]);
+  }, [adminWallet, apiBaseUrl, announcementFilter, hasValidOwnerSession, ownerReadRequest]);
+
+  const reloginOwnerSession = useCallback(async () => {
+    try {
+      setBackendError('');
+      await ensureOwnerSession({ force: true });
+      await loadBackendData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '管理员登录失败';
+      setBackendError(`管理员重新登录失败：${message}`);
+    }
+  }, [ensureOwnerSession, loadBackendData]);
 
   const loadRecords = useCallback(async () => {
     if (!adminWallet) return;
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('当前角色无权访问交易记录，请使用 Owner 钱包登录。');
+      return;
+    }
+    if (!hasValidOwnerSession()) {
+      setRecordsError('管理数据未登录，请先重新钱包登录。');
+      return;
+    }
+
     try {
       setRecordsError('');
       setRecordsLoading(true);
@@ -763,10 +854,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setRecordsLoading(false);
     }
-  }, [adminWallet, ownerReadRequest]);
+  }, [adminWallet, hasValidOwnerSession, ownerReadRequest, ownerSessionRole]);
 
   const loadDevices = useCallback(async () => {
     if (!adminWallet) return;
+    if (!hasValidOwnerSession()) {
+      setBackendError('管理数据未登录，请先重新钱包登录。');
+      return;
+    }
+
     try {
       setDevicesLoading(true);
       const query = new URLSearchParams();
@@ -790,7 +886,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setDevicesLoading(false);
     }
-  }, [adminWallet, deviceStatusFilter, ownerReadRequest]);
+  }, [adminWallet, deviceStatusFilter, hasValidOwnerSession, ownerReadRequest]);
 
   const toggleDeviceSelection = useCallback((deviceId: string) => {
     setSelectedDeviceIds((prev) => {
@@ -806,6 +902,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const loadDeviceDetail = useCallback(async (deviceRecordId: string) => {
     if (!deviceRecordId) return;
+    if (!hasValidOwnerSession()) {
+      setBackendError('管理数据未登录，请先重新钱包登录。');
+      return;
+    }
+
     try {
       const detail = await ownerReadRequest<AdminDeviceDetail>(`/api/admin/devices/${deviceRecordId}`);
       setDeviceDetail(detail);
@@ -823,7 +924,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } catch (loadError) {
       setBackendError(loadError instanceof Error ? loadError.message : '读取设备详情失败');
     }
-  }, [ownerReadRequest]);
+  }, [hasValidOwnerSession, ownerReadRequest]);
 
   const handleSaveDeviceDetail = async () => {
     if (!deviceDetail || !deviceDetailForm) return;
@@ -953,13 +1054,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       ?? '';
     const keepUserId = machineCodeKeepUserByCode[item.machineCode] || fallbackKeepUser;
     if (!keepUserId) {
-      setBackendError('缺少保留账号，无法处理机器码冲突');
+      setBackendError('缺少保留账号，无法处理设备标识冲突');
       return;
     }
 
     const keepUser = item.users.find((user) => user.userId === keepUserId);
     const keepLabel = keepUser?.nickname || `${keepUser?.wallet.slice(0, 10)}...${keepUser?.wallet.slice(-6)}` || keepUserId;
-    if (!window.confirm(`确认将机器码 ${item.machineCode} 保留给 ${keepLabel}，并清理其余账号绑定？`)) {
+    if (!window.confirm(`确认将设备标识 ${item.machineCode} 保留给 ${keepLabel}，并清理其余账号绑定？`)) {
       return;
     }
 
@@ -976,7 +1077,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       }
       await loadBackendData();
     } catch (error) {
-      setBackendError(error instanceof Error ? error.message : '处理机器码冲突失败');
+      setBackendError(error instanceof Error ? error.message : '处理设备标识冲突失败');
     } finally {
       setMachineCodeResolveLoading('');
     }
@@ -1086,17 +1187,24 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [refreshOnChainData]);
 
   useEffect(() => {
+    if (ownerSessionAutoLoginPaused && !hasValidOwnerSession()) {
+      return;
+    }
+
     void loadBackendData();
     // Refresh backend snapshot + offline alerts frequently so admins see
     // device dropout within ~1 heartbeat interval.
     const timer = window.setInterval(() => {
+      if (ownerSessionAutoLoginPaused && !hasValidOwnerSession()) {
+        return;
+      }
       void loadBackendData();
     }, 15000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [loadBackendData]);
+  }, [hasValidOwnerSession, loadBackendData, ownerSessionAutoLoginPaused]);
 
   useEffect(() => {
     if (section !== 'records') return;
@@ -1346,6 +1454,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const saveSystemSettings = async (payload: Record<string, unknown>) => {
+    if (ownerSessionRole !== 'owner') {
+      setBackendError('当前角色无权修改系统设置，请使用 Owner 钱包登录。');
+      return;
+    }
     setAdminActionLoading('systemSettings');
     setBackendError('');
     try {
@@ -1698,7 +1810,97 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const openCustomerDetailPanel = async (userId: string) => {
+    if (!userId) return;
+    try {
+      setCustomerDetailLoading(true);
+      const detail = await ownerReadRequest<CustomerDetail>(`/api/admin/customers/${userId}`);
+      setSelectedCustomerDetailId(userId);
+      setSelectedCustomerDetail(detail);
+      setCustomerDetailForm({
+        nickname: detail.nickname ?? '',
+        notes: detail.notes ?? '',
+        rewardRateUsdtPerHour: detail.rewardRateUsdtPerHour ?? '0.084',
+        monthlyCardDays: String(detail.monthlyCardDays ?? 30),
+        devices: (detail.devices ?? []).map((device) => ({
+          id: device.id,
+          deviceId: device.deviceId ?? '',
+          hashrate: String(device.hashrate ?? 0),
+          status: device.status ?? 'active',
+        })),
+      });
+      setBackendError('');
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '读取客户详情失败');
+    } finally {
+      setCustomerDetailLoading(false);
+    }
+  };
+
+  const handleSaveCustomerDetail = async () => {
+    if (!selectedCustomerDetailId || !customerDetailForm) return;
+    const rateNum = Number(customerDetailForm.rewardRateUsdtPerHour);
+    const monthlyDaysNum = Math.max(1, Math.floor(Number(customerDetailForm.monthlyCardDays) || 30));
+    if (!Number.isFinite(rateNum) || rateNum < 0) {
+      setBackendError('收益率必须是非负数');
+      return;
+    }
+
+    const normalizedDevices = customerDetailForm.devices.map((device, index) => {
+      const hashrateNum = Number(device.hashrate);
+      if (!device.deviceId.trim()) {
+        throw new Error(`设备 ${index + 1} 的设备 ID 不能为空`);
+      }
+      if (!Number.isFinite(hashrateNum) || hashrateNum < 0) {
+        throw new Error(`设备 ${index + 1} 的算力必须是大于等于 0 的数字`);
+      }
+      if (!device.status.trim()) {
+        throw new Error(`设备 ${index + 1} 的状态不能为空`);
+      }
+      return {
+        id: device.id,
+        deviceId: device.deviceId.trim(),
+        hashrate: Math.floor(hashrateNum),
+        status: device.status.trim(),
+      };
+    });
+
+    try {
+      setAdminActionLoading(`save-customer-${selectedCustomerDetailId}`);
+      const updated = await signedRequest<CustomerDetail>(`/api/admin/customers/${selectedCustomerDetailId}`, 'PUT', {
+        nickname: customerDetailForm.nickname.trim() || null,
+        notes: customerDetailForm.notes.trim() || null,
+        rewardRateUsdtPerHour: rateNum,
+        monthlyCardDays: monthlyDaysNum,
+        devices: normalizedDevices,
+      });
+      await loadBackendData();
+      setSelectedCustomerDetail(updated);
+      setCustomerDetailForm({
+        nickname: updated.nickname ?? '',
+        notes: updated.notes ?? '',
+        rewardRateUsdtPerHour: updated.rewardRateUsdtPerHour ?? '0.084',
+        monthlyCardDays: String(updated.monthlyCardDays ?? 30),
+        devices: (updated.devices ?? []).map((device) => ({
+          id: device.id,
+          deviceId: device.deviceId ?? '',
+          hashrate: String(device.hashrate ?? 0),
+          status: device.status ?? 'active',
+        })),
+      });
+      setBackendError('');
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '保存客户设置失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
   const handleApproveExchange = async (orderId: string) => {
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('当前角色无权审批兑换订单，请使用 Owner 钱包登录。');
+      return;
+    }
     if (!window.confirm(`确认批准兑换订单 ${orderId}？`)) return;
     try {
       setAdminActionLoading(`approve-${orderId}`);
@@ -1713,6 +1915,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleCompleteExchange = async (orderId: string, defaultWallet: string | null, amountUsdt: string) => {
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('当前角色无权完成兑换订单，请使用 Owner 钱包登录。');
+      return;
+    }
     const payoutWallet = window.prompt('请输入实际收款钱包（留空使用原 payout_wallet）：', defaultWallet ?? '');
     if (payoutWallet === null) return;
     const txHash = window.prompt('请输入链上 tx hash（可留空）：', '') ?? '';
@@ -1792,8 +1998,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       }
       if (missingMachineCode) {
         score += 20;
-        reasons.push('缺少机器码');
-        actionLabel = actionLabel === '观察' ? '补录机器码' : actionLabel;
+        reasons.push('缺少设备标识');
+        actionLabel = actionLabel === '观察' ? '补录设备标识' : actionLabel;
       }
       if (lowGas) {
         score += 25;
@@ -1882,6 +2088,41 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     return filtered;
   }, [customerInsights, customerSearch, customerSortBy, customerStatusFilter]);
 
+  const deviceMetricsByUserId = useMemo(() => {
+    const map = new Map<string, {
+      totalHashrate: number;
+      lastSeenAt: string | null;
+      lastSeenMs: number;
+      statusCounts: Record<string, number>;
+    }>();
+
+    for (const device of devices) {
+      const existing = map.get(device.userId) ?? {
+        totalHashrate: 0,
+        lastSeenAt: null,
+        lastSeenMs: 0,
+        statusCounts: {},
+      };
+
+      existing.totalHashrate += Number(device.hashrate ?? 0);
+
+      const statusKey = (device.deviceStatus || 'unknown').toLowerCase();
+      existing.statusCounts[statusKey] = (existing.statusCounts[statusKey] ?? 0) + 1;
+
+      if (device.lastSeenAt) {
+        const ts = new Date(device.lastSeenAt).getTime();
+        if (Number.isFinite(ts) && ts > existing.lastSeenMs) {
+          existing.lastSeenMs = ts;
+          existing.lastSeenAt = device.lastSeenAt;
+        }
+      }
+
+      map.set(device.userId, existing);
+    }
+
+    return map;
+  }, [devices]);
+
   const recordsSummary = useMemo(() => {
     const pendingApprove = withdrawalRecords.filter(
       (item) => item.source === 'exchange' && (item.status === 'manual_pending' || item.status === 'auto_processing')
@@ -1899,11 +2140,31 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     };
   }, [exchangeRecords.length, rechargeRecords.length, withdrawalRecords]);
 
+  const isPrimaryOwnerSession = ownerSessionRole === 'owner';
+  const canAccessSection = useCallback(
+    (id: AdminSection) => isPrimaryOwnerSession || !OWNER_ONLY_SECTION_IDS.has(id),
+    [isPrimaryOwnerSession]
+  );
+  const availableBasicSectionIds = useMemo(
+    () => BASIC_SECTION_IDS.filter(canAccessSection),
+    [canAccessSection]
+  );
+  const availableAdvancedSectionIds = useMemo(
+    () => ADVANCED_SECTION_IDS.filter(canAccessSection),
+    [canAccessSection]
+  );
+
   useEffect(() => {
-    if (showAdvancedNav) return;
-    if (!ADVANCED_SECTION_IDS.includes(section)) return;
+    if (availableBasicSectionIds.includes(section)) return;
+    if (showAdvancedNav && availableAdvancedSectionIds.includes(section)) return;
     setSection('overview');
-  }, [section, showAdvancedNav]);
+  }, [availableAdvancedSectionIds, availableBasicSectionIds, section, showAdvancedNav]);
+
+  useEffect(() => {
+    if (section === 'owner' && !isPrimaryOwnerSession) {
+      setSection('overview');
+    }
+  }, [isPrimaryOwnerSession, section]);
 
   return (
     <section
@@ -1942,6 +2203,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             <div className="flex items-center gap-3 mb-3">
               <LayoutDashboard className="text-purple-400" />
               <span className="font-bold text-lg text-white">Coin Planet Admin</span>
+              {ownerSessionRole && (
+                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${ownerSessionRole === 'owner' ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30' : 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30'}`}>
+                  {ownerSessionRole === 'owner' ? 'Owner' : 'SubAdmin'}
+                </span>
+              )}
               <span className="text-xs text-slate-500 hidden md:inline">
                 {t(SECTION_LABELS.find((s) => s.id === section)?.descKey ?? 'admin.section.overview.desc')}
               </span>
@@ -1955,10 +2221,18 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   onClick={() => setLocale('en')}
                   className={`px-2 py-1 rounded ${locale === 'en' ? 'bg-purple-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >EN</button>
+                {ownerSessionAutoLoginPaused && (
+                  <button
+                    onClick={() => void reloginOwnerSession()}
+                    className="ml-2 px-2 py-1 rounded bg-amber-500 text-slate-950 hover:bg-amber-400"
+                  >
+                    重新钱包登录
+                  </button>
+                )}
               </div>
             </div>
             <nav className="flex flex-wrap gap-2">
-              {SECTION_LABELS.filter((item) => BASIC_SECTION_IDS.includes(item.id)).map((item) => (
+              {SECTION_LABELS.filter((item) => availableBasicSectionIds.includes(item.id)).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setSection(item.id)}
@@ -1984,7 +2258,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             </nav>
             {showAdvancedNav && (
               <nav className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-800">
-                {SECTION_LABELS.filter((item) => ADVANCED_SECTION_IDS.includes(item.id)).map((item) => (
+                {SECTION_LABELS.filter((item) => availableAdvancedSectionIds.includes(item.id)).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setSection(item.id)}
@@ -2004,13 +2278,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
           {/* Main Content */}
           <div className="flex-1 p-6 md:p-8">
             {/* Owner Console section */}
-            {section === 'owner' && (
+            {section === 'owner' && isPrimaryOwnerSession && (
               <OwnerConsole adminWallet={adminWallet} signMessageAsync={signMessageAsync} />
             )}
 
             {/* Top Stats (Overview) */}
             {section === 'overview' && (
             <>
+              {isPrimaryOwnerSession ? (
+              <>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -2051,8 +2327,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   <div className="text-lg font-semibold text-emerald-200">{recordsSummary.pendingComplete}</div>
                 </div>
               </div>
+              </>
+              ) : (
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+                  当前以 SubAdmin 身份登录，仅展示你邀请范围内的客户与设备；交易记录、系统设置和资产操作仅 Owner 可见。
+                </div>
+              )}
 
-              {showRecordsDetail && (
+              {isPrimaryOwnerSession && showRecordsDetail && (
               <>
             <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mb-8">
               <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-5">
@@ -2061,12 +2343,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     <div className="text-sm font-semibold text-cyan-200">管理员权限快照</div>
                     <div className="text-xs text-slate-400 mt-1">总览直接查看链上管理员状态，详细增删仍在管理员控制台。</div>
                   </div>
-                  <button
-                    onClick={() => setSection('owner')}
-                    className="px-3 py-2 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold hover:bg-cyan-400 transition-colors"
-                  >
-                    打开管理员控制台
-                  </button>
+                  {isPrimaryOwnerSession && (
+                    <button
+                      onClick={() => setSection('owner')}
+                      className="px-3 py-2 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold hover:bg-cyan-400 transition-colors"
+                    >
+                      打开管理员控制台
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -2656,7 +2940,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
                 <div className="text-sm font-semibold text-emerald-200 mb-1">客户激活 / 续期（线下收款后录入）</div>
                 <p className="text-xs text-emerald-100/80 mb-3">
-                  选择客户 → 录入 App 生成的机器码 → 选择合同期 (1/2/3 年)，系统自动计算 contract_end_at 并开启收益。到期后 devices 心跳将自动停发。
+                  选择客户 → 录入 App 设备标识（可选）→ 选择合同期 (1/2/3 年)，系统自动计算 contract_end_at 并开启收益。到期后 devices 心跳将自动停发。
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <select
@@ -2674,7 +2958,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   <input
                     value={activateMachineCode}
                     onChange={(e) => setActivateMachineCode(e.target.value)}
-                    placeholder="机器码（客户提供）"
+                    placeholder="设备标识（可选）"
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
                   />
                   <select
@@ -2726,8 +3010,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-amber-200">机器码冲突检测</div>
-                      <p className="text-xs text-amber-100/80 mt-1">同一机器码对应多个账户时，会影响客服核对与合同归属，请优先处理。</p>
+                      <div className="text-sm font-semibold text-amber-200">设备标识冲突检测</div>
+                      <p className="text-xs text-amber-100/80 mt-1">同一设备标识对应多个账户时，会影响客服核对与合同归属，请优先处理。</p>
                     </div>
                     <button
                       type="button"
@@ -2741,7 +3025,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mb-3">
                     <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                      <div className="text-slate-400">冲突机器码</div>
+                      <div className="text-slate-400">冲突设备标识</div>
                       <div className="text-slate-100 mt-1">{machineCodeConflicts?.counts.machineCodes ?? 0}</div>
                     </div>
                     <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
@@ -2808,13 +3092,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     </div>
                   ) : (
                     <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
-                      当前未发现机器码冲突。
+                      当前未发现设备标识冲突。
                     </div>
                   )}
                 </div>
 
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-4">
                   <div className="text-sm font-semibold text-amber-200 mb-2">系统管理员</div>
+                  <div className="text-[11px] text-amber-100/80 mb-2">
+                    当前角色：{ownerSessionRole === 'owner' ? 'Owner 超级管理员（可见全部账户）' : ownerSessionRole === 'subadmin' ? 'SubAdmin 子管理员（仅可见自己推荐账户）' : '未识别（请重新钱包登录）'}
+                  </div>
                   <div className="text-xs text-slate-300 break-all font-mono mb-3">{adminSummary?.wallet ?? adminWallet}</div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                     <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
@@ -2832,67 +3119,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </div>
                 </div>
 
-                <div className="mb-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-indigo-100">用户推荐体系（行动优先队列）</div>
-                      <div className="mt-1 text-xs text-indigo-100/70">
-                        综合到期、在线、设备、机器码与 Gas 余额，自动给出处理优先级和建议动作。
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCustomerIds(new Set(recommendedCustomers.map((item) => item.customer.id)))}
-                      className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 py-1.5 text-xs text-indigo-100 hover:bg-indigo-500/30"
-                    >
-                      选中推荐用户
-                    </button>
-                  </div>
-                  {recommendedCustomers.length === 0 ? (
-                    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-3 text-xs text-slate-300">当前暂无需重点处理的客户。</div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                      {recommendedCustomers.map((item) => (
-                        <div key={`rec-${item.customer.id}`} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-xs">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="font-mono text-slate-100">{item.customer.nickname ? `${item.customer.nickname} · ${shortWallet(item.customer.wallet)}` : shortWallet(item.customer.wallet)}</div>
-                              <div className="mt-1 text-slate-400">{item.customer.id}</div>
-                            </div>
-                            <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${item.priority === 'P0' ? 'bg-red-500/20 text-red-200' : item.priority === 'P1' ? 'bg-amber-500/20 text-amber-200' : item.priority === 'P2' ? 'bg-sky-500/20 text-sky-200' : 'bg-slate-700 text-slate-200'}`}>
-                              {item.priority} · {item.score}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-indigo-100">建议：{item.actionLabel}</div>
-                          <div className="mt-1 text-slate-400 line-clamp-2">{item.reasons.join('，') || '暂无风险项'}</div>
-                          <div className="mt-3 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedCustomerIds(new Set([item.customer.id]));
-                                if (item.actionLabel.includes('激活')) {
-                                  setActivateCustomerId(item.customer.id);
-                                }
-                              }}
-                              className="rounded border border-indigo-400/30 bg-indigo-500/20 px-2 py-1 text-[11px] text-indigo-100 hover:bg-indigo-500/30"
-                            >
-                              定位并选中
-                            </button>
-                            <span className="text-[11px] text-slate-500">{item.remainDays == null ? '未激活' : `剩余 ${item.remainDays} 天`}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
                 {/* Bulk actions toolbar */}
                 <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
                   <span className="text-slate-300">已选 {selectedCustomerIds.size} 位</span>
                   <input
                     value={customerSearch}
                     onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="搜索钱包 / 昵称 / ID / 机器码"
+                    placeholder="搜索钱包 / 昵称 / ID / 设备标识"
                     className="h-8 w-56 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                   />
                   <select
@@ -2968,12 +3201,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <tr>
                         <th className="px-2 py-2 font-medium w-8"></th>
                         <th className="px-3 py-2 font-medium">钱包</th>
-                        <th className="px-3 py-2 font-medium">机器码</th>
+                        <th className="px-3 py-2 font-medium">设备标识</th>
                         <th className="px-3 py-2 font-medium">合同到期</th>
                         <th className="px-3 py-2 font-medium">状态</th>
                         <th className="px-3 py-2 font-medium">矿机注册</th>
                         <th className="px-3 py-2 font-medium">在线</th>
                         <th className="px-3 py-2 font-medium">设备</th>
+                        <th className="px-3 py-2 font-medium">设备状态明细</th>
+                        <th className="px-3 py-2 font-medium">总算力</th>
+                        <th className="px-3 py-2 font-medium">最近心跳</th>
                         <th className="px-3 py-2 font-medium">BNB</th>
                         <th className="px-3 py-2 font-medium">USDT</th>
                         <th className="px-3 py-2 font-medium">SUPER</th>
@@ -2987,6 +3223,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       {visibleCustomers.map((entry) => {
                         const { customer, remainDays, expiring, expired, priority, actionLabel, reasons, score } = entry;
                         const registerBadge = getMinerRegisterBadge(customer);
+                        const deviceMetrics = deviceMetricsByUserId.get(customer.id);
+                        const statusSummary = deviceMetrics
+                          ? Object.entries(deviceMetrics.statusCounts)
+                            .sort((a, b) => Number(b[1]) - Number(a[1]))
+                            .map(([status, count]) => `${status}:${count}`)
+                            .join(' / ')
+                          : '--';
                         const checked = selectedCustomerIds.has(customer.id);
                         const isOfflineAlert = customer.contractActive === 1 && customer.onlineStatus !== 'online';
                         const rowClass = isOfflineAlert
@@ -3022,6 +3265,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                               {customer.onlineStatus === 'online' ? '在线' : customer.onlineStatus === 'stale' ? '延迟' : '离线'}
                             </td>
                             <td className="px-3 py-2 text-slate-300">{customer.activeDeviceCount}/{customer.deviceCount}</td>
+                            <td className="px-3 py-2 text-slate-400">{statusSummary || '--'}</td>
+                            <td className="px-3 py-2 text-slate-300">
+                              {deviceMetrics ? formatHashrate(BigInt(Math.max(0, Math.floor(deviceMetrics.totalHashrate)))) : '--'}
+                            </td>
+                            <td className="px-3 py-2 text-slate-400">
+                              {deviceMetrics?.lastSeenAt ? new Date(deviceMetrics.lastSeenAt).toLocaleString('zh-CN') : '--'}
+                            </td>
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.bnbBalance, 6)}</td>
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.usdtBalance, 4)}</td>
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.superBalance, 4)}</td>
@@ -3054,6 +3304,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                 >
                                   {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void openCustomerDetailPanel(customer.id)}
+                                  disabled={customerDetailLoading && selectedCustomerDetailId === customer.id}
+                                  className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/30 disabled:opacity-50"
+                                >
+                                  {customerDetailLoading && selectedCustomerDetailId === customer.id ? '加载中…' : '运营设置'}
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -3063,317 +3321,152 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </table>
                 </div>
 
-                <div className="mt-6 rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <div className="text-sm font-semibold text-sky-200">设备列表（按设备维度）</div>
-                    <button
-                      type="button"
-                      onClick={() => void loadDevices()}
-                      disabled={devicesLoading}
-                      className="px-3 py-1.5 rounded border border-sky-500/40 bg-sky-500/20 text-xs text-sky-100 hover:bg-sky-500/30 disabled:opacity-50"
-                    >
-                      {devicesLoading ? '刷新中…' : '刷新设备'}
-                    </button>
-                  </div>
-
-                  <div className="mb-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                    <input
-                      value={deviceSearch}
-                      onChange={(e) => setDeviceSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void loadDevices();
-                      }}
-                      placeholder="搜索设备ID / 钱包 / 昵称（回车或点应用筛选）"
-                      className="h-9 rounded border border-slate-700 bg-slate-900 px-3 text-slate-100 outline-none focus:border-sky-400"
-                    />
-                    <select
-                      value={deviceStatusFilter}
-                      onChange={(e) => setDeviceStatusFilter(e.target.value as 'all' | 'online' | 'offline' | 'active' | 'inactive' | 'contract_active' | 'contract_expired')}
-                      className="h-9 rounded border border-slate-700 bg-slate-900 px-3 text-slate-100 outline-none focus:border-sky-400"
-                    >
-                      <option value="all">全部状态</option>
-                      <option value="online">在线</option>
-                      <option value="offline">离线</option>
-                      <option value="active">设备激活</option>
-                      <option value="inactive">设备停用</option>
-                      <option value="contract_active">合同有效</option>
-                      <option value="contract_expired">合同过期</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => void loadDevices()}
-                      disabled={devicesLoading}
-                      className="h-9 rounded bg-sky-500 text-slate-950 font-semibold hover:bg-sky-400 disabled:opacity-60"
-                    >
-                      应用筛选
-                    </button>
-                  </div>
-
-                  <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-xs">
-                    <div className="mb-2 text-slate-300">已选设备：{selectedDeviceIds.size}</div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        value={bulkDeviceRate}
-                        onChange={(e) => setBulkDeviceRate(e.target.value)}
-                        placeholder="收益率"
-                        className="h-8 w-24 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
-                      />
+                {selectedCustomerDetailId && customerDetailForm && (
+                  <div className="mt-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-indigo-100">用户运营操作面板</div>
                       <button
                         type="button"
-                        onClick={() => void handleBulkDeviceUpdate('rate')}
-                        disabled={adminActionLoading === 'bulk-device-rate' || selectedDeviceIds.size === 0}
-                        className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
+                        onClick={() => {
+                          setSelectedCustomerDetailId('');
+                          setSelectedCustomerDetail(null);
+                          setCustomerDetailForm(null);
+                        }}
+                        className="px-2 py-1 rounded border border-slate-700 bg-slate-900 text-xs text-slate-200 hover:bg-slate-800"
                       >
-                        {adminActionLoading === 'bulk-device-rate' ? '处理中…' : '批量改收益率'}
-                      </button>
-
-                      <input
-                        value={bulkDeviceExtendDays}
-                        onChange={(e) => setBulkDeviceExtendDays(e.target.value)}
-                        placeholder="续期天数"
-                        className="h-8 w-24 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void handleBulkDeviceUpdate('extend')}
-                        disabled={adminActionLoading === 'bulk-device-extend' || selectedDeviceIds.size === 0}
-                        className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                      >
-                        {adminActionLoading === 'bulk-device-extend' ? '处理中…' : '批量续期'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleBulkDeviceUpdate('monthlyRenew')}
-                        disabled={adminActionLoading === 'bulk-device-monthlyRenew' || selectedDeviceIds.size === 0}
-                        className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                      >
-                        {adminActionLoading === 'bulk-device-monthlyRenew' ? '处理中…' : '按月批量续期'}
-                      </button>
-
-                      <select
-                        value={bulkDeviceStatus}
-                        onChange={(e) => setBulkDeviceStatus(e.target.value)}
-                        className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-slate-100 outline-none focus:border-sky-400"
-                      >
-                        <option value="active">active</option>
-                        <option value="inactive">inactive</option>
-                        <option value="paused">paused</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => void handleBulkDeviceUpdate('status')}
-                        disabled={adminActionLoading === 'bulk-device-status' || selectedDeviceIds.size === 0}
-                        className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
-                      >
-                        {adminActionLoading === 'bulk-device-status' ? '处理中…' : '批量改状态'}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDeviceIds(new Set())}
-                        className="px-2 py-1 rounded border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700"
-                      >
-                        清空勾选
+                        关闭
                       </button>
                     </div>
-                  </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 max-h-120">
-                    <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 bg-slate-900 text-slate-400 border-b border-slate-800">
-                        <tr>
-                          <th className="px-2 py-2 font-medium w-8"></th>
-                          <th className="px-3 py-2 font-medium">设备ID</th>
-                          <th className="px-3 py-2 font-medium">钱包</th>
-                          <th className="px-3 py-2 font-medium">在线</th>
-                          <th className="px-3 py-2 font-medium">算力</th>
-                          <th className="px-3 py-2 font-medium">设备状态</th>
-                          <th className="px-3 py-2 font-medium">最后心跳</th>
-                          <th className="px-3 py-2 font-medium">收益率</th>
-                          <th className="px-3 py-2 font-medium">累计USDT</th>
-                          <th className="px-3 py-2 font-medium">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {devices.length === 0 ? (
-                          <tr>
-                            <td colSpan={10} className="px-3 py-4 text-slate-500">暂无设备数据</td>
-                          </tr>
-                        ) : devices.map((device) => {
-                          const deviceOfflineAlert = device.contractActive === 1 && device.onlineStatus !== 'online';
-                          const deviceRowClass = deviceOfflineAlert
-                            ? 'bg-red-500/10 hover:bg-red-500/20 border-l-2 border-red-500'
-                            : 'hover:bg-slate-800/40';
-                          return (
-                          <tr key={device.id} className={deviceRowClass}>
-                            <td className="px-2 py-2">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs mb-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-slate-300">标签（昵称）</span>
+                        <input
+                          value={customerDetailForm.nickname}
+                          onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, nickname: e.target.value } : prev)}
+                          placeholder="例如：高净值 / 重点跟进"
+                          className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-slate-300">运营备注（打标签说明）</span>
+                        <input
+                          value={customerDetailForm.notes}
+                          onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, notes: e.target.value } : prev)}
+                          placeholder="例如：本周回访 / 重点续费"
+                          className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-slate-300">收益率 (USDT/h)</span>
+                        <input
+                          value={customerDetailForm.rewardRateUsdtPerHour}
+                          onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, rewardRateUsdtPerHour: e.target.value } : prev)}
+                          className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-slate-300">月卡天数</span>
+                        <input
+                          value={customerDetailForm.monthlyCardDays}
+                          onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, monthlyCardDays: e.target.value } : prev)}
+                          className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 mb-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="text-xs font-semibold text-slate-200">账户设备参数</div>
+                        <div className="text-[11px] text-slate-500">
+                          {selectedCustomerDetail?.devices?.length ?? customerDetailForm.devices.length} 台设备
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {customerDetailForm.devices.length > 0 ? customerDetailForm.devices.map((device, index) => (
+                          <div key={device.id} className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                            <label className="flex flex-col gap-1">
+                              <span className="text-slate-300">设备 ID #{index + 1}</span>
                               <input
-                                type="checkbox"
-                                checked={selectedDeviceIds.has(device.id)}
-                                onChange={() => toggleDeviceSelection(device.id)}
-                                className="accent-sky-500"
+                                value={device.deviceId}
+                                onChange={(e) => setCustomerDetailForm((prev) => prev ? {
+                                  ...prev,
+                                  devices: prev.devices.map((item) => item.id === device.id ? { ...item, deviceId: e.target.value } : item),
+                                } : prev)}
+                                className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                               />
-                            </td>
-                            <td className="px-3 py-2 font-mono text-slate-200">{device.deviceId}</td>
-                            <td className="px-3 py-2 font-mono text-slate-300">{device.wallet.slice(0, 10)}...{device.wallet.slice(-6)}</td>
-                            <td className={`px-3 py-2 font-medium ${device.onlineStatus === 'online' ? 'text-emerald-300' : device.onlineStatus === 'stale' ? 'text-amber-300' : 'text-red-300'}`}>
-                              {device.onlineStatus === 'online' ? '在线' : device.onlineStatus === 'stale' ? '延迟' : '离线'}
-                            </td>
-                            <td className="px-3 py-2 text-slate-300">{device.hashrate}</td>
-                            <td className="px-3 py-2 text-slate-300">{device.deviceStatus}</td>
-                            <td className="px-3 py-2 text-slate-400">{device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('zh-CN') : '--'}</td>
-                            <td className="px-3 py-2 text-slate-300">{device.rewardRateUsdtPerHour}</td>
-                            <td className="px-3 py-2 text-slate-300">{Number(device.totalRewardUsdt || '0').toFixed(3)}</td>
-                            <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedDeviceId(device.id)}
-                                className="px-2 py-1 rounded border border-sky-500/40 bg-sky-500/20 text-sky-200 hover:bg-sky-500/30"
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-slate-300">设备算力</span>
+                              <input
+                                value={device.hashrate}
+                                onChange={(e) => setCustomerDetailForm((prev) => prev ? {
+                                  ...prev,
+                                  devices: prev.devices.map((item) => item.id === device.id ? { ...item, hashrate: e.target.value } : item),
+                                } : prev)}
+                                inputMode="numeric"
+                                className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-slate-300">设备状态</span>
+                              <select
+                                value={device.status}
+                                onChange={(e) => setCustomerDetailForm((prev) => prev ? {
+                                  ...prev,
+                                  devices: prev.devices.map((item) => item.id === device.id ? { ...item, status: e.target.value } : item),
+                                } : prev)}
+                                className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                               >
-                                详情/编辑
-                              </button>
-                            </td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {deviceDetail && deviceDetailForm && (
-                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-semibold text-slate-200">设备详情：{deviceDetail.deviceId}</div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedDeviceId('');
-                            setDeviceDetail(null);
-                            setDeviceDetailForm(null);
-                          }}
-                          className="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:bg-slate-700"
-                        >
-                          关闭
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mb-3">
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">算力</span>
-                          <input
-                            value={deviceDetailForm.hashrate}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, hashrate: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">设备状态</span>
-                          <input
-                            value={deviceDetailForm.deviceStatus}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, deviceStatus: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">收益率 (USDT/h)</span>
-                          <input
-                            value={deviceDetailForm.rewardRateUsdtPerHour}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, rewardRateUsdtPerHour: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">昵称</span>
-                          <input
-                            value={deviceDetailForm.nickname}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, nickname: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">机器码</span>
-                          <input
-                            value={deviceDetailForm.machineCode}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, machineCode: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">月卡天数</span>
-                          <input
-                            value={deviceDetailForm.monthlyCardDays}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, monthlyCardDays: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-slate-400">合同有效</span>
-                          <select
-                            value={deviceDetailForm.contractActive ? '1' : '0'}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, contractActive: e.target.value === '1' } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          >
-                            <option value="1">有效</option>
-                            <option value="0">停用</option>
-                          </select>
-                        </label>
-                        <label className="flex flex-col gap-1 md:col-span-2">
-                          <span className="text-slate-400">合同到期</span>
-                          <input
-                            type="datetime-local"
-                            value={deviceDetailForm.contractEndAt}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, contractEndAt: e.target.value } : prev)}
-                            className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1 md:col-span-3">
-                          <span className="text-slate-400">备注</span>
-                          <textarea
-                            value={deviceDetailForm.notes}
-                            onChange={(e) => setDeviceDetailForm((prev) => prev ? { ...prev, notes: e.target.value } : prev)}
-                            rows={3}
-                            className="rounded border border-slate-700 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-sky-400"
-                          />
-                        </label>
-                      </div>
-
-                      <div className="flex items-center gap-2 mb-3">
-                        <button
-                          type="button"
-                          onClick={handleSaveDeviceDetail}
-                          disabled={adminActionLoading === `device-save-${deviceDetail.id}`}
-                          className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold disabled:opacity-60"
-                        >
-                          {adminActionLoading === `device-save-${deviceDetail.id}` ? '保存中…' : '保存设备信息'}
-                        </button>
-                        <span className="text-xs text-slate-500">钱包：{deviceDetail.wallet}</span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-                          <div className="text-slate-300 mb-2">最近状态历史</div>
-                          <div className="space-y-1 max-h-40 overflow-auto">
-                            {deviceDetail.deviceStatusHistory.slice(0, 15).map((row) => (
-                              <div key={row.id} className="text-slate-400">
-                                {new Date(row.observedAt).toLocaleString('zh-CN')} · {row.status} · {row.hashrate}
+                                <option value="active">active</option>
+                                <option value="inactive">inactive</option>
+                                <option value="paused">paused</option>
+                              </select>
+                            </label>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-300">记录 ID</span>
+                              <div className="h-9 rounded border border-slate-800 bg-slate-950 px-2 text-[11px] leading-9 text-slate-500">
+                                {device.id}
                               </div>
-                            ))}
+                            </div>
                           </div>
-                        </div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-                          <div className="text-slate-300 mb-2">最近收益流水</div>
-                          <div className="space-y-1 max-h-40 overflow-auto">
-                            {deviceDetail.rewardLedger.slice(0, 15).map((row) => (
-                              <div key={row.id} className="text-slate-400">
-                                {new Date(row.createdAt).toLocaleString('zh-CN')} · +{row.rewardUsdt} USDT ({row.source})
-                              </div>
-                            ))}
+                        )) : (
+                          <div className="rounded-lg border border-dashed border-slate-700 px-3 py-4 text-center text-xs text-slate-500">
+                            该账户下暂无设备记录
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomerDetail}
+                        disabled={adminActionLoading === `save-customer-${selectedCustomerDetailId}`}
+                        className="px-3 py-1.5 rounded bg-indigo-500 text-slate-950 text-xs font-semibold hover:bg-indigo-400 disabled:opacity-50"
+                      >
+                        {adminActionLoading === `save-customer-${selectedCustomerDetailId}` ? '保存中…' : '保存标签/收益率设置'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMonthlyRenew(selectedCustomerDetailId, Number(customerDetailForm.monthlyCardDays) || undefined)}
+                        disabled={adminActionLoading === `extend-monthly-${selectedCustomerDetailId}`}
+                        className="px-3 py-1.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-xs hover:bg-cyan-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === `extend-monthly-${selectedCustomerDetailId}` ? '处理中…' : '按月续费'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExtendContract(selectedCustomerDetailId)}
+                        disabled={adminActionLoading === `extend-${selectedCustomerDetailId}`}
+                        className="px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs hover:bg-emerald-500/30 disabled:opacity-50"
+                      >
+                        {adminActionLoading === `extend-${selectedCustomerDetailId}` ? '处理中…' : `合约续期 +${extendDays || 30}天`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
             )}
@@ -4051,7 +4144,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     title: '🆕 激活新用户',
                     steps: [
                       '在「客户列表」找到目标用户（按钱包地址或 ID 搜索）',
-                      '点击「激活」，填入机器码（可选）和合同年限',
+                      '点击「激活」，填入设备标识（可选）和合同年限',
                       '确认后系统自动设置 contract_start_at / contract_end_at，并将 activation_status 改为 active',
                       '激活成功后用户 APP 将显示正常收益状态',
                     ],
@@ -4106,7 +4199,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     title: '🆕 Activate a New User',
                     steps: [
                       'Find the target user in "Customers" (search by wallet or ID)',
-                      'Click "Activate", enter machine code (optional) and contract term in years',
+                      'Click "Activate", enter device id (optional) and contract term in years',
                       'System sets contract_start_at / contract_end_at and changes activation_status to active',
                       "After activation the user's app will show normal reward status",
                     ],

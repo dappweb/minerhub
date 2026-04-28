@@ -1,9 +1,11 @@
 import { createId, nowIso } from "../lib/id";
-import { requireOwnerAuth } from "../lib/ownerAuth";
+import { getAdminActorRole, requireOwnerAuth, type AdminActorRole } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json } from "../lib/response";
 import { runScheduledTasks } from "../lib/scheduled";
 import type { Env } from "../types/env";
+
+type OwnerAuthResult = { ok: true; wallet: string } | { ok: false; response: Response };
 
 type CustomerSummary = {
   id: string;
@@ -12,7 +14,6 @@ type CustomerSummary = {
   role: string | null;
   status: string | null;
   nickname: string | null;
-  machineCode: string | null;
   contractStartAt: string | null;
   contractEndAt: string | null;
   contractActive: number;
@@ -80,7 +81,6 @@ type AdminDeviceItem = {
   userId: string;
   wallet: string;
   nickname: string | null;
-  machineCode: string | null;
   monthlyCardDays: number;
   notes: string | null;
   deviceId: string;
@@ -135,14 +135,65 @@ export function deriveLiveOnlineStatus(lastSeenAt: string | null | undefined): "
   return "offline";
 }
 
-async function requireOwnerRead(request: Request, env: Env): Promise<Response | null> {
+async function requireOwnerRead(request: Request, env: Env): Promise<OwnerAuthResult> {
   const auth = await requireOwnerAuth(request, env);
-  return auth.ok ? null : auth.response;
+  return auth.ok ? { ok: true, wallet: auth.wallet } : { ok: false, response: auth.response };
 }
 
-async function requireOwner(request: Request, env: Env): Promise<Response | null> {
+async function requireOwner(request: Request, env: Env): Promise<OwnerAuthResult> {
   const auth = await requireOwnerAuth(request, env);
-  return auth.ok ? null : auth.response;
+  return auth.ok ? { ok: true, wallet: auth.wallet } : { ok: false, response: auth.response };
+}
+
+async function findUserIdByWallet(env: Env, wallet: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT id FROM users WHERE wallet = ? LIMIT 1")
+    .bind(wallet.toLowerCase())
+    .first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+async function ensureUserIdByWallet(env: Env, wallet: string): Promise<string> {
+  const normalized = wallet.toLowerCase();
+  const existing = await findUserIdByWallet(env, normalized);
+  if (existing) return existing;
+
+  const id = createId("usr");
+  const now = nowIso();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO users (id, wallet, email, role, created_at, updated_at)
+     VALUES (?, ?, NULL, 'subadmin', ?, ?)`
+  )
+    .bind(id, normalized, now, now)
+    .run();
+
+  return (await findUserIdByWallet(env, normalized)) ?? id;
+}
+
+async function canManageUserByScope(env: Env, scopeUserId: string | null, targetUserId: string): Promise<boolean> {
+  if (!scopeUserId) return true;
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok
+     FROM referral_closure
+     WHERE ancestor_user_id = ? AND descendant_user_id = ? AND depth >= 1
+     LIMIT 1`
+  )
+    .bind(scopeUserId, targetUserId)
+    .first<{ ok: number }>();
+  return Boolean(row?.ok);
+}
+
+async function canManageDeviceByScope(env: Env, scopeUserId: string | null, deviceRecordId: string): Promise<boolean> {
+  if (!scopeUserId) return true;
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok
+     FROM devices d
+     INNER JOIN referral_closure rc ON rc.descendant_user_id = d.user_id
+     WHERE d.id = ? AND rc.ancestor_user_id = ? AND rc.depth >= 1
+     LIMIT 1`
+  )
+    .bind(deviceRecordId, scopeUserId)
+    .first<{ ok: number }>();
+  return Boolean(row?.ok);
 }
 
 async function ensureProfile(env: Env, userId: string): Promise<void> {
@@ -183,7 +234,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
   const { results } = await env.DB.prepare(
     `SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
-      cp.nickname AS nickname, cp.machine_code AS machineCode, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
@@ -194,17 +245,81 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COUNT(DISTINCT d.id) AS deviceCount,
       SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount,
-      COUNT(DISTINCT sa.id) AS subAccountCount
+      0 AS subAccountCount
     FROM users u
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
-    LEFT JOIN sub_accounts sa ON sa.owner_user_id = u.id
-    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
+    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
              cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`
   ).all<CustomerSummary>();
+
+  const baseRows = (results ?? []).map((row) => ({
+    ...row,
+    deviceCount: Number((row as { deviceCount?: number }).deviceCount ?? 0),
+    activeDeviceCount: Number((row as { activeDeviceCount?: number }).activeDeviceCount ?? 0),
+    subAccountCount: Number((row as { subAccountCount?: number }).subAccountCount ?? 0),
+    onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
+    bnbBalance: null,
+    usdtBalance: null,
+    superBalance: null,
+  }));
+
+  const relayer = tryCreateRelayer(env);
+  if (!relayer) {
+    return baseRows;
+  }
+
+  return await Promise.all(
+    baseRows.map(async (row) => {
+      const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+      return {
+        ...row,
+        bnbBalance: balances.bnb,
+        usdtBalance: balances.usdt,
+        superBalance: balances.super,
+      };
+    })
+  );
+}
+
+async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: string): Promise<CustomerSummary[]> {
+  const inviter = await env.DB.prepare("SELECT id FROM users WHERE wallet = ? LIMIT 1")
+    .bind(inviterWallet.toLowerCase())
+    .first<{ id: string }>();
+
+  if (!inviter?.id) {
+    return [];
+  }
+
+  const { results } = await env.DB.prepare(
+    `SELECT
+      u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
+      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      COALESCE(cp.contract_active, 0) AS contractActive,
+      COALESCE(cp.activation_status, 'pending') AS activationStatus,
+      COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
+      COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
+      COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+      COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
+      cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
+      COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
+      COUNT(DISTINCT d.id) AS deviceCount,
+      SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount,
+      0 AS subAccountCount
+    FROM referral_closure rc
+    INNER JOIN users u ON u.id = rc.descendant_user_id
+    LEFT JOIN customer_profiles cp ON cp.user_id = u.id
+    LEFT JOIN devices d ON d.user_id = u.id
+    WHERE rc.ancestor_user_id = ? AND rc.depth >= 1
+    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
+             cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
+             cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
+             cp.reward_rate_usdt_per_hour
+    ORDER BY u.created_at DESC`
+  ).bind(inviter.id).all<CustomerSummary>();
 
   const baseRows = (results ?? []).map((row) => ({
     ...row,
@@ -257,7 +372,7 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
   const customer = await env.DB.prepare(
     `SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
-      cp.nickname AS nickname, cp.machine_code AS machineCode, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
@@ -292,18 +407,13 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
       updated_at: string;
     }>();
 
-  const subAccounts = await env.DB.prepare(
-    `SELECT id, child_user_id, label, created_at, updated_at
-     FROM sub_accounts WHERE owner_user_id = ? ORDER BY created_at DESC`
-  )
-    .bind(userId)
-    .all<{
-      id: string;
-      child_user_id: string;
-      label: string | null;
-      created_at: string;
-      updated_at: string;
-    }>();
+  const subAccounts = { results: [] as Array<{
+    id: string;
+    child_user_id: string;
+    label: string | null;
+    created_at: string;
+    updated_at: string;
+  }> };
 
   const rewardLedger = await env.DB.prepare(
     `SELECT id, device_id, reward_usdt, reward_super, rate_usdt_per_hour, source, note, created_at, updated_at
@@ -398,16 +508,17 @@ function calculateContractEnd(startAt: string, termDays: number): string {
   return new Date(new Date(startAt).getTime() + termDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
-async function handleCustomerList(request: Request, env: Env): Promise<Response> {
-  const adminWallet = request.headers.get("x-wallet");
+async function handleCustomerList(env: Env, requesterWallet: string, role: AdminActorRole): Promise<Response> {
+  const mineOnly = role !== "owner";
+
   const [items, admin] = await Promise.all([
-    readCustomerSummaries(env),
-    readAdminSummary(env, adminWallet),
+    mineOnly ? readCustomerSummariesByInviterWallet(env, requesterWallet) : readCustomerSummaries(env),
+    readAdminSummary(env, requesterWallet),
   ]);
   return json({ items, admin });
 }
 
-async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDeviceItem[]; total: number }> {
+async function readAdminDevices(env: Env, url: URL, scopeUserId: string | null): Promise<{ items: AdminDeviceItem[]; total: number }> {
   const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
   const status = (url.searchParams.get("status") ?? "all").trim().toLowerCase();
   const limit = clampLimit(url.searchParams.get("limit"), 100, 200);
@@ -417,10 +528,10 @@ async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDevic
 
   if (search) {
     clauses.push(
-      "(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ? OR LOWER(COALESCE(cp.machine_code, '')) LIKE ? OR LOWER(d.id) LIKE ?)"
+      "(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ? OR LOWER(d.id) LIKE ?)"
     );
     const like = `%${search}%`;
-    params.push(like, like, like, like, like);
+    params.push(like, like, like, like);
   }
 
   if (status === "online") {
@@ -438,6 +549,11 @@ async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDevic
     params.push(nowIso());
   }
 
+  if (scopeUserId) {
+    clauses.push("EXISTS (SELECT 1 FROM referral_closure rc WHERE rc.ancestor_user_id = ? AND rc.descendant_user_id = d.user_id AND rc.depth >= 1)");
+    params.push(scopeUserId);
+  }
+
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
   const { results } = await env.DB.prepare(
@@ -446,7 +562,6 @@ async function readAdminDevices(env: Env, url: URL): Promise<{ items: AdminDevic
       d.user_id AS userId,
       u.wallet AS wallet,
       cp.nickname AS nickname,
-      cp.machine_code AS machineCode,
       COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       cp.notes AS notes,
       d.device_id AS deviceId,
@@ -517,7 +632,6 @@ async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<A
       d.user_id AS userId,
       u.wallet AS wallet,
       cp.nickname AS nickname,
-      cp.machine_code AS machineCode,
       COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       cp.notes AS notes,
       d.device_id AS deviceId,
@@ -602,8 +716,8 @@ async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<A
   };
 }
 
-async function handleAdminDeviceList(request: Request, env: Env): Promise<Response> {
-  const data = await readAdminDevices(env, new URL(request.url));
+async function handleAdminDeviceList(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
+  const data = await readAdminDevices(env, new URL(request.url), scopeUserId);
   return json(data);
 }
 
@@ -618,7 +732,6 @@ async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordI
     hashrate?: number;
     deviceStatus?: string;
     nickname?: string;
-    machineCode?: string;
     notes?: string;
     rewardRateUsdtPerHour?: string | number;
     monthlyCardDays?: number;
@@ -651,9 +764,6 @@ async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordI
   if (typeof body.nickname === "string") {
     await updateProfileField(env, current.user_id, "nickname", body.nickname.trim() || null);
   }
-  if (typeof body.machineCode === "string") {
-    await updateProfileField(env, current.user_id, "machine_code", body.machineCode.trim() || null);
-  }
   if (typeof body.notes === "string") {
     await updateProfileField(env, current.user_id, "notes", body.notes.trim() || null);
   }
@@ -678,7 +788,7 @@ async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordI
   return handleAdminDeviceDetail(env, deviceRecordId);
 }
 
-async function handleAdminDeviceBulkUpdate(request: Request, env: Env): Promise<Response> {
+async function handleAdminDeviceBulkUpdate(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     deviceIds?: string[];
     rewardRateUsdtPerHour?: string | number;
@@ -722,6 +832,10 @@ async function handleAdminDeviceBulkUpdate(request: Request, env: Env): Promise<
       .first<{ id: string; user_id: string; contract_end_at: string | null; monthly_card_days: number }>();
 
     if (!current) continue;
+
+    if (!(await canManageUserByScope(env, scopeUserId, current.user_id))) {
+      continue;
+    }
 
     await ensureProfile(env, current.user_id);
 
@@ -774,10 +888,6 @@ async function handleCustomerUpdate(request: Request, env: Env, userId: string):
     await updateProfileField(env, userId, "nickname", body.nickname.trim() || null);
   }
 
-  if (typeof body.machineCode === "string") {
-    await updateProfileField(env, userId, "machine_code", body.machineCode.trim() || null);
-  }
-
   if (typeof body.parentUserId === "string" || body.parentUserId === null) {
     await updateProfileField(env, userId, "parent_user_id", body.parentUserId ? String(body.parentUserId).trim() : null);
   }
@@ -805,6 +915,49 @@ async function handleCustomerUpdate(request: Request, env: Env, userId: string):
 
   if (typeof body.notes === "string") {
     await updateProfileField(env, userId, "notes", body.notes.trim() || null);
+  }
+
+  if (Array.isArray(body.devices)) {
+    const seenIds = new Set<string>();
+    for (const item of body.devices) {
+      if (!item || typeof item !== "object") {
+        return badRequest("devices entries must be objects");
+      }
+
+      const device = item as {
+        id?: unknown;
+        deviceId?: unknown;
+        hashrate?: unknown;
+        status?: unknown;
+      };
+
+      const deviceRecordId = typeof device.id === "string" ? device.id.trim() : "";
+      const deviceId = typeof device.deviceId === "string" ? device.deviceId.trim() : "";
+      const status = typeof device.status === "string" ? device.status.trim() : "";
+      const hashrate = typeof device.hashrate === "number" ? device.hashrate : Number(device.hashrate);
+
+      if (!deviceRecordId) return badRequest("devices[].id is required");
+      if (seenIds.has(deviceRecordId)) return badRequest("devices[].id must be unique");
+      seenIds.add(deviceRecordId);
+      if (!deviceId) return badRequest("devices[].deviceId is required");
+      if (!status) return badRequest("devices[].status is required");
+      if (!Number.isFinite(hashrate) || hashrate < 0) return badRequest("devices[].hashrate must be >= 0");
+
+      const currentDevice = await env.DB.prepare("SELECT id, user_id FROM devices WHERE id = ? LIMIT 1")
+        .bind(deviceRecordId)
+        .first<{ id: string; user_id: string }>();
+      if (!currentDevice || currentDevice.user_id !== userId) {
+        return badRequest(`Device ${deviceRecordId} not found for user`);
+      }
+
+      await env.DB.prepare(
+        `UPDATE devices
+         SET device_id = ?, hashrate = ?, status = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`
+      )
+        .bind(deviceId, Math.max(0, Math.floor(hashrate)), status, nowIso(), deviceRecordId, userId)
+        .run();
+    }
   }
 
   if (Array.isArray(body.payoutWallets)) {
@@ -842,7 +995,6 @@ async function handleCustomerUpdate(request: Request, env: Env, userId: string):
 
 async function handleCustomerActivate(request: Request, env: Env, userId: string): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
-    machineCode?: string;
     contractTermYears?: number;
     contractTermDays?: number;
     contractStartAt?: string;
@@ -860,7 +1012,6 @@ async function handleCustomerActivate(request: Request, env: Env, userId: string
       ? Math.max(1, Math.floor((body.contractTermYears as number) * 365))
       : 1095;
 
-  await updateProfileField(env, userId, "machine_code", body.machineCode?.trim() ?? null);
   await updateProfileField(env, userId, "contract_start_at", now);
   await updateProfileField(env, userId, "contract_end_at", calculateContractEnd(now, termDays));
   await updateProfileField(env, userId, "contract_term_days", termDays);
@@ -1106,60 +1257,6 @@ async function handleWithdrawalRecords(env: Env, url: URL): Promise<Response> {
     }
   }
 
-  if (!source || source === "claim") {
-    const clauses: string[] = [];
-    const params: Array<string | number> = [];
-    if (userIdFilter) {
-      clauses.push("c.user_id = ?");
-      params.push(userIdFilter);
-    }
-    if (walletFilter) {
-      clauses.push("LOWER(u.wallet) = ?");
-      params.push(walletFilter);
-    }
-    if (statusFilter) {
-      clauses.push("c.status = ?");
-      params.push(statusFilter);
-    }
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-
-    const { results } = await env.DB.prepare(
-      `SELECT c.id AS id, c.user_id AS user_id, u.wallet AS wallet,
-              c.amount AS amount, c.status AS status, c.tx_hash AS tx_hash,
-              c.created_at AS created_at, c.updated_at AS updated_at
-       FROM claims c LEFT JOIN users u ON u.id = c.user_id ${where}
-       ORDER BY c.created_at DESC LIMIT ?`
-    )
-      .bind(...params, limit)
-      .all<{
-        id: string;
-        user_id: string;
-        wallet: string | null;
-        amount: string;
-        status: string;
-        tx_hash: string | null;
-        created_at: string;
-        updated_at: string;
-      }>();
-
-    for (const row of results ?? []) {
-      items.push({
-        id: row.id,
-        source: "claim",
-        userId: row.user_id,
-        wallet: row.wallet,
-        amountUsdt: row.amount,
-        amountSuper: "0",
-        status: row.status,
-        txHash: row.tx_hash,
-        payoutWallet: null,
-        note: null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      });
-    }
-  }
-
   items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 
   return json({ items: items.slice(0, limit), limit });
@@ -1232,7 +1329,7 @@ async function handleExchangeRecords(env: Env, url: URL): Promise<Response> {
   return json({ items, limit });
 }
 
-async function handleBulkRate(request: Request, env: Env): Promise<Response> {
+async function handleBulkRate(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     userIds?: string[];
     rewardRateUsdtPerHour?: string | number;
@@ -1248,6 +1345,9 @@ async function handleBulkRate(request: Request, env: Env): Promise<Response> {
   let updated = 0;
   for (const userId of body.userIds) {
     if (!userId) continue;
+    if (!(await canManageUserByScope(env, scopeUserId, userId))) {
+      continue;
+    }
     await ensureProfile(env, userId);
     await updateProfileField(env, userId, "reward_rate_usdt_per_hour", rate);
     updated += 1;
@@ -1291,7 +1391,6 @@ type AdminAlertItem = {
   userId: string;
   wallet: string;
   nickname: string | null;
-  machineCode: string | null;
   contractActive: number;
   contractEndAt: string | null;
   lastSeenAt: string | null;
@@ -1302,42 +1401,29 @@ type AdminAlertItem = {
   activeDeviceCount: number;
 };
 
-type MachineCodeConflictUser = {
-  userId: string;
-  wallet: string;
-  nickname: string | null;
-  contractActive: number;
-  onlineStatus: "online" | "stale" | "offline";
-  deviceCount: number;
-  activeDeviceCount: number;
-  updatedAt: string;
-};
-
-type MachineCodeConflictItem = {
-  machineCode: string;
-  userCount: number;
-  activeContractCount: number;
-  users: MachineCodeConflictUser[];
-};
-
-type MachineCodeConflictResolveBody = {
-  machineCode?: string;
-  keepUserId?: string;
-  allowReassignFromActive?: boolean;
-};
-
-async function handleAdminAlerts(env: Env): Promise<Response> {
+async function handleAdminAlerts(env: Env, scopeUserId: string | null): Promise<Response> {
   // Return customers whose heartbeat stopped while their contract is still active.
   // Uses a broad SQL pre-filter (older than online threshold) and then classifies
   // offline vs stale via the shared derivation to keep a single source of truth.
   const onlineCutoff = new Date(Date.now() - HEARTBEAT_ONLINE_MS).toISOString();
+
+  const clauses: string[] = [
+    "COALESCE(cp.contract_active, 0) = 1",
+    "(cp.last_seen_at IS NULL OR cp.last_seen_at < ?)"
+  ];
+  const params: Array<string> = [onlineCutoff];
+  if (scopeUserId) {
+    clauses.push("EXISTS (SELECT 1 FROM referral_closure rc WHERE rc.ancestor_user_id = ? AND rc.descendant_user_id = u.id AND rc.depth >= 1)");
+    params.push(scopeUserId);
+  }
+
+  const where = `WHERE ${clauses.join(" AND ")}`;
 
   const { results } = await env.DB.prepare(
     `SELECT
       u.id AS userId,
       u.wallet AS wallet,
       cp.nickname AS nickname,
-      cp.machine_code AS machineCode,
       COALESCE(cp.contract_active, 0) AS contractActive,
       cp.contract_end_at AS contractEndAt,
       cp.last_seen_at AS lastSeenAt,
@@ -1347,18 +1433,16 @@ async function handleAdminAlerts(env: Env): Promise<Response> {
     FROM users u
     INNER JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
-    WHERE COALESCE(cp.contract_active, 0) = 1
-      AND (cp.last_seen_at IS NULL OR cp.last_seen_at < ?)
-    GROUP BY u.id, u.wallet, cp.nickname, cp.machine_code, cp.contract_active,
+    ${where}
+    GROUP BY u.id, u.wallet, cp.nickname, cp.contract_active,
              cp.contract_end_at, cp.last_seen_at, cp.offline_alerted_at
     ORDER BY (CASE WHEN cp.last_seen_at IS NULL THEN 0 ELSE 1 END) ASC, cp.last_seen_at ASC`
   )
-    .bind(onlineCutoff)
+    .bind(...params)
     .all<{
       userId: string;
       wallet: string;
       nickname: string | null;
-      machineCode: string | null;
       contractActive: number;
       contractEndAt: string | null;
       lastSeenAt: string | null;
@@ -1380,7 +1464,6 @@ async function handleAdminAlerts(env: Env): Promise<Response> {
       userId: row.userId,
       wallet: row.wallet,
       nickname: row.nickname,
-      machineCode: row.machineCode,
       contractActive: Number(row.contractActive ?? 0),
       contractEndAt: row.contractEndAt,
       lastSeenAt: row.lastSeenAt,
@@ -1407,200 +1490,50 @@ async function handleAdminAlerts(env: Env): Promise<Response> {
   });
 }
 
-async function handleMachineCodeConflicts(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const limit = clampLimit(url.searchParams.get("limit"), 30, 100);
-
-  const groups = await env.DB.prepare(
-    `SELECT
-      TRIM(machine_code) AS machineCode,
-      COUNT(*) AS userCount,
-      SUM(CASE WHEN COALESCE(contract_active, 0) = 1 THEN 1 ELSE 0 END) AS activeContractCount,
-      MAX(updated_at) AS latestUpdatedAt
-     FROM customer_profiles
-     WHERE machine_code IS NOT NULL
-       AND TRIM(machine_code) <> ''
-     GROUP BY TRIM(machine_code)
-     HAVING COUNT(*) > 1
-     ORDER BY userCount DESC, activeContractCount DESC, latestUpdatedAt DESC
-     LIMIT ?`
-  )
-    .bind(limit)
-    .all<{
-      machineCode: string;
-      userCount: number;
-      activeContractCount: number;
-      latestUpdatedAt: string;
-    }>();
-
-  const items: MachineCodeConflictItem[] = [];
-
-  for (const group of groups.results ?? []) {
-    const detailRows = await env.DB.prepare(
-      `SELECT
-        cp.user_id AS userId,
-        u.wallet AS wallet,
-        cp.nickname AS nickname,
-        COALESCE(cp.contract_active, 0) AS contractActive,
-        cp.last_seen_at AS lastSeenAt,
-        cp.updated_at AS updatedAt,
-        COUNT(d.id) AS deviceCount,
-        SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount
-       FROM customer_profiles cp
-       INNER JOIN users u ON u.id = cp.user_id
-       LEFT JOIN devices d ON d.user_id = cp.user_id
-       WHERE TRIM(cp.machine_code) = ?
-       GROUP BY cp.user_id, u.wallet, cp.nickname, cp.contract_active, cp.last_seen_at, cp.updated_at
-       ORDER BY cp.contract_active DESC, cp.updated_at DESC`
-    )
-      .bind(group.machineCode)
-      .all<{
-        userId: string;
-        wallet: string;
-        nickname: string | null;
-        contractActive: number;
-        lastSeenAt: string | null;
-        updatedAt: string;
-        deviceCount: number;
-        activeDeviceCount: number;
-      }>();
-
-    items.push({
-      machineCode: group.machineCode,
-      userCount: Number(group.userCount ?? 0),
-      activeContractCount: Number(group.activeContractCount ?? 0),
-      users: (detailRows.results ?? []).map((row) => ({
-        userId: row.userId,
-        wallet: row.wallet,
-        nickname: row.nickname,
-        contractActive: Number(row.contractActive ?? 0),
-        onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt),
-        deviceCount: Number(row.deviceCount ?? 0),
-        activeDeviceCount: Number(row.activeDeviceCount ?? 0),
-        updatedAt: row.updatedAt,
-      })),
-    });
-  }
-
-  return json({
-    items,
-    counts: {
-      machineCodes: items.length,
-      impactedUsers: items.reduce((sum, item) => sum + item.userCount, 0),
-      activeContracts: items.reduce((sum, item) => sum + item.activeContractCount, 0),
-    },
-    generatedAt: nowIso(),
-  });
-}
-
-async function handleResolveMachineCodeConflict(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json().catch(() => null)) as MachineCodeConflictResolveBody | null;
-  const machineCode = body?.machineCode?.trim();
-  const keepUserId = body?.keepUserId?.trim();
-  const allowReassignFromActive = body?.allowReassignFromActive === true;
-
-  if (!machineCode) return badRequest("machineCode required");
-  if (!keepUserId) return badRequest("keepUserId required");
-
-  const rows = await env.DB.prepare(
-    `SELECT user_id, COALESCE(contract_active, 0) AS contract_active
-     FROM customer_profiles
-     WHERE TRIM(machine_code) = ?`
-  )
-    .bind(machineCode)
-    .all<{ user_id: string; contract_active: number }>();
-
-  const users = rows.results ?? [];
-  if (users.length <= 1) {
-    return json({ ok: true, resolved: false, reason: "no_conflict", machineCode, keepUserId });
-  }
-
-  const keepExists = users.some((row) => row.user_id === keepUserId);
-  if (!keepExists) return badRequest("keepUserId not in conflict group");
-
-  const now = nowIso();
-  const clearedUserIds: string[] = [];
-  const blockedActiveUserIds: string[] = [];
-
-  for (const row of users) {
-    if (row.user_id === keepUserId) continue;
-
-    const isActive = Number(row.contract_active ?? 0) === 1;
-    if (isActive && !allowReassignFromActive) {
-      blockedActiveUserIds.push(row.user_id);
-      continue;
-    }
-
-    await env.DB.prepare(
-      `UPDATE customer_profiles
-       SET machine_code = NULL, updated_at = ?
-       WHERE user_id = ? AND TRIM(machine_code) = ?`
-    )
-      .bind(now, row.user_id, machineCode)
-      .run();
-    clearedUserIds.push(row.user_id);
-  }
-
-  await env.DB.prepare(
-    `UPDATE customer_profiles
-     SET machine_code = ?, updated_at = ?
-     WHERE user_id = ?`
-  )
-    .bind(machineCode, now, keepUserId)
-    .run();
-
-  const remainingRows = await env.DB.prepare(
-    `SELECT user_id
-     FROM customer_profiles
-     WHERE TRIM(machine_code) = ?
-     ORDER BY user_id ASC`
-  )
-    .bind(machineCode)
-    .all<{ user_id: string }>();
-
-  return json({
-    ok: true,
-    resolved: clearedUserIds.length > 0,
-    machineCode,
-    keepUserId,
-    clearedUserIds,
-    blockedActiveUserIds,
-    remainingUserIds: (remainingRows.results ?? []).map((row) => row.user_id),
-  });
-}
-
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   const ownerCheck = request.method === "GET"
     ? await requireOwnerRead(request, env)
     : await requireOwner(request, env);
-  if (ownerCheck) return ownerCheck;
+  if (!ownerCheck.ok) return ownerCheck.response;
+  const requesterWallet = ownerCheck.wallet;
+  const requesterRole = await getAdminActorRole(env, requesterWallet);
+  if (!requesterRole) return json({ error: "Not admin wallet" }, 403);
+  const isPrimaryOwner = requesterRole === "owner";
+  const scopeUserId = isPrimaryOwner ? null : await ensureUserIdByWallet(env, requesterWallet);
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
-    return handleCustomerList(request, env);
+    return handleCustomerList(env, requesterWallet, requesterRole);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "alerts") {
-    return handleAdminAlerts(env);
+    return handleAdminAlerts(env, scopeUserId);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "machine-code-conflicts") {
-    return handleMachineCodeConflicts(request, env);
+    return json({
+      items: [],
+      counts: { machineCodes: 0, impactedUsers: 0, activeContracts: 0 },
+      generatedAt: nowIso(),
+    });
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "machine-code-conflicts" && pathParts[1] === "resolve") {
-    return handleResolveMachineCodeConflict(request, env);
+    return json({ ok: true, resolved: false, reason: "machine-code-disabled" });
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
-    return handleAdminDeviceList(request, env);
+    return handleAdminDeviceList(request, env, scopeUserId);
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "devices" && pathParts[1] === "bulk-update") {
-    return handleAdminDeviceBulkUpdate(request, env);
+    return handleAdminDeviceBulkUpdate(request, env, scopeUserId);
   }
 
   if (pathParts.length === 2 && pathParts[0] === "devices") {
     const deviceRecordId = pathParts[1];
+    if (!(await canManageDeviceByScope(env, scopeUserId, deviceRecordId))) {
+      return json({ error: "Forbidden" }, 403);
+    }
     if (request.method === "GET") {
       return handleAdminDeviceDetail(env, deviceRecordId);
     }
@@ -1610,7 +1543,15 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {
-    return handleBulkRate(request, env);
+    return handleBulkRate(request, env, scopeUserId);
+  }
+
+  if (!isPrimaryOwner && pathParts[0] === "records") {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  if (!isPrimaryOwner && pathParts[0] === "tasks") {
+    return json({ error: "Forbidden" }, 403);
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "tasks" && pathParts[1] === "run") {
@@ -1627,6 +1568,9 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
   if (pathParts.length >= 2 && pathParts[0] === "customers") {
     const userId = pathParts[1];
+    if (!(await canManageUserByScope(env, scopeUserId, userId))) {
+      return json({ error: "Forbidden" }, 403);
+    }
 
     if (request.method === "GET" && pathParts.length === 2) {
       return handleCustomerDetail(env, userId);

@@ -319,27 +319,11 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     }, 410);
   }
 
-  if (request.method === "GET" && pathParts.length === 1) {
-    const claimId = pathParts[0];
-    const claim = await env.DB.prepare(
-      "SELECT id, user_id, amount, status, tx_hash, created_at, updated_at FROM claims WHERE id = ?"
-    )
-      .bind(claimId)
-      .first();
-
-    if (!claim) return json({ error: "Claim not found" }, 404);
-    return json(claim);
-  }
-
-  if (request.method === "GET" && pathParts.length === 2 && pathParts[0] === "user") {
-    const userId = pathParts[1];
-    const { results } = await env.DB.prepare(
-      "SELECT id, user_id, amount, status, tx_hash, created_at, updated_at FROM claims WHERE user_id = ? ORDER BY created_at DESC"
-    )
-      .bind(userId)
-      .all();
-
-    return json({ items: results ?? [] });
+  if (request.method === "GET") {
+    return json({
+      error: "Legacy claims history has been retired. Use reward-withdraw or exchange-request records instead.",
+      code: "CLAIMS_HISTORY_RETIRED",
+    }, 410);
   }
 
   return json({ error: "Unsupported claims route" }, 404);

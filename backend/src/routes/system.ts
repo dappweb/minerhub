@@ -85,6 +85,7 @@ const DEFAULT_STATUS: SystemStatus = {
   swapPriceSuperPerUsdt: 0,
   payoutWallets: [],
   userAgreement: DEFAULT_AGREEMENT,
+  contract: DEFAULT_CONTRACT,
   supportContacts: [],
 };
 

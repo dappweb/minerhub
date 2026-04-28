@@ -24,7 +24,6 @@ export interface HomeTabProps {
   setActiveTab: (tab: BottomTab) => void;
   onCopyAddress: () => void;
   copyState: 'idle' | 'copied' | 'failed';
-  machineCode: string;
   bnbBalance: string;
   superBalance: string;
   usdtBalance: string;
@@ -45,8 +44,6 @@ export interface HomeTabProps {
     copyAddress: string;
     copied: string;
     copyFailed: string;
-    machineCodeTitle: string;
-    machineCodeHint: string;
   };
 }
 
@@ -78,7 +75,6 @@ export default function HomeTab({
   setActiveTab,
   onCopyAddress,
   copyState,
-  machineCode,
   t,
   bnbBalance,
   superBalance,
@@ -199,9 +195,6 @@ export default function HomeTab({
             </View>
           </View>
         ) : null}
-        <Text style={styles.machineLabel}>{t.machineCodeTitle}</Text>
-        <Text style={styles.machineValue}>{machineCode}</Text>
-        <Text style={styles.machineHint}>{t.machineCodeHint}</Text>
       </View>
     </>
   );

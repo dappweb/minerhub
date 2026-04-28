@@ -7,7 +7,6 @@ type OnboardingFlowProps = {
   visible: boolean;
   minimized: boolean;
   lang: OnboardingLang;
-  machineCode: string;
   initialReferralWallet?: string;
   onComplete: (referralWallet: string) => void;
   onMinimize: () => void;
@@ -23,14 +22,14 @@ const COPY = {
     minimize: 'Later',
     resume: 'Continue Setup',
     finish: 'Start Earning',
-    s1Title: 'Your Machine Code',
+    s1Title: 'Complete Account Setup',
     s1Body:
-      'Send this code to our support when you purchase a monthly card. It binds your phone to your contract.',
-    s1Hint: 'You can also find this code in the Home tab.',
+      'Finish identity setup and keep your wallet ready. You can continue from any tab later.',
+    s1Hint: 'No device code is required anymore.',
     s2Title: 'Ready to Configure Miner',
     s2Body: 'Identity config is complete. Next, ask support to activate the monthly card, then return to finish miner setup.',
     s2Bullet1: '• Keep this floating guide available from any tab',
-    s2Bullet2: '• Finish monthly-card activation with your machine code',
+    s2Bullet2: '• Finish monthly-card activation with support',
     s2Bullet3: '• After activation, tap Setup Miner from the home guide',
     s3Title: 'Bind Referrer (Optional)',
     s3Body: 'Enter the wallet address of your referrer if you have one. This can be added later from the profile page.',
@@ -47,13 +46,13 @@ const COPY = {
     minimize: '稍后',
     resume: '继续配置',
     finish: '开始挖矿',
-    s1Title: '您的机器码',
-    s1Body: '购买月卡时请将此机器码告知客服，用于将本机绑定到您的合同。',
-    s1Hint: '您也可以在"首页"随时查看此机器码。',
+    s1Title: '完成账户配置',
+    s1Body: '先完成身份同步并保持钱包可用，之后可在任意页面继续配置流程。',
+    s1Hint: '当前流程无需额外设备编码。',
     s2Title: '准备配置矿机',
-    s2Body: '注册配置已完成。下一步请联系客服用机器码开通月卡，随后返回首页完成矿机设置。',
+    s2Body: '注册配置已完成。下一步请联系客服开通月卡，随后返回首页完成矿机设置。',
     s2Bullet1: '• 这个悬浮引导可在任意页面继续打开',
-    s2Bullet2: '• 用机器码联系客服完成月卡激活',
+    s2Bullet2: '• 联系客服完成月卡激活',
     s2Bullet3: '• 激活完成后，回到首页点击"矿机设置"',
     s3Title: '绑定推荐人（可选）',
     s3Body: '输入您的推荐人钱包地址，如果您有的话。也可以稍后在个人页面添加。',
@@ -68,7 +67,7 @@ function isValidEthereumAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
-export default function OnboardingFlow({ visible, minimized, lang, machineCode, initialReferralWallet = '', onComplete, onMinimize, onExpand }: OnboardingFlowProps) {
+export default function OnboardingFlow({ visible, minimized, lang, initialReferralWallet = '', onComplete, onMinimize, onExpand }: OnboardingFlowProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [referralWallet, setReferralWallet] = useState(initialReferralWallet);
   const [referralError, setReferralError] = useState('');
@@ -180,11 +179,6 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
               {step === 1 && (
                 <>
                   <Text style={styles.title}>{t.s1Title}</Text>
-                  <View style={styles.codeBox}>
-                    <Text style={styles.codeText} selectable>
-                      {machineCode || '------'}
-                    </Text>
-                  </View>
                   <Text style={styles.body}>{t.s1Body}</Text>
                   <Text style={styles.hint}>{t.s1Hint}</Text>
                 </>

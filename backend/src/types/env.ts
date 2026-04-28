@@ -12,6 +12,8 @@
   OWNER_ADDRESS?: string;
   /** Comma-separated additional admin wallets (same privileges as OWNER_ADDRESS) */
   ADMIN_ADDRESSES?: string;
+  /** Comma-separated SubAdmin wallets (referral-scope dashboard access) */
+  SUB_ADMIN_ADDRESSES?: string;
 
   /** Phase-1 gas service pricing */
   GAS_FEE_RATE?: string;

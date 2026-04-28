@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "./AdminAccess.sol";
 
 /**
  * @title SUPER Token
  * @notice Coin Planet 鐢熸€佷唬甯侊紝鏀寔閾搁€犮€侀攢姣併€佹爣鍑?ERC20 鎿嶄綔
  */
-contract SUPER is ERC20, ERC20Burnable, AdminAccess, ERC20Permit {
+contract SUPER is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, AdminAccess, ERC20PermitUpgradeable, UUPSUpgradeable {
     // 浠ｅ竵鎬讳緵搴旈噺锛?0 浜?SUPER
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 * 10 ** 18;
     
@@ -26,9 +28,18 @@ contract SUPER is ERC20, ERC20Burnable, AdminAccess, ERC20Permit {
     // 閾搁€犺€呮潈闄愭槧灏?
     mapping(address => bool) public minters;
 
-    constructor() ERC20("Coin Planet Token", "SUPER") ERC20Permit("Coin Planet Token") {
-        // 鍒濆渚涘簲缁欓儴缃茶€咃紙鐢ㄤ簬鍒濆鍖?Swap 姹犲拰鐢熸€佸熀閲戯級
-        // 灏嗗湪閮ㄧ讲鑴氭湰涓垎閰嶅埌涓嶅悓鍦板潃
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address initialAdmin) external initializer {
+        require(initialAdmin != address(0), "Invalid admin address");
+        __ERC20_init("Coin Planet Token", "SUPER");
+        __ERC20Burnable_init();
+        __AdminAccess_init(initialAdmin);
+        __ERC20Permit_init("Coin Planet Token");
+        __UUPSUpgradeable_init();
     }
     
     /**
@@ -101,5 +112,7 @@ contract SUPER is ERC20, ERC20Burnable, AdminAccess, ERC20Permit {
     function isMinter(address _account) external view returns (bool) {
         return isAdmin(_account) || minters[_account];
     }
+
+    function _authorizeUpgrade(address) internal override onlyAdmin {}
 }
 

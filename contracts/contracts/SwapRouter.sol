@@ -2,7 +2,9 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./AdminAccess.sol";
 
 /**
@@ -12,7 +14,7 @@ import "./AdminAccess.sol";
  * - 鍒濆娴佸姩鎬э細50M SUPER + 50k USDT
  * - 鎵嬬画璐癸細0.5% (70% LP, 20% 骞冲彴, 10% 鐢熸€?
  */
-contract SwapRouter is AdminAccess, ReentrancyGuard {
+contract SwapRouter is Initializable, AdminAccess, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     IERC20 public superToken;
     IERC20 public usdtToken;
     
@@ -22,9 +24,9 @@ contract SwapRouter is AdminAccess, ReentrancyGuard {
     
     // 鎵嬬画璐瑰弬鏁?
     uint256 public constant FEE_BIPS = 50;  // 0.5% = 50 basis points
-    uint256 public lpFeeShare = 70;         // LP 鑾峰緱 70%
-    uint256 public platformFeeShare = 20;   // 骞冲彴 20%
-    uint256 public ecosystemFeeShare = 10;  // 鐢熸€?10%
+    uint256 public lpFeeShare;              // LP 鑾峰緱 70%
+    uint256 public platformFeeShare;        // 骞冲彴 20%
+    uint256 public ecosystemFeeShare;       // 鐢熸€?10%
     
     // 娴佸姩鎬ф彁渚涜€?(LP) 杩借釜
     mapping(address => uint256) public lpShares;
@@ -48,10 +50,22 @@ contract SwapRouter is AdminAccess, ReentrancyGuard {
     event FeeCollected(uint256 platformFee, uint256 ecosystemFee);
     event PriceUpdated(uint256 priceSuperPerUSDT);
     
-    constructor(address _super, address _usdt) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _super, address _usdt, address initialAdmin) external initializer {
         require(_super != address(0) && _usdt != address(0), "Invalid token addresses");
+        require(initialAdmin != address(0), "Invalid admin address");
+        __AdminAccess_init(initialAdmin);
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
         superToken = IERC20(_super);
         usdtToken = IERC20(_usdt);
+        lpFeeShare = 70;
+        platformFeeShare = 20;
+        ecosystemFeeShare = 10;
     }
     
     /**
@@ -298,6 +312,8 @@ contract SwapRouter is AdminAccess, ReentrancyGuard {
         
         emit PriceUpdated(price);
     }
+
+    function _authorizeUpgrade(address) internal override onlyAdmin {}
 }
 
 

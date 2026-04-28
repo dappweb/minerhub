@@ -37,6 +37,7 @@ export interface SwapRouterInterface extends Interface {
       | "ecosystemFeeShare"
       | "getAdmins"
       | "getPrice"
+      | "initialize"
       | "initializeLiquidity"
       | "isAdmin"
       | "lpFeeShare"
@@ -44,6 +45,7 @@ export interface SwapRouterInterface extends Interface {
       | "owner"
       | "platformFeeShare"
       | "priceHistory"
+      | "proxiableUUID"
       | "removeAdmin"
       | "removeLiquidity"
       | "renounceOwnership"
@@ -54,19 +56,25 @@ export interface SwapRouterInterface extends Interface {
       | "swapUsdtToSuper"
       | "totalLPShares"
       | "transferOwnership"
+      | "upgradeTo"
+      | "upgradeToAndCall"
       | "usdtToken"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "AdminAdded"
+      | "AdminChanged"
       | "AdminRemoved"
+      | "BeaconUpgraded"
       | "FeeCollected"
+      | "Initialized"
       | "LiquidityAdded"
       | "LiquidityRemoved"
       | "OwnershipTransferred"
       | "PriceUpdated"
       | "Swap"
+      | "Upgraded"
   ): EventFragment;
 
   encodeFunctionData(functionFragment: "FEE_BIPS", values?: undefined): string;
@@ -105,6 +113,10 @@ export interface SwapRouterInterface extends Interface {
   encodeFunctionData(functionFragment: "getAdmins", values?: undefined): string;
   encodeFunctionData(functionFragment: "getPrice", values?: undefined): string;
   encodeFunctionData(
+    functionFragment: "initialize",
+    values: [AddressLike, AddressLike, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "initializeLiquidity",
     values: [BigNumberish, BigNumberish]
   ): string;
@@ -128,6 +140,10 @@ export interface SwapRouterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "priceHistory",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "proxiableUUID",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "removeAdmin",
@@ -169,6 +185,14 @@ export interface SwapRouterInterface extends Interface {
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "upgradeTo",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "upgradeToAndCall",
+    values: [AddressLike, BytesLike]
+  ): string;
   encodeFunctionData(functionFragment: "usdtToken", values?: undefined): string;
 
   decodeFunctionResult(functionFragment: "FEE_BIPS", data: BytesLike): Result;
@@ -200,6 +224,7 @@ export interface SwapRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "getAdmins", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getPrice", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "initializeLiquidity",
     data: BytesLike
@@ -214,6 +239,10 @@ export interface SwapRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "priceHistory",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -253,6 +282,11 @@ export interface SwapRouterInterface extends Interface {
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "upgradeTo", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "upgradeToAndCall",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "usdtToken", data: BytesLike): Result;
 }
 
@@ -262,6 +296,19 @@ export namespace AdminAddedEvent {
   export interface OutputObject {
     admin: string;
     operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AdminChangedEvent {
+  export type InputTuple = [previousAdmin: AddressLike, newAdmin: AddressLike];
+  export type OutputTuple = [previousAdmin: string, newAdmin: string];
+  export interface OutputObject {
+    previousAdmin: string;
+    newAdmin: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -282,6 +329,18 @@ export namespace AdminRemovedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace BeaconUpgradedEvent {
+  export type InputTuple = [beacon: AddressLike];
+  export type OutputTuple = [beacon: string];
+  export interface OutputObject {
+    beacon: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace FeeCollectedEvent {
   export type InputTuple = [
     platformFee: BigNumberish,
@@ -291,6 +350,18 @@ export namespace FeeCollectedEvent {
   export interface OutputObject {
     platformFee: bigint;
     ecosystemFee: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace InitializedEvent {
+  export type InputTuple = [version: BigNumberish];
+  export type OutputTuple = [version: bigint];
+  export interface OutputObject {
+    version: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -401,6 +472,18 @@ export namespace SwapEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace UpgradedEvent {
+  export type InputTuple = [implementation: AddressLike];
+  export type OutputTuple = [implementation: string];
+  export interface OutputObject {
+    implementation: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export interface SwapRouter extends BaseContract {
   connect(runner?: ContractRunner | null): SwapRouter;
   waitForDeployment(): Promise<this>;
@@ -474,6 +557,12 @@ export interface SwapRouter extends BaseContract {
 
   getPrice: TypedContractMethod<[], [bigint], "view">;
 
+  initialize: TypedContractMethod<
+    [_super: AddressLike, _usdt: AddressLike, initialAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   initializeLiquidity: TypedContractMethod<
     [_superAmount: BigNumberish, _usdtAmount: BigNumberish],
     [void],
@@ -495,6 +584,8 @@ export interface SwapRouter extends BaseContract {
     [[bigint, bigint] & { timestamp: bigint; priceSuperPerUSDT: bigint }],
     "view"
   >;
+
+  proxiableUUID: TypedContractMethod<[], [string], "view">;
 
   removeAdmin: TypedContractMethod<
     [account: AddressLike],
@@ -534,6 +625,18 @@ export interface SwapRouter extends BaseContract {
     [newOwner: AddressLike],
     [void],
     "nonpayable"
+  >;
+
+  upgradeTo: TypedContractMethod<
+    [newImplementation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  upgradeToAndCall: TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
   >;
 
   usdtToken: TypedContractMethod<[], [string], "view">;
@@ -580,6 +683,13 @@ export interface SwapRouter extends BaseContract {
     nameOrSignature: "getPrice"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "initialize"
+  ): TypedContractMethod<
+    [_super: AddressLike, _usdt: AddressLike, initialAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "initializeLiquidity"
   ): TypedContractMethod<
     [_superAmount: BigNumberish, _usdtAmount: BigNumberish],
@@ -608,6 +718,9 @@ export interface SwapRouter extends BaseContract {
     [[bigint, bigint] & { timestamp: bigint; priceSuperPerUSDT: bigint }],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "proxiableUUID"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "removeAdmin"
   ): TypedContractMethod<[account: AddressLike], [void], "nonpayable">;
@@ -639,6 +752,20 @@ export interface SwapRouter extends BaseContract {
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "upgradeTo"
+  ): TypedContractMethod<
+    [newImplementation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "upgradeToAndCall"
+  ): TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
+  >;
+  getFunction(
     nameOrSignature: "usdtToken"
   ): TypedContractMethod<[], [string], "view">;
 
@@ -650,6 +777,13 @@ export interface SwapRouter extends BaseContract {
     AdminAddedEvent.OutputObject
   >;
   getEvent(
+    key: "AdminChanged"
+  ): TypedContractEvent<
+    AdminChangedEvent.InputTuple,
+    AdminChangedEvent.OutputTuple,
+    AdminChangedEvent.OutputObject
+  >;
+  getEvent(
     key: "AdminRemoved"
   ): TypedContractEvent<
     AdminRemovedEvent.InputTuple,
@@ -657,11 +791,25 @@ export interface SwapRouter extends BaseContract {
     AdminRemovedEvent.OutputObject
   >;
   getEvent(
+    key: "BeaconUpgraded"
+  ): TypedContractEvent<
+    BeaconUpgradedEvent.InputTuple,
+    BeaconUpgradedEvent.OutputTuple,
+    BeaconUpgradedEvent.OutputObject
+  >;
+  getEvent(
     key: "FeeCollected"
   ): TypedContractEvent<
     FeeCollectedEvent.InputTuple,
     FeeCollectedEvent.OutputTuple,
     FeeCollectedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Initialized"
+  ): TypedContractEvent<
+    InitializedEvent.InputTuple,
+    InitializedEvent.OutputTuple,
+    InitializedEvent.OutputObject
   >;
   getEvent(
     key: "LiquidityAdded"
@@ -698,6 +846,13 @@ export interface SwapRouter extends BaseContract {
     SwapEvent.OutputTuple,
     SwapEvent.OutputObject
   >;
+  getEvent(
+    key: "Upgraded"
+  ): TypedContractEvent<
+    UpgradedEvent.InputTuple,
+    UpgradedEvent.OutputTuple,
+    UpgradedEvent.OutputObject
+  >;
 
   filters: {
     "AdminAdded(address,address)": TypedContractEvent<
@@ -711,6 +866,17 @@ export interface SwapRouter extends BaseContract {
       AdminAddedEvent.OutputObject
     >;
 
+    "AdminChanged(address,address)": TypedContractEvent<
+      AdminChangedEvent.InputTuple,
+      AdminChangedEvent.OutputTuple,
+      AdminChangedEvent.OutputObject
+    >;
+    AdminChanged: TypedContractEvent<
+      AdminChangedEvent.InputTuple,
+      AdminChangedEvent.OutputTuple,
+      AdminChangedEvent.OutputObject
+    >;
+
     "AdminRemoved(address,address)": TypedContractEvent<
       AdminRemovedEvent.InputTuple,
       AdminRemovedEvent.OutputTuple,
@@ -722,6 +888,17 @@ export interface SwapRouter extends BaseContract {
       AdminRemovedEvent.OutputObject
     >;
 
+    "BeaconUpgraded(address)": TypedContractEvent<
+      BeaconUpgradedEvent.InputTuple,
+      BeaconUpgradedEvent.OutputTuple,
+      BeaconUpgradedEvent.OutputObject
+    >;
+    BeaconUpgraded: TypedContractEvent<
+      BeaconUpgradedEvent.InputTuple,
+      BeaconUpgradedEvent.OutputTuple,
+      BeaconUpgradedEvent.OutputObject
+    >;
+
     "FeeCollected(uint256,uint256)": TypedContractEvent<
       FeeCollectedEvent.InputTuple,
       FeeCollectedEvent.OutputTuple,
@@ -731,6 +908,17 @@ export interface SwapRouter extends BaseContract {
       FeeCollectedEvent.InputTuple,
       FeeCollectedEvent.OutputTuple,
       FeeCollectedEvent.OutputObject
+    >;
+
+    "Initialized(uint8)": TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
+    >;
+    Initialized: TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
     >;
 
     "LiquidityAdded(address,uint256,uint256,uint256)": TypedContractEvent<
@@ -786,6 +974,17 @@ export interface SwapRouter extends BaseContract {
       SwapEvent.InputTuple,
       SwapEvent.OutputTuple,
       SwapEvent.OutputObject
+    >;
+
+    "Upgraded(address)": TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
+    >;
+    Upgraded: TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
     >;
   };
 }
