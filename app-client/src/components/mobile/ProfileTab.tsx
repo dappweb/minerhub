@@ -16,7 +16,6 @@ export interface ProfileTabProps {
   walletAddress: string;
   expireDate: string;
   contractExpired: boolean;
-  machineCode: string;
   transferTo: string;
   setTransferTo: (v: string) => void;
   transferAmount: string;
@@ -104,8 +103,6 @@ export interface ProfileTabProps {
   referralSummary?: {
     directCount: number;
     directAmountUsdt: string;
-    teamCount: number;
-    teamAmountUsdt: string;
   } | null;
   referralMembers?: Array<{
     userId: string;
@@ -116,13 +113,11 @@ export interface ProfileTabProps {
     contractActive: number;
     createdAt: string;
   }>;
-  referralMembersMode?: 'direct' | 'team';
   referralMembersTotal?: number;
   referralMembersPage?: number;
   referralMembersPageSize?: number;
   referralMembersLoading?: boolean;
   referralMembersError?: string;
-  onReferralModeChange?: (mode: 'direct' | 'team') => void;
   onReferralPageChange?: (page: number) => void;
   agreement?: {
     required: boolean;
@@ -179,7 +174,6 @@ export default function ProfileTab({
   walletAddress,
   expireDate,
   contractExpired,
-  machineCode,
   transferTo,
   setTransferTo,
   transferAmount,
@@ -201,13 +195,11 @@ export default function ProfileTab({
   inviterInfo,
   referralSummary,
   referralMembers,
-  referralMembersMode = 'direct',
   referralMembersTotal = 0,
   referralMembersPage = 1,
   referralMembersPageSize = 20,
   referralMembersLoading = false,
   referralMembersError = '',
-  onReferralModeChange,
   onReferralPageChange,
   agreement,
 }: ProfileTabProps) {
@@ -224,7 +216,7 @@ export default function ProfileTab({
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const members = referralMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
-  const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet' | 'machine'>('idle');
+  const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet'>('idle');
   const [agreementVisible, setAgreementVisible] = React.useState(false);
 
   const agreementSectionLabel = t.agreementSectionLabel ?? (isZh ? '用户协议' : 'User Agreement');
@@ -284,14 +276,6 @@ export default function ProfileTab({
     }
   };
 
-  const handleCopyMachineCode = async () => {
-    if (!machineCode) return;
-    const ok = await copyToClipboard(machineCode);
-    if (ok) {
-      setSupportCopied('machine');
-      setTimeout(() => setSupportCopied('idle'), 1800);
-    }
-  };
   return (
     <>
       <View style={s.actionCard}>
@@ -356,8 +340,8 @@ export default function ProfileTab({
           <Text style={styles.growthTitle}>{isZh ? '邀请与开通怎么配合' : 'How invite and activation work together'}</Text>
           <Text style={styles.growthText}>
             {isZh
-              ? '复制你的邀请钱包给新用户，让对方注册时填写；设备开通前，再把机器码提交给客服完成绑定。'
-              : 'Share your invite wallet with new users during signup, then submit the device machine code to support for activation.'}
+              ? '复制你的邀请钱包给新用户，让对方注册时填写；开通月卡请直接联系客服。'
+              : 'Share your invite wallet with new users during signup, and contact support directly for monthly-card activation.'}
           </Text>
         </View>
         <View style={styles.supportToolsGrid}>
@@ -367,15 +351,6 @@ export default function ProfileTab({
             <TouchableOpacity style={styles.supportToolBtn} onPress={handleCopyInviteWallet} disabled={!walletAddress}>
               <Text style={styles.supportToolBtnText}>
                 {supportCopied === 'wallet' ? t.copied : (t.copyAddress ?? 'Copy')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.supportToolCard}>
-            <Text style={styles.supportToolLabel}>{isZh ? '设备机器码' : 'Device machine code'}</Text>
-            <Text style={styles.supportToolValue}>{machineCode || '--'}</Text>
-            <TouchableOpacity style={styles.supportToolBtn} onPress={handleCopyMachineCode} disabled={!machineCode}>
-              <Text style={styles.supportToolBtnText}>
-                {supportCopied === 'machine' ? t.copied : (t.copyAddress ?? 'Copy')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -432,34 +407,12 @@ export default function ProfileTab({
               <Text style={styles.referralLabel}>{t.referralDirectAmount ?? 'Direct Amount (USDT)'}</Text>
               <Text style={styles.referralValue}>{referralSummary.directAmountUsdt}</Text>
             </View>
-            <View style={styles.referralItem}>
-              <Text style={styles.referralLabel}>{t.referralTeamCount ?? 'Team Accounts'}</Text>
-              <Text style={styles.referralValue}>{referralSummary.teamCount}</Text>
-            </View>
-            <View style={styles.referralItem}>
-              <Text style={styles.referralLabel}>{t.referralTeamAmount ?? 'Team Amount (USDT)'}</Text>
-              <Text style={styles.referralValue}>{referralSummary.teamAmountUsdt}</Text>
-            </View>
           </View>
         </View>
       )}
 
       <View style={s.actionCard}>
-        <Text style={s.sectionTitle}>{t.referralMembersTitle ?? 'Team Members'}</Text>
-        <View style={styles.memberTabRow}>
-          <TouchableOpacity
-            style={[styles.memberTabBtn, referralMembersMode === 'direct' && styles.memberTabBtnActive]}
-            onPress={() => onReferralModeChange?.('direct')}
-          >
-            <Text style={styles.memberTabText}>{t.referralMembersDirectTab ?? 'Direct'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.memberTabBtn, referralMembersMode === 'team' && styles.memberTabBtnActive]}
-            onPress={() => onReferralModeChange?.('team')}
-          >
-            <Text style={styles.memberTabText}>{t.referralMembersTeamTab ?? 'Team'}</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={s.sectionTitle}>{t.referralMembersTitle ?? 'Referral Members'}</Text>
 
         {referralMembersLoading ? (
           <Text style={styles.contactEmpty}>{t.referralMembersLoading ?? 'Loading...'}</Text>

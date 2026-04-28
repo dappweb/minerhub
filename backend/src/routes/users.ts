@@ -5,15 +5,41 @@ import { badRequest, json, unauthorized } from "../lib/response";
 import { isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
 
+const HEARTBEAT_ONLINE_MS = 90_000;
+let heartbeatColumnsReady = false;
+
+function deriveLiveOnlineStatus(lastSeenAt: string | null | undefined): "online" | "offline" {
+  if (!lastSeenAt) return "offline";
+  const ts = new Date(lastSeenAt).getTime();
+  if (Number.isNaN(ts)) return "offline";
+  return Date.now() - ts <= HEARTBEAT_ONLINE_MS ? "online" : "offline";
+}
+
+async function ensureHeartbeatColumns(env: Env): Promise<void> {
+  if (heartbeatColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  const statements: string[] = [];
+  if (!columns.has("last_heartbeat_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_heartbeat_at TEXT");
+  if (!columns.has("last_reward_accrued_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_reward_accrued_at TEXT");
+  if (!columns.has("total_online_seconds")) statements.push("ALTER TABLE customer_profiles ADD COLUMN total_online_seconds INTEGER NOT NULL DEFAULT 0");
+  if (!columns.has("contract_agreement_accepted_version")) statements.push("ALTER TABLE customer_profiles ADD COLUMN contract_agreement_accepted_version TEXT");
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
+  heartbeatColumnsReady = true;
+}
+
 async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
+  await ensureHeartbeatColumns(env);
   const now = nowIso();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO customer_profiles (
       user_id, contract_term_days, monthly_card_days, contract_active,
       activation_status, exchange_auto_enabled, payout_wallets_json,
       reward_rate_usdt_per_hour, total_reward_usdt, total_reward_super,
-      online_status, created_at, updated_at
-    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 'offline', ?, ?)`
+      total_online_seconds, online_status, created_at, updated_at
+    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 0, 'offline', ?, ?)`
   )
     .bind(userId, now, now)
     .run();
@@ -25,12 +51,30 @@ async function findUserByWallet(env: Env, wallet: string): Promise<{ id: string;
     .first<{ id: string; wallet: string }>();
 }
 
+async function ensureReferrerUser(env: Env, referralWalletRaw: string): Promise<{ id: string; wallet: string } | null> {
+  const referralWallet = referralWalletRaw.trim().toLowerCase();
+  if (!referralWallet) return null;
+
+  const existing = await findUserByWallet(env, referralWallet);
+  if (existing) return existing;
+
+  const now = nowIso();
+  const id = createId("usr");
+  await env.DB.prepare(
+    "INSERT INTO users (id, wallet, email, created_at, updated_at) VALUES (?, ?, NULL, ?, ?)"
+  )
+    .bind(id, referralWallet, now, now)
+    .run();
+
+  return { id, wallet: referralWallet };
+}
+
 async function bindReferralRelation(env: Env, inviteeId: string, inviteeWallet: string, referralWalletRaw: string): Promise<void> {
   const referralWallet = referralWalletRaw.trim().toLowerCase();
   if (!referralWallet) return;
   if (inviteeWallet.toLowerCase() === referralWallet) return;
 
-  const inviter = await findUserByWallet(env, referralWallet);
+  const inviter = await ensureReferrerUser(env, referralWallet);
   if (!inviter) return;
 
   const existing = await env.DB.prepare("SELECT id FROM referral_edges WHERE invitee_user_id = ?")
@@ -89,29 +133,6 @@ async function bindReferralRelation(env: Env, inviteeId: string, inviteeWallet: 
     .run();
 }
 
-async function upsertMachineCodeForUser(env: Env, userId: string, machineCodeRaw: string): Promise<void> {
-  const machineCode = machineCodeRaw.trim();
-  if (!machineCode) return;
-
-  const conflict = await env.DB.prepare(
-    `SELECT user_id FROM customer_profiles
-     WHERE TRIM(COALESCE(machine_code, '')) = ? AND user_id <> ?
-     LIMIT 1`
-  )
-    .bind(machineCode, userId)
-    .first<{ user_id: string }>();
-
-  if (conflict?.user_id) {
-    throw new Error("machine code already in use");
-  }
-
-  await env.DB.prepare(
-    "UPDATE customer_profiles SET machine_code = ?, updated_at = ? WHERE user_id = ?"
-  )
-    .bind(machineCode, nowIso(), userId)
-    .run();
-}
-
 export async function handleUsers(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
     if (await isMaintenanceEnabled(env)) {
@@ -124,7 +145,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       return unauthorized(authResult.error || "Signature verification failed");
     }
 
-    const body = (await request.json().catch(() => null)) as { wallet?: string; email?: string; referralWallet?: string; machineCode?: string } | null;
+    const body = (await request.json().catch(() => null)) as { wallet?: string; email?: string; referralWallet?: string } | null;
     if (!body?.wallet) return badRequest("wallet is required");
 
     // 检查请求中的wallet与签名wallet是否一致
@@ -138,16 +159,6 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .first<{ id: string; wallet: string; email: string | null }>();
     if (existing) {
       await ensureCustomerProfile(env, existing.id);
-      if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-        try {
-          await upsertMachineCodeForUser(env, existing.id, body.machineCode);
-        } catch (error) {
-          if (error instanceof Error && error.message === "machine code already in use") {
-            return json({ error: "Machine code already in use" }, 409);
-          }
-          throw error;
-        }
-      }
       return json({ id: existing.id, wallet: existing.wallet, email: existing.email ?? null });
     }
 
@@ -172,16 +183,6 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     }
 
     await ensureCustomerProfile(env, id);
-    if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-      try {
-        await upsertMachineCodeForUser(env, id, body.machineCode);
-      } catch (error) {
-        if (error instanceof Error && error.message === "machine code already in use") {
-          return json({ error: "Machine code already in use" }, 409);
-        }
-        throw error;
-      }
-    }
     if (typeof body.referralWallet === "string" && body.referralWallet.trim()) {
       await bindReferralRelation(env, id, normalizedWallet, body.referralWallet);
     }
@@ -206,7 +207,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     const user = await env.DB.prepare(
       `SELECT
         u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
-        cp.nickname, cp.machine_code AS machineCode, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+        cp.nickname, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
         COALESCE(cp.contract_term_days, 1095) AS contractTermDays,
         COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
         COALESCE(cp.contract_active, 0) AS contractActive,
@@ -215,6 +216,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
         COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
         COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
         COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
+        COALESCE(cp.total_online_seconds, 0) AS totalOnlineSeconds,
         cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
         cp.agreement_accepted_at AS agreementAcceptedAt, cp.offline_alerted_at AS offlineAlertedAt, cp.notes
       FROM users u
@@ -264,11 +266,13 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
 
     return json({
       ...user,
+      onlineStatus: deriveLiveOnlineStatus((user as { lastSeenAt?: string | null }).lastSeenAt ?? null),
       devices: devices.results ?? [],
       rewards: rewards.results ?? [],
       payoutWallets: wallets.results ?? [],
       agreementAcceptedVersion: acceptance?.version ?? null,
       agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreementAcceptedAt?: string | null }).agreementAcceptedAt ?? null,
+      contractAgreementAcceptedVersion: (user as { contract_agreement_accepted_version?: string | null }).contract_agreement_accepted_version ?? null,
       lockSummary: {
         total: Number(lockSummary?.total ?? 0),
         pending: Number(lockSummary?.pending ?? 0),
@@ -322,6 +326,42 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
     const activated = await activatePendingLocksOnAgreement(env, userId, version, now);
 
     return json({ ok: true, version, acceptedAt: now, activatedLocks: activated.activated });
+  }
+
+  // POST /api/users/:id/contract-agreement — record user's contract agreement acceptance
+  if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "contract-agreement") {
+    const userId = pathParts[0];
+
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { version?: string; wallet?: string } | null;
+    if (!body?.version || typeof body.version !== "string") {
+      return badRequest("version is required");
+    }
+
+    const user = await env.DB.prepare("SELECT id, wallet FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ id: string; wallet: string }>();
+    if (!user) return json({ error: "User not found" }, 404);
+
+    if (authResult.wallet && user.wallet && authResult.wallet.toLowerCase() !== user.wallet.toLowerCase()) {
+      return unauthorized("Wallet does not match user");
+    }
+
+    await ensureCustomerProfile(env, userId);
+
+    const now = nowIso();
+    const version = body.version.trim();
+    await env.DB.prepare(
+      "UPDATE customer_profiles SET contract_agreement_accepted_version = ?, updated_at = ? WHERE user_id = ?"
+    )
+      .bind(version, now, userId)
+      .run();
+
+    return json({ ok: true, version, acceptedAt: now });
   }
 
   // GET /api/users?wallet=0x... — look up user by wallet address (for app re-install recovery)

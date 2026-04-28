@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -7,7 +7,6 @@ type OnboardingFlowProps = {
   visible: boolean;
   minimized: boolean;
   lang: OnboardingLang;
-  machineCode: string;
   initialReferralWallet?: string;
   onComplete: (referralWallet: string) => void;
   onMinimize: () => void;
@@ -23,22 +22,20 @@ const COPY = {
     minimize: 'Later',
     resume: 'Continue Setup',
     finish: 'Start Earning',
-    s1Title: 'Bind Inviter Wallet',
-    s1Body: 'Use inviter wallet address to complete registration. After activation, keep phone online to accrue rewards.',
-    s1Hint: 'Required. Use inviter wallet address (0x...).',
-    s1Tip: 'Tip: support/admin manages monthly-card activation and contract duration.',
-    s2Title: 'Your Machine Code',
-    s2Body:
-      'Send this code to our support when you purchase a monthly card. It binds your phone to your contract.',
-    s2Hint: 'You can also find this code in the Home tab.',
-    s3Title: 'Ready to Configure Miner',
-    s3Body: 'Identity config is complete. Next, ask support to activate the monthly card, then return to finish miner setup.',
-    s3Bullet1: '• Keep this floating guide available from any tab',
-    s3Bullet2: '• Finish monthly-card activation with your machine code',
-    s3Bullet3: '• After activation, tap Setup Miner from the home guide',
-    referralTitle: 'Inviter Wallet Address',
-    referralPlaceholder: '0x... inviter wallet',
-    referralInvalid: 'Please enter a valid wallet address.',
+    s1Title: 'Complete Account Setup',
+    s1Body:
+      'Finish identity setup and keep your wallet ready. You can continue from any tab later.',
+    s1Hint: 'No device code is required anymore.',
+    s2Title: 'Ready to Configure Miner',
+    s2Body: 'Identity config is complete. Next, ask support to activate the monthly card, then return to finish miner setup.',
+    s2Bullet1: '• Keep this floating guide available from any tab',
+    s2Bullet2: '• Finish monthly-card activation with support',
+    s2Bullet3: '• After activation, tap Setup Miner from the home guide',
+    s3Title: 'Bind Referrer (Optional)',
+    s3Body: 'Enter the wallet address of your referrer if you have one. This can be added later from the profile page.',
+    s3Placeholder: 'Referrer wallet address (0x...)',
+    s3Optional: 'Optional: Leave empty to continue',
+    s3Invalid: 'Invalid wallet address',
     floatingTitle: 'Registration Setup',
   },
   zh: {
@@ -49,36 +46,43 @@ const COPY = {
     minimize: '稍后',
     resume: '继续配置',
     finish: '开始挖矿',
-    s1Title: '绑定推荐人钱包',
-    s1Body: '请输入推荐人钱包地址完成注册。开通后请保持手机在线，以便持续累计收益。',
-    s1Hint: '必填，请输入推荐人的钱包地址（0x...）。',
-    s1Tip: '提示：月卡开通与合同周期由客服/管理员统一管理。',
-    s2Title: '您的机器码',
-    s2Body: '购买月卡时请将此机器码告知客服，用于将本机绑定到您的合同。',
-    s2Hint: '您也可以在"首页"随时查看此机器码。',
-    s3Title: '准备配置矿机',
-    s3Body: '注册配置已完成。下一步请联系客服用机器码开通月卡，随后返回首页完成矿机设置。',
-    s3Bullet1: '• 这个悬浮引导可在任意页面继续打开',
-    s3Bullet2: '• 用机器码联系客户完成月卡激活',
-    s3Bullet3: '• 激活完成后，回到首页点击“矿机设置”',
-    referralTitle: '推荐人钱包地址',
-    referralPlaceholder: '输入推荐人钱包地址 0x...',
-    referralInvalid: '请输入有效的钱包地址。',
+    s1Title: '完成账户配置',
+    s1Body: '先完成身份同步并保持钱包可用，之后可在任意页面继续配置流程。',
+    s1Hint: '当前流程无需额外设备编码。',
+    s2Title: '准备配置矿机',
+    s2Body: '注册配置已完成。下一步请联系客服开通月卡，随后返回首页完成矿机设置。',
+    s2Bullet1: '• 这个悬浮引导可在任意页面继续打开',
+    s2Bullet2: '• 联系客服完成月卡激活',
+    s2Bullet3: '• 激活完成后，回到首页点击"矿机设置"',
+    s3Title: '绑定推荐人（可选）',
+    s3Body: '输入您的推荐人钱包地址，如果您有的话。也可以稍后在个人页面添加。',
+    s3Placeholder: '推荐人钱包地址（0x...）',
+    s3Optional: '可选：留空可继续',
+    s3Invalid: '无效的钱包地址',
     floatingTitle: '注册配置',
   },
 } as const;
 
-export default function OnboardingFlow({ visible, minimized, lang, machineCode, initialReferralWallet = '', onComplete, onMinimize, onExpand }: OnboardingFlowProps) {
+function isValidEthereumAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+export default function OnboardingFlow({ visible, minimized, lang, initialReferralWallet = '', onComplete, onMinimize, onExpand }: OnboardingFlowProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [referralWallet, setReferralWallet] = useState(initialReferralWallet);
   const [referralError, setReferralError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const t = COPY[lang];
 
   useEffect(() => {
-    if (initialReferralWallet && !referralWallet) {
-      setReferralWallet(initialReferralWallet);
-    }
-  }, [initialReferralWallet, referralWallet]);
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const stepSummary = useMemo(() => {
     if (step === 1) return t.s1Title;
@@ -88,34 +92,59 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
 
   const next = () => {
     if (step === 1) {
-      const normalized = referralWallet.trim().toLowerCase();
-      const isValidWallet = /^0x[a-f0-9]{40}$/.test(normalized);
-      if (!isValidWallet) {
-        setReferralError(t.referralInvalid);
-        return;
-      }
-
-      setReferralWallet(normalized);
-      setReferralError('');
       setStep(2);
       return;
     }
-
-    if (step < 3) {
-      setStep((step + 1) as 1 | 2 | 3);
+    if (step === 2) {
+      setStep(3);
       return;
     }
-
+    // Step 3: Validate referral wallet (optional, can be empty)
     const normalized = referralWallet.trim().toLowerCase();
-    setReferralError('');
+    if (normalized && !isValidEthereumAddress(normalized)) {
+      setReferralError(t.s3Invalid);
+      return;
+    }
     onComplete(normalized);
   };
 
   const back = () => {
-    if (step > 1) setStep((step - 1) as 1 | 2 | 3);
+    if (step > 1) {
+      setReferralError('');
+      setStep((step - 1) as 1 | 2 | 3);
+    }
+  };
+
+  const handleReferralChange = (text: string) => {
+    setReferralWallet(text);
+    setReferralError('');
   };
 
   if (!visible) return null;
+
+  const { cardWidth, cardMaxHeight, scrollMaxHeight, paddingBottom, screenWidth } = getResponsiveDimensions(keyboardVisible);
+  
+  // 动态样式（根据屏幕尺寸）
+  const dynamicStyles = {
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(2, 6, 23, 0.68)',
+      justifyContent: 'flex-end' as const,
+      alignItems: 'center' as const,
+      paddingHorizontal: Math.max(12, screenWidth * 0.05),
+      paddingBottom,
+    },
+    expandedWrap: {
+      width: cardWidth,
+      maxWidth: cardWidth,
+    },
+    card: {
+      maxHeight: cardMaxHeight,
+    },
+    scroll: {
+      maxHeight: scrollMaxHeight,
+    },
+  };
 
   if (minimized) {
     return (
@@ -132,88 +161,138 @@ export default function OnboardingFlow({ visible, minimized, lang, machineCode, 
   }
 
   return (
-    <View pointerEvents="box-none" style={styles.floatingWrap}>
-      <View style={styles.card}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.badge}>
-              {t.step} {step} {t.of} 3
-            </Text>
-            <Text style={styles.floatingTitle}>{t.floatingTitle}</Text>
-          </View>
-          <Pressable onPress={onMinimize} style={styles.headerAction}>
-            <Text style={styles.headerActionText}>{t.minimize}</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {step === 1 && (
-            <>
-              <Text style={styles.title}>{t.s1Title}</Text>
-              <Text style={styles.body}>{t.s1Body}</Text>
-              <Text style={styles.referralTitle}>{t.referralTitle}</Text>
-              <TextInput
-                style={styles.referralInput}
-                value={referralWallet}
-                onChangeText={(text) => {
-                  setReferralWallet(text);
-                  if (referralError) setReferralError('');
-                }}
-                placeholder={t.referralPlaceholder}
-                placeholderTextColor="#64748b"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Text style={styles.hint}>{t.s1Hint}</Text>
-              {referralError ? <Text style={styles.errorText}>{referralError}</Text> : null}
-              <Text style={styles.hint}>{t.s1Tip}</Text>
-            </>
-          )}
-
-          {step === 2 && (
-            <>
-              <Text style={styles.title}>{t.s2Title}</Text>
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText} selectable>
-                  {machineCode || '------'}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onMinimize}
+    >
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+      <View style={[styles.modalBackdrop, dynamicStyles.modalBackdrop]}>
+        <TouchableWithoutFeedback onPress={onMinimize}>
+          <View style={StyleSheet.absoluteFillObject} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.expandedWrap, dynamicStyles.expandedWrap]} pointerEvents="box-none">
+          <View style={[styles.card, dynamicStyles.card]}>
+            <View style={styles.headerRow}>
+              <View style={styles.headerCopy}>
+                <Text style={styles.badge}>
+                  {t.step} {step} {t.of} 3
                 </Text>
+                <Text style={styles.floatingTitle}>{t.floatingTitle}</Text>
               </View>
-              <Text style={styles.body}>{t.s2Body}</Text>
-              <Text style={styles.hint}>{t.s2Hint}</Text>
-            </>
-          )}
+              <Pressable onPress={onMinimize} style={styles.headerAction}>
+                <Text style={styles.headerActionText}>{t.minimize}</Text>
+              </Pressable>
+            </View>
 
-          {step === 3 && (
-            <>
-              <Text style={styles.title}>{t.s3Title}</Text>
-              <Text style={styles.body}>{t.s3Body}</Text>
-              <View style={styles.bullets}>
-                <Text style={styles.bullet}>{t.s3Bullet1}</Text>
-                <Text style={styles.bullet}>{t.s3Bullet2}</Text>
-                <Text style={styles.bullet}>{t.s3Bullet3}</Text>
-              </View>
-            </>
-          )}
-        </ScrollView>
+            <ScrollView style={[styles.scroll, dynamicStyles.scroll]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+              {step === 1 && (
+                <>
+                  <Text style={styles.title}>{t.s1Title}</Text>
+                  <Text style={styles.body}>{t.s1Body}</Text>
+                  <Text style={styles.hint}>{t.s1Hint}</Text>
+                </>
+              )}
 
-        <View style={styles.actions}>
-          {step > 1 ? (
-            <Pressable onPress={back} style={[styles.btn, styles.btnGhost]}>
-              <Text style={styles.btnGhostText}>{t.back}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.spacer} />
-          )}
-          <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
-            <Text style={styles.btnPrimaryText}>{step === 3 ? t.finish : t.next}</Text>
-          </Pressable>
+              {step === 2 && (
+                <>
+                  <Text style={styles.title}>{t.s2Title}</Text>
+                  <Text style={styles.body}>{t.s2Body}</Text>
+                  <View style={styles.bullets}>
+                    <Text style={styles.bullet}>{t.s2Bullet1}</Text>
+                    <Text style={styles.bullet}>{t.s2Bullet2}</Text>
+                    <Text style={styles.bullet}>{t.s2Bullet3}</Text>
+                  </View>
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <Text style={styles.title}>{t.s3Title}</Text>
+                  <Text style={styles.body}>{t.s3Body}</Text>
+                  <Text style={styles.referralTitle}>{t.s3Optional}</Text>
+                  <TextInput
+                    style={styles.referralInput}
+                    placeholder={t.s3Placeholder}
+                    placeholderTextColor="#64748b"
+                    value={referralWallet}
+                    onChangeText={handleReferralChange}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    importantForAutofill="no"
+                    keyboardType={Platform.OS === 'ios' ? 'ascii-capable' : 'visible-password'}
+                    returnKeyType="done"
+                    spellCheck={false}
+                    textContentType="none"
+                  />
+                  {referralError && <Text style={styles.errorText}>{referralError}</Text>}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.actions}>
+              {step > 1 ? (
+                <Pressable onPress={back} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>{t.back}</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.spacer} />
+              )}
+              <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
+                <Text style={styles.btnPrimaryText}>{step === 3 ? t.finish : t.next}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </View>
-    </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
+// 响应式尺寸计算
+const getResponsiveDimensions = (keyboardVisible = false) => {
+  const { width, height } = Dimensions.get('window');
+  const isLandscape = width > height;
+  
+  return {
+    screenWidth: width,
+    screenHeight: height,
+    isLandscape,
+    // 弹窗宽度：屏幕宽度的 90%，但最大 520px，最小 280px
+    cardWidth: Math.min(Math.max(width * 0.9, 280), 520),
+    // 弹窗最大高度：屏幕高度的 85%（横屏）或 75%（竖屏）
+    cardMaxHeight: isLandscape ? height * 0.85 : keyboardVisible ? height * 0.62 : height * 0.75,
+    // ScrollView 高度：动态计算
+    scrollMaxHeight: isLandscape ? height * 0.5 : keyboardVisible ? height * 0.3 : height * 0.4,
+    // 底部间距：在竖屏模式下固定96，横屏模式下为20
+    paddingBottom: isLandscape ? 20 : keyboardVisible ? 16 : 96,
+  };
+};
+
 const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.68)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 96,
+  },
+  keyboardWrap: {
+    flex: 1,
+  },
+  expandedWrap: {
+    width: '100%',
+    maxWidth: 520,
+  },
   floatingWrap: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
@@ -227,10 +306,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#225b98',
-    padding: 16,
+    padding: 18,
     width: '100%',
-    maxWidth: 420,
-    maxHeight: '48%',
+    maxHeight: '85%',
     shadowColor: '#020617',
     shadowOpacity: 0.35,
     shadowRadius: 20,
@@ -250,7 +328,7 @@ const styles = StyleSheet.create({
   },
   floatingTitle: {
     color: '#dbeafe',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   headerAction: {
@@ -276,52 +354,53 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  scroll: { maxHeight: 320 },
-  scrollContent: { paddingBottom: 8 },
-  title: { color: '#f1f5f9', fontSize: 22, fontWeight: '700', marginBottom: 10 },
-  body: { color: '#cbd5e1', fontSize: 14, lineHeight: 20, marginBottom: 10 },
-  hint: { color: '#64748b', fontSize: 12, marginTop: 8 },
-  errorText: { color: '#fda4af', fontSize: 12, marginTop: 8 },
-  referralTitle: { color: '#cbd5e1', fontSize: 13, marginTop: 6, marginBottom: 8, fontWeight: '600' },
+  scroll: { maxHeight: 400 },
+  scrollContent: { paddingBottom: 12 },
+  title: { color: '#f1f5f9', fontSize: 24, fontWeight: '700', marginBottom: 12 },
+  body: { color: '#cbd5e1', fontSize: 15, lineHeight: 22, marginBottom: 12 },
+  hint: { color: '#64748b', fontSize: 13, marginTop: 10 },
+  errorText: { color: '#fda4af', fontSize: 13, marginTop: 10 },
+  referralTitle: { color: '#cbd5e1', fontSize: 14, marginTop: 8, marginBottom: 10, fontWeight: '600' },
   referralInput: {
-    height: 44,
+    height: 48,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#334155',
     backgroundColor: '#0b1224',
     color: '#e2e8f0',
-    paddingHorizontal: 12,
-    marginBottom: 4,
+    paddingHorizontal: 14,
+    marginBottom: 6,
+    fontSize: 15,
   },
-  bullets: { marginTop: 8 },
-  bullet: { color: '#e2e8f0', fontSize: 14, lineHeight: 24 },
+  bullets: { marginTop: 10 },
+  bullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 26 },
   codeBox: {
     backgroundColor: '#1e293b',
     borderRadius: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    marginVertical: 14,
+    marginVertical: 16,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  codeText: { color: '#22d3ee', fontSize: 22, fontWeight: '700', letterSpacing: 2 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  codeText: { color: '#22d3ee', fontSize: 24, fontWeight: '700', letterSpacing: 2 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 18 },
   spacer: { flex: 1 },
-  btn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  btn: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   btnPrimary: { backgroundColor: '#a78bfa' },
-  btnPrimaryText: { color: '#0f172a', fontWeight: '700', fontSize: 15 },
+  btnPrimaryText: { color: '#0f172a', fontWeight: '700', fontSize: 16 },
   btnGhost: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
-  btnGhostText: { color: '#cbd5e1', fontWeight: '600', fontSize: 15 },
+  btnGhostText: { color: '#cbd5e1', fontWeight: '600', fontSize: 16 },
   minimizedPill: {
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 380,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#225b98',
     backgroundColor: 'rgba(8, 39, 84, 0.96)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -338,16 +417,16 @@ const styles = StyleSheet.create({
   },
   minimizedTitle: {
     color: '#e0f2fe',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   minimizedHint: {
     color: '#93c5fd',
-    fontSize: 11,
+    fontSize: 12,
   },
   minimizedAction: {
     color: '#67e8f9',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
 });

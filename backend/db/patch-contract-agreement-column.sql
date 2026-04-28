@@ -1,0 +1,1 @@
+ALTER TABLE customer_profiles ADD COLUMN contract_agreement_accepted_version TEXT;

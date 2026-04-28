@@ -152,14 +152,62 @@ async function signedRequest<T>(
   method: string,
   body: Record<string, any>
 ): Promise<T> {
-  // 获取签名headers
-  const authHeaders = await getAuthHeaders(path, body);
+  const baseUrls = getApiBaseUrls();
+  const requestId = generateRequestId();
+  let lastError: unknown = null;
 
-  return request<T>(path, {
-    method,
-    body: JSON.stringify(body),
-    headers: authHeaders,
-  });
+  for (const baseUrl of baseUrls) {
+    for (let attempt = 1; attempt <= REQUEST_RETRY_COUNT; attempt += 1) {
+      try {
+        // Signed requests must use a fresh nonce/signature on each retry.
+        const authHeaders = await getAuthHeaders(path, body);
+
+        const response = await fetchWithTimeout(`${baseUrl}${path}`, {
+          method,
+          body: JSON.stringify(body),
+          headers: {
+            'content-type': 'application/json',
+            'x-request-id': requestId,
+            ...authHeaders,
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          const message = text || `Request failed: ${response.status}`;
+
+          if (isRetryableStatus(response.status) && attempt < REQUEST_RETRY_COUNT) {
+            await delay(RETRY_BACKOFF_MS * attempt);
+            continue;
+          }
+
+          throw new Error(message);
+        }
+
+        activeApiBaseUrl = baseUrl;
+        return (await response.json()) as T;
+      } catch (err) {
+        const normalizedError = err instanceof Error && err.name === 'AbortError'
+          ? new Error('API request timeout')
+          : err;
+
+        lastError = normalizedError;
+
+        if (isRetryableError(normalizedError) && attempt < REQUEST_RETRY_COUNT) {
+          await delay(RETRY_BACKOFF_MS * attempt);
+          continue;
+        }
+
+        break;
+      }
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error('API unavailable');
 }
 
 export type UserDto = { id: string; wallet: string; email?: string | null };
@@ -209,6 +257,15 @@ export type GasIntentDto = {
   relay_order_id?: string | null;
 };
 
+type AgreementDocumentDto = {
+  required: boolean;
+  version: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+};
+
 export type SystemStatusDto = {
   maintenanceEnabled: boolean;
   maintenanceMessageZh: string;
@@ -220,14 +277,8 @@ export type SystemStatusDto = {
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
-  userAgreement?: {
-    required: boolean;
-    version: string;
-    titleZh: string;
-    titleEn: string;
-    contentZh: string;
-    contentEn: string;
-  };
+  userAgreement?: AgreementDocumentDto;
+  contract?: AgreementDocumentDto;
   supportContacts?: Array<{
     id: string;
     type: string;
@@ -258,7 +309,6 @@ export type AnnouncementDto = {
 export type UserDetailsDto = UserDto & {
   status?: string | null;
   nickname?: string | null;
-  machineCode?: string | null;
   parentUserId?: string | null;
   inviterWallet?: string | null;
   contractStartAt?: string | null;
@@ -271,12 +321,14 @@ export type UserDetailsDto = UserDto & {
   rewardRateUsdtPerHour?: string;
   totalRewardUsdt?: string;
   totalRewardSuper?: string;
+  totalOnlineSeconds?: number;
   lastSeenAt?: string | null;
   onlineStatus?: string;
   agreementAcceptedAt?: string | null;
   offlineAlertedAt?: string | null;
   notes?: string | null;
   agreementAcceptedVersion?: string | null;
+  contractAgreementAcceptedVersion?: string | null;
   devices?: Array<{
     id: string;
     device_id: string;
@@ -363,11 +415,10 @@ export type BindReferralResultDto = {
   inviterSummary: ReferralSummaryDto;
 };
 
-export async function createUser(wallet: string, referralWallet?: string, machineCode?: string): Promise<UserDto> {
+export async function createUser(wallet: string, referralWallet?: string): Promise<UserDto> {
   return signedRequest<UserDto>("/api/users", "POST", {
     wallet,
     ...(referralWallet ? { referralWallet } : {}),
-    ...(machineCode ? { machineCode } : {}),
   });
 }
 
@@ -430,7 +481,6 @@ export async function registerDevice(payload: {
   deviceId: string;
   hashrate: number;
   wallet?: string;
-  machineCode?: string;
 }): Promise<DeviceDto> {
   return signedRequest<DeviceDto>("/api/devices", "POST", payload);
 }
@@ -580,6 +630,10 @@ export async function reportDeviceHeartbeat(payload: {
 
 export async function acceptUserAgreement(userId: string, version: string, wallet: string): Promise<{ ok: boolean; version: string; acceptedAt: string }> {
   return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/agreement`, 'POST', { version, wallet });
+}
+
+export async function acceptContractAgreement(userId: string, version: string, wallet: string): Promise<{ ok: boolean; version: string; acceptedAt: string }> {
+  return signedRequest<{ ok: boolean; version: string; acceptedAt: string }>(`/api/users/${userId}/contract-agreement`, 'POST', { version, wallet });
 }
 
 export interface AppDownloadInfo {

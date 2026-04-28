@@ -209,11 +209,11 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
     .bind(orderId)
     .first<ExchangeOrder>();
   if (!order) return json({ error: "Exchange order not found" }, 404);
-  if (order.status !== "approved") {
+  if (order.status !== "approved" && order.status !== "auto_processing") {
     return badRequest("Order cannot be completed in current status");
   }
 
-  const amountUsdt = Number(order.amount_usdt ?? "0");
+  const amountUsdt = Number(body?.amountUsdt ?? order.amount_usdt ?? "0");
   if (!Number.isFinite(amountUsdt) || amountUsdt < 0) {
     return badRequest("Invalid order amountUsdt");
   }
@@ -221,10 +221,17 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
   const now = nowIso();
   await env.DB.prepare(
     `UPDATE exchange_orders
-     SET status = 'completed', amount_usdt = ?, payout_wallet = ?, tx_hash = ?, completed_at = ?, updated_at = ?
+     SET status = 'completed',
+         amount_usdt = ?,
+         payout_wallet = ?,
+         tx_hash = ?,
+         approved_by = COALESCE(approved_by, ?),
+         approved_at = COALESCE(approved_at, ?),
+         completed_at = ?,
+         updated_at = ?
      WHERE id = ?`
   )
-    .bind(String(amountUsdt), payoutWallet ?? null, body?.txHash ?? null, now, now, orderId)
+    .bind(String(amountUsdt), payoutWallet ?? null, body?.txHash ?? null, owner.wallet, now, now, now, orderId)
     .run();
 
   await env.DB.prepare(

@@ -7,7 +7,7 @@ type OwnerConsoleProps = {
   signMessageAsync: (walletAddress: string, message: string) => Promise<string>;
 };
 
-type Tab = 'overview' | 'tokens' | 'earnings' | 'payouts' | 'audit';
+type Tab = 'overview' | 'roles' | 'tokens' | 'earnings' | 'payouts' | 'audit';
 
 type OverviewData = {
   users: number;
@@ -52,6 +52,32 @@ type AuditRow = {
   userAgent: string | null;
   createdAt: string;
 };
+
+type SubAdminRow = {
+  wallet: string;
+  source: 'database' | 'environment';
+  note: string | null;
+  allowedContractTypes: string[] | null;
+  contractTypesLocked: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  canRemove: boolean;
+};
+
+const CONTRACT_TYPE_OPTIONS = [
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'one_year', label: '1 year' },
+  { id: 'two_year', label: '2 years' },
+  { id: 'three_year', label: '3 years' },
+] as const;
+
+function formatContractTypes(types: string[] | null | undefined): string {
+  if (types === null) return 'Unrestricted';
+  if (!types?.length) return 'Not set';
+  return types
+    .map((type) => CONTRACT_TYPE_OPTIONS.find((option) => option.id === type)?.label ?? type)
+    .join(' / ');
+}
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
@@ -139,6 +165,12 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   const [transferOwnerNote, setTransferOwnerNote] = useState('');
   const [transferOwnerLoading, setTransferOwnerLoading] = useState(false);
   const [transferOwnerMsg, setTransferOwnerMsg] = useState('');
+  const [subAdmins, setSubAdmins] = useState<SubAdminRow[]>([]);
+  const [subAdminWallet, setSubAdminWallet] = useState('');
+  const [subAdminNote, setSubAdminNote] = useState('');
+  const [subAdminContractTypes, setSubAdminContractTypes] = useState<string[]>(['three_year']);
+  const [subAdminLoading, setSubAdminLoading] = useState(false);
+  const [subAdminMsg, setSubAdminMsg] = useState('');
   const loadOverview = useCallback(async () => {
     try { setLoadingOverview(true); setOverview(await authedFetch<OverviewData>('/api/owner/overview')); }
     catch (e) { console.error(e); }
@@ -219,6 +251,70 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       setTransferOwnerLoading(false);
     }
   }, [authedFetch, logout, transferOwnerNote, transferOwnerWallet]);
+
+  const loadSubAdmins = useCallback(async () => {
+    setSubAdminLoading(true);
+    setSubAdminMsg('');
+    try {
+      const response = await authedFetch<{ items: SubAdminRow[] }>('/api/owner/subadmins');
+      setSubAdmins(response.items ?? []);
+    } catch (e) {
+      setSubAdminMsg(e instanceof Error ? e.message : '加载 SubAdmin 列表失败');
+    } finally {
+      setSubAdminLoading(false);
+    }
+  }, [authedFetch]);
+
+  const addSubAdmin = useCallback(async () => {
+    const wallet = subAdminWallet.trim();
+    if (!isAddress(wallet)) {
+      setSubAdminMsg('请输入有效的钱包地址');
+      return;
+    }
+    if (subAdminContractTypes.length === 0) {
+      setSubAdminMsg('Select at least one contract type.');
+      return;
+    }
+    setSubAdminLoading(true);
+    setSubAdminMsg('');
+    try {
+      await authedFetch<{ ok: boolean; wallet: string }>(
+        '/api/owner/subadmins',
+        {
+          method: 'POST',
+          body: JSON.stringify({ wallet, note: subAdminNote.trim() || undefined, allowedContractTypes: subAdminContractTypes }),
+        },
+        true
+      );
+      setSubAdminWallet('');
+      setSubAdminNote('');
+      setSubAdminContractTypes(['three_year']);
+      setSubAdminMsg('SubAdmin 添加成功');
+      await loadSubAdmins();
+    } catch (e) {
+      setSubAdminMsg(e instanceof Error ? e.message : '添加 SubAdmin 失败');
+    } finally {
+      setSubAdminLoading(false);
+    }
+  }, [authedFetch, loadSubAdmins, subAdminContractTypes, subAdminNote, subAdminWallet]);
+
+  const removeSubAdmin = useCallback(async (wallet: string) => {
+    setSubAdminLoading(true);
+    setSubAdminMsg('');
+    try {
+      await authedFetch<{ ok: boolean; removed: boolean }>(
+        `/api/owner/subadmins/${encodeURIComponent(wallet)}`,
+        { method: 'DELETE' },
+        true
+      );
+      setSubAdminMsg('SubAdmin 已移除');
+      await loadSubAdmins();
+    } catch (e) {
+      setSubAdminMsg(e instanceof Error ? e.message : '移除 SubAdmin 失败');
+    } finally {
+      setSubAdminLoading(false);
+    }
+  }, [authedFetch, loadSubAdmins]);
 
   // --- Token ops ---
   const [mintTo, setMintTo] = useState('');
@@ -404,6 +500,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       void loadOverview();
       void loadAdminAccess();
     }
+    if (tab === 'roles') void loadSubAdmins();
     if (tab === 'earnings') void loadEarnings();
     if (tab === 'audit') void loadAudit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,11 +536,11 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       </div>
 
       <div className="flex flex-wrap gap-2 mb-5">
-        {(['overview', 'tokens', 'earnings', 'payouts', 'audit'] as Tab[]).map((t) => (
+        {(['overview', 'roles', 'tokens', 'earnings', 'payouts', 'audit'] as Tab[]).map((t) => (
           <button key={t}
             onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-sm ${tab === t ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-            {t === 'overview' ? '概览' : t === 'tokens' ? 'SUPER 代币' : t === 'earnings' ? '收益' : t === 'payouts' ? '批量出款' : '审计日志'}
+            {t === 'overview' ? '概览' : t === 'roles' ? 'Owner/SubAdmin' : t === 'tokens' ? 'SUPER 代币' : t === 'earnings' ? '收益' : t === 'payouts' ? '批量出款' : '审计日志'}
           </button>
         ))}
       </div>
@@ -604,6 +701,84 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
               onChange={(e) => setAirdropCsv(e.target.value)}
             />
             <button onClick={runAirdrop} disabled={tokenLoading} className={`${btnCls} mt-2`}>执行空投 (最多 200 条)</button>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'roles' && (
+        <div className="space-y-6 text-sm">
+          {subAdminMsg && <p className="text-cyan-300 break-all">{subAdminMsg}</p>}
+
+          <Card title="SubAdmin 管理（仅 Owner）">
+            <p className="text-xs text-slate-400">SubAdmin 登录后只能看到其推荐关系下的用户与设备列表。</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                className={inputCls}
+                placeholder="SubAdmin 钱包地址 0x..."
+                value={subAdminWallet}
+                onChange={(e) => setSubAdminWallet(e.target.value)}
+              />
+              <input
+                className={inputCls}
+                placeholder="备注（可选）"
+                value={subAdminNote}
+                onChange={(e) => setSubAdminNote(e.target.value)}
+              />
+              <button
+                onClick={addSubAdmin}
+                disabled={subAdminLoading || !subAdminWallet.trim()}
+                className={btnCls}
+              >
+                {subAdminLoading ? '处理中...' : '添加 SubAdmin'}
+              </button>
+              <button
+                onClick={() => void loadSubAdmins()}
+                disabled={subAdminLoading}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 text-sm"
+              >
+                刷新列表
+              </button>
+            </div>
+          </Card>
+
+          <Card title={`SubAdmin 列表 (${subAdmins.length})`}>
+            <div className="overflow-auto max-h-96">
+              <table className="text-xs w-full">
+                <thead className="text-slate-400">
+                  <tr>
+                    <th className="text-left py-1 pr-2">钱包</th>
+                    <th className="text-left pr-2">来源</th>
+                    <th className="text-left pr-2">备注</th>
+                    <th className="text-left pr-2">更新时间</th>
+                    <th className="text-left pr-2">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subAdmins.map((item) => (
+                    <tr key={`${item.source}-${item.wallet}`} className="border-t border-slate-800 align-top">
+                      <td className="py-2 pr-2 font-mono text-slate-200 break-all">{item.wallet}</td>
+                      <td className="pr-2 text-slate-400">{item.source === 'database' ? '数据库' : '环境变量'}</td>
+                      <td className="pr-2 text-slate-400">{item.note || '--'}</td>
+                      <td className="pr-2 text-slate-400">{item.updatedAt ? new Date(item.updatedAt).toLocaleString('zh-CN') : '--'}</td>
+                      <td className="pr-2">
+                        <button
+                          onClick={() => void removeSubAdmin(item.wallet)}
+                          disabled={subAdminLoading || !item.canRemove}
+                          className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                        >
+                          移除
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {subAdmins.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-slate-500">暂无 SubAdmin 记录</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </div>
       )}

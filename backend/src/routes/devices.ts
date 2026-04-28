@@ -4,15 +4,34 @@ import { badRequest, json, unauthorized } from "../lib/response";
 import { getRewardRateUsdtPerHour, isMaintenanceEnabled, readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
 
+const HEARTBEAT_CONTINUITY_MS = 90_000;
+const MAX_HEARTBEAT_REWARD_MS = 90_000;
+let heartbeatColumnsReady = false;
+
+async function ensureHeartbeatColumns(env: Env): Promise<void> {
+  if (heartbeatColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  const statements: string[] = [];
+  if (!columns.has("last_heartbeat_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_heartbeat_at TEXT");
+  if (!columns.has("last_reward_accrued_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_reward_accrued_at TEXT");
+  if (!columns.has("total_online_seconds")) statements.push("ALTER TABLE customer_profiles ADD COLUMN total_online_seconds INTEGER NOT NULL DEFAULT 0");
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
+  heartbeatColumnsReady = true;
+}
+
 async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
+  await ensureHeartbeatColumns(env);
   const now = nowIso();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO customer_profiles (
       user_id, contract_term_days, monthly_card_days, contract_active,
       activation_status, exchange_auto_enabled, payout_wallets_json,
       reward_rate_usdt_per_hour, total_reward_usdt, total_reward_super,
-      online_status, created_at, updated_at
-    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 'offline', ?, ?)`
+      total_online_seconds, online_status, created_at, updated_at
+    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 0, 'offline', ?, ?)`
   )
     .bind(userId, now, now)
     .run();
@@ -23,31 +42,6 @@ async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string)
     .bind(userId, wallet.toLowerCase())
     .first<{ id: string }>();
   return Boolean(row?.id);
-}
-
-async function upsertMachineCodeForUser(env: Env, userId: string, machineCodeRaw: string, updatedAt: string): Promise<void> {
-  const machineCode = machineCodeRaw.trim();
-  if (!machineCode) return;
-
-  const conflict = await env.DB.prepare(
-    `SELECT user_id FROM customer_profiles
-     WHERE TRIM(COALESCE(machine_code, '')) = ? AND user_id <> ?
-     LIMIT 1`
-  )
-    .bind(machineCode, userId)
-    .first<{ user_id: string }>();
-
-  if (conflict?.user_id) {
-    throw new Error("machine code already in use");
-  }
-
-  await env.DB.prepare(
-    `UPDATE customer_profiles
-     SET machine_code = ?, updated_at = ?
-     WHERE user_id = ?`
-  )
-    .bind(machineCode, updatedAt, userId)
-    .run();
 }
 
 async function accrueHourlyReward(env: Env, userId: string, deviceId: string): Promise<void> {
@@ -131,6 +125,184 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
     .run();
 }
 
+type HeartbeatRewardResult = {
+  rewardUsdt: number;
+  rewardSuper: number;
+  accruedSeconds: number;
+  continuous: boolean;
+  reason: string;
+};
+
+async function updateHeartbeatPresence(
+  env: Env,
+  userId: string,
+  deviceId: string,
+  deviceRecordId: string | null,
+  hashrate: number,
+  heartbeatAt: string,
+  note: string
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET last_seen_at = ?,
+         last_heartbeat_at = ?,
+         last_reward_accrued_at = ?,
+         online_status = 'online',
+         updated_at = ?
+     WHERE user_id = ?`
+  )
+    .bind(heartbeatAt, heartbeatAt, heartbeatAt, heartbeatAt, userId)
+    .run();
+
+  if (deviceRecordId) {
+    await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
+      .bind(heartbeatAt, deviceRecordId)
+      .run();
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
+     VALUES (?, ?, ?, 'active', ?, ?, ?)`
+  )
+    .bind(createId("dst"), deviceId, userId, Number(hashrate ?? 0), heartbeatAt, note)
+    .run();
+}
+
+async function accrueHeartbeatReward(env: Env, userId: string, deviceId: string, heartbeatAt: string): Promise<HeartbeatRewardResult> {
+  const device = await env.DB.prepare(
+    `SELECT id, hashrate FROM devices WHERE user_id = ? AND device_id = ?`
+  )
+    .bind(userId, deviceId)
+    .first<{ id: string; hashrate: number }>();
+
+  if (!device) {
+    await env.DB.prepare(
+      `UPDATE customer_profiles
+       SET last_seen_at = ?, last_heartbeat_at = ?, online_status = 'online', updated_at = ?
+       WHERE user_id = ?`
+    )
+      .bind(heartbeatAt, heartbeatAt, heartbeatAt, userId)
+      .run();
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "device_not_found" };
+  }
+
+  const profile = await env.DB.prepare(
+    `SELECT
+       contract_active,
+       contract_end_at,
+       reward_rate_usdt_per_hour,
+       last_heartbeat_at,
+       last_reward_accrued_at,
+       COALESCE(total_online_seconds, 0) AS total_online_seconds
+     FROM customer_profiles WHERE user_id = ?`
+  )
+    .bind(userId)
+    .first<{
+      contract_active: number;
+      contract_end_at: string | null;
+      reward_rate_usdt_per_hour: string | null;
+      last_heartbeat_at: string | null;
+      last_reward_accrued_at: string | null;
+      total_online_seconds: number;
+    }>();
+
+  if (!profile) {
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "profile_not_found" };
+  }
+
+  const heartbeatMs = new Date(heartbeatAt).getTime();
+  const previousHeartbeatMs = profile.last_heartbeat_at ? new Date(profile.last_heartbeat_at).getTime() : NaN;
+  if (!profile.last_heartbeat_at || Number.isNaN(previousHeartbeatMs)) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:first_seen");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "first_heartbeat" };
+  }
+
+  const heartbeatGapMs = Math.max(0, heartbeatMs - previousHeartbeatMs);
+  if (heartbeatGapMs <= 0) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:duplicate");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "duplicate_heartbeat" };
+  }
+
+  if (heartbeatGapMs > HEARTBEAT_CONTINUITY_MS) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:reconnected");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "reconnected_after_gap" };
+  }
+
+  if (Number(profile.contract_active ?? 0) !== 1) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:contract_inactive");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "contract_inactive" };
+  }
+
+  if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < heartbeatMs) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:contract_expired");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "contract_expired" };
+  }
+
+  const accruedMs = Math.min(heartbeatGapMs, MAX_HEARTBEAT_REWARD_MS);
+  const elapsedHours = accruedMs / 3_600_000;
+  const rate = Number(profile.reward_rate_usdt_per_hour ?? await getRewardRateUsdtPerHour(env));
+  const hashrateFactor = Math.max(1, Number(device.hashrate ?? 0) / 1000);
+  const rewardUsdt = elapsedHours * rate * hashrateFactor;
+  if (!Number.isFinite(rewardUsdt) || rewardUsdt <= 0) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:no_reward");
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "no_reward" };
+  }
+
+  const systemStatus = await readSystemStatus(env);
+  const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+  const rewardSuper = rewardUsdt * superPerUsdt;
+  const accruedSeconds = Math.max(0, Math.floor(accruedMs / 1000));
+
+  await env.DB.prepare(
+    `INSERT INTO reward_ledger (
+      id, user_id, device_id, reward_usdt, reward_super, rate_usdt_per_hour,
+      accrued_from, accrued_to, source, note, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'heartbeat', ?, ?, ?)`
+  )
+    .bind(
+      createId("rwd"),
+      userId,
+      deviceId,
+      rewardUsdt.toFixed(6),
+      rewardSuper.toFixed(6),
+      String(rate),
+      profile.last_heartbeat_at,
+      heartbeatAt,
+      `continuous heartbeat reward (${accruedSeconds}s, hashrate=${device.hashrate}, price=${superPerUsdt})`,
+      heartbeatAt,
+      heartbeatAt,
+    )
+    .run();
+
+  await env.DB.prepare(
+    `UPDATE customer_profiles
+     SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
+         total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) + ?, 6) AS TEXT),
+         last_seen_at = ?,
+         last_heartbeat_at = ?,
+         last_reward_accrued_at = ?,
+         total_online_seconds = COALESCE(total_online_seconds, 0) + ?,
+         online_status = 'online',
+         updated_at = ?
+     WHERE user_id = ?`
+  )
+    .bind(rewardUsdt, rewardSuper, heartbeatAt, heartbeatAt, heartbeatAt, accruedSeconds, heartbeatAt, userId)
+    .run();
+
+  await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
+    .bind(heartbeatAt, device.id)
+    .run();
+
+  await env.DB.prepare(
+    `INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
+     VALUES (?, ?, ?, 'active', ?, ?, ?)`
+  )
+    .bind(createId("dst"), deviceId, userId, Number(device.hashrate ?? 0), heartbeatAt, "heartbeat:reward")
+    .run();
+
+  return { rewardUsdt, rewardSuper, accruedSeconds, continuous: true, reason: "reward_accrued" };
+}
+
 export async function handleDevices(request: Request, env: Env, pathParts: string[]): Promise<Response> {
   if (request.method === "POST" && pathParts.length === 0) {
     if (await isMaintenanceEnabled(env)) {
@@ -144,7 +316,7 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { userId?: string; deviceId?: string; hashrate?: number; wallet?: string; machineCode?: string }
+      | { userId?: string; deviceId?: string; hashrate?: number; wallet?: string }
       | null;
 
     if (!body?.userId || !body.deviceId || typeof body.hashrate !== "number") {
@@ -197,17 +369,6 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
       .bind(now, now, body.userId)
       .run();
 
-    if (typeof body.machineCode === "string" && body.machineCode.trim()) {
-      try {
-        await upsertMachineCodeForUser(env, body.userId, body.machineCode, now);
-      } catch (error) {
-        if (error instanceof Error && error.message === "machine code already in use") {
-          return json({ error: "Machine code already in use" }, 409);
-        }
-        throw error;
-      }
-    }
-
     return json({ id: existingDevice?.id ?? id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: "active" }, existingDevice ? 200 : 201);
   }
 
@@ -232,10 +393,10 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
     }
 
     await ensureCustomerProfile(env, body.userId);
-    await accrueHourlyReward(env, body.userId, deviceId);
+    const heartbeatAt = nowIso();
+    const reward = await accrueHeartbeatReward(env, body.userId, deviceId, heartbeatAt);
 
     if (typeof body.status === "string") {
-      const now = nowIso();
       const current = await env.DB.prepare("SELECT id FROM devices WHERE user_id = ? AND device_id = ?")
         .bind(body.userId, deviceId)
         .first<{ id: string }>();
@@ -248,13 +409,13 @@ export async function handleDevices(request: Request, env: Env, pathParts: strin
           values.push(body.status);
         }
         parts.push("updated_at = ?");
-        values.push(now);
+        values.push(heartbeatAt);
         values.push(current.id);
         await env.DB.prepare(`UPDATE devices SET ${parts.join(", ")} WHERE id = ?`).bind(...values).run();
       }
     }
 
-    return json({ ok: true, deviceId, userId: body.userId, heartbeatAt: nowIso() });
+    return json({ ok: true, deviceId, userId: body.userId, heartbeatAt, reward });
   }
 
   if (request.method === "GET" && pathParts.length === 1) {

@@ -41,11 +41,13 @@ export interface MiningPoolInterface extends Interface {
       | "getGlobalStats"
       | "getMinerInfo"
       | "globalHashrate"
+      | "initialize"
       | "isAdmin"
       | "lastDifficultyAdjustment"
       | "lockupPeriod"
       | "miners"
       | "owner"
+      | "proxiableUUID"
       | "registerMiner"
       | "registeredMiners"
       | "removeAdmin"
@@ -58,20 +60,26 @@ export interface MiningPoolInterface extends Interface {
       | "transferOwnership"
       | "updateHashrate"
       | "updateRewardParameters"
+      | "upgradeTo"
+      | "upgradeToAndCall"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "AdminAdded"
+      | "AdminChanged"
       | "AdminRemoved"
+      | "BeaconUpgraded"
       | "DifficultyAdjusted"
       | "HashrateUpdated"
+      | "Initialized"
       | "MinerDeactivated"
       | "MinerRegistered"
       | "OwnershipTransferred"
       | "RewardClaimed"
       | "RewardParametersUpdated"
       | "SuspiciousActivityDetected"
+      | "Upgraded"
   ): EventFragment;
 
   encodeFunctionData(
@@ -132,6 +140,10 @@ export interface MiningPoolInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "initialize",
+    values: [AddressLike, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "isAdmin",
     values: [AddressLike]
   ): string;
@@ -145,6 +157,10 @@ export interface MiningPoolInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "miners", values: [AddressLike]): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "proxiableUUID",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "registerMiner",
     values: [BigNumberish, string]
@@ -192,6 +208,14 @@ export interface MiningPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "updateRewardParameters",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "upgradeTo",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "upgradeToAndCall",
+    values: [AddressLike, BytesLike]
   ): string;
 
   decodeFunctionResult(
@@ -245,6 +269,7 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "globalHashrate",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "isAdmin", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "lastDifficultyAdjustment",
@@ -256,6 +281,10 @@ export interface MiningPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "miners", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "proxiableUUID",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "registerMiner",
     data: BytesLike
@@ -301,6 +330,11 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "updateRewardParameters",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "upgradeTo", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "upgradeToAndCall",
+    data: BytesLike
+  ): Result;
 }
 
 export namespace AdminAddedEvent {
@@ -316,12 +350,37 @@ export namespace AdminAddedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace AdminChangedEvent {
+  export type InputTuple = [previousAdmin: AddressLike, newAdmin: AddressLike];
+  export type OutputTuple = [previousAdmin: string, newAdmin: string];
+  export interface OutputObject {
+    previousAdmin: string;
+    newAdmin: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace AdminRemovedEvent {
   export type InputTuple = [admin: AddressLike, operator: AddressLike];
   export type OutputTuple = [admin: string, operator: string];
   export interface OutputObject {
     admin: string;
     operator: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace BeaconUpgradedEvent {
+  export type InputTuple = [beacon: AddressLike];
+  export type OutputTuple = [beacon: string];
+  export interface OutputObject {
+    beacon: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -356,6 +415,18 @@ export namespace HashrateUpdatedEvent {
     miner: string;
     oldHashrate: bigint;
     newHashrate: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace InitializedEvent {
+  export type InputTuple = [version: BigNumberish];
+  export type OutputTuple = [version: bigint];
+  export interface OutputObject {
+    version: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -445,6 +516,18 @@ export namespace SuspiciousActivityDetectedEvent {
     miner: string;
     score: bigint;
     reason: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace UpgradedEvent {
+  export type InputTuple = [implementation: AddressLike];
+  export type OutputTuple = [implementation: string];
+  export interface OutputObject {
+    implementation: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -555,6 +638,12 @@ export interface MiningPool extends BaseContract {
 
   globalHashrate: TypedContractMethod<[], [bigint], "view">;
 
+  initialize: TypedContractMethod<
+    [_superToken: AddressLike, initialAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   isAdmin: TypedContractMethod<[account: AddressLike], [boolean], "view">;
 
   lastDifficultyAdjustment: TypedContractMethod<[], [bigint], "view">;
@@ -578,6 +667,8 @@ export interface MiningPool extends BaseContract {
   >;
 
   owner: TypedContractMethod<[], [string], "view">;
+
+  proxiableUUID: TypedContractMethod<[], [string], "view">;
 
   registerMiner: TypedContractMethod<
     [_hashrate: BigNumberish, _deviceId: string],
@@ -621,6 +712,18 @@ export interface MiningPool extends BaseContract {
     [_rewardPerHash: BigNumberish, _claimCooldown: BigNumberish],
     [void],
     "nonpayable"
+  >;
+
+  upgradeTo: TypedContractMethod<
+    [newImplementation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  upgradeToAndCall: TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
@@ -699,6 +802,13 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "globalHashrate"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "initialize"
+  ): TypedContractMethod<
+    [_superToken: AddressLike, initialAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "isAdmin"
   ): TypedContractMethod<[account: AddressLike], [boolean], "view">;
   getFunction(
@@ -726,6 +836,9 @@ export interface MiningPool extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "owner"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "proxiableUUID"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "registerMiner"
@@ -771,6 +884,20 @@ export interface MiningPool extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "upgradeTo"
+  ): TypedContractMethod<
+    [newImplementation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "upgradeToAndCall"
+  ): TypedContractMethod<
+    [newImplementation: AddressLike, data: BytesLike],
+    [void],
+    "payable"
+  >;
 
   getEvent(
     key: "AdminAdded"
@@ -780,11 +907,25 @@ export interface MiningPool extends BaseContract {
     AdminAddedEvent.OutputObject
   >;
   getEvent(
+    key: "AdminChanged"
+  ): TypedContractEvent<
+    AdminChangedEvent.InputTuple,
+    AdminChangedEvent.OutputTuple,
+    AdminChangedEvent.OutputObject
+  >;
+  getEvent(
     key: "AdminRemoved"
   ): TypedContractEvent<
     AdminRemovedEvent.InputTuple,
     AdminRemovedEvent.OutputTuple,
     AdminRemovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "BeaconUpgraded"
+  ): TypedContractEvent<
+    BeaconUpgradedEvent.InputTuple,
+    BeaconUpgradedEvent.OutputTuple,
+    BeaconUpgradedEvent.OutputObject
   >;
   getEvent(
     key: "DifficultyAdjusted"
@@ -799,6 +940,13 @@ export interface MiningPool extends BaseContract {
     HashrateUpdatedEvent.InputTuple,
     HashrateUpdatedEvent.OutputTuple,
     HashrateUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Initialized"
+  ): TypedContractEvent<
+    InitializedEvent.InputTuple,
+    InitializedEvent.OutputTuple,
+    InitializedEvent.OutputObject
   >;
   getEvent(
     key: "MinerDeactivated"
@@ -842,6 +990,13 @@ export interface MiningPool extends BaseContract {
     SuspiciousActivityDetectedEvent.OutputTuple,
     SuspiciousActivityDetectedEvent.OutputObject
   >;
+  getEvent(
+    key: "Upgraded"
+  ): TypedContractEvent<
+    UpgradedEvent.InputTuple,
+    UpgradedEvent.OutputTuple,
+    UpgradedEvent.OutputObject
+  >;
 
   filters: {
     "AdminAdded(address,address)": TypedContractEvent<
@@ -855,6 +1010,17 @@ export interface MiningPool extends BaseContract {
       AdminAddedEvent.OutputObject
     >;
 
+    "AdminChanged(address,address)": TypedContractEvent<
+      AdminChangedEvent.InputTuple,
+      AdminChangedEvent.OutputTuple,
+      AdminChangedEvent.OutputObject
+    >;
+    AdminChanged: TypedContractEvent<
+      AdminChangedEvent.InputTuple,
+      AdminChangedEvent.OutputTuple,
+      AdminChangedEvent.OutputObject
+    >;
+
     "AdminRemoved(address,address)": TypedContractEvent<
       AdminRemovedEvent.InputTuple,
       AdminRemovedEvent.OutputTuple,
@@ -864,6 +1030,17 @@ export interface MiningPool extends BaseContract {
       AdminRemovedEvent.InputTuple,
       AdminRemovedEvent.OutputTuple,
       AdminRemovedEvent.OutputObject
+    >;
+
+    "BeaconUpgraded(address)": TypedContractEvent<
+      BeaconUpgradedEvent.InputTuple,
+      BeaconUpgradedEvent.OutputTuple,
+      BeaconUpgradedEvent.OutputObject
+    >;
+    BeaconUpgraded: TypedContractEvent<
+      BeaconUpgradedEvent.InputTuple,
+      BeaconUpgradedEvent.OutputTuple,
+      BeaconUpgradedEvent.OutputObject
     >;
 
     "DifficultyAdjusted(uint256)": TypedContractEvent<
@@ -886,6 +1063,17 @@ export interface MiningPool extends BaseContract {
       HashrateUpdatedEvent.InputTuple,
       HashrateUpdatedEvent.OutputTuple,
       HashrateUpdatedEvent.OutputObject
+    >;
+
+    "Initialized(uint8)": TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
+    >;
+    Initialized: TypedContractEvent<
+      InitializedEvent.InputTuple,
+      InitializedEvent.OutputTuple,
+      InitializedEvent.OutputObject
     >;
 
     "MinerDeactivated(address,string)": TypedContractEvent<
@@ -952,6 +1140,17 @@ export interface MiningPool extends BaseContract {
       SuspiciousActivityDetectedEvent.InputTuple,
       SuspiciousActivityDetectedEvent.OutputTuple,
       SuspiciousActivityDetectedEvent.OutputObject
+    >;
+
+    "Upgraded(address)": TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
+    >;
+    Upgraded: TypedContractEvent<
+      UpgradedEvent.InputTuple,
+      UpgradedEvent.OutputTuple,
+      UpgradedEvent.OutputObject
     >;
   };
 }

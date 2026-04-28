@@ -75,7 +75,7 @@ function getQrHint(): string {
 }
 
 function getInstallHint(): string {
-  return '安装后请先完成身份同步，再用机器码联系管理员开通月卡，最后点击“矿机设置”开始累计收益。';
+  return '安装后请先完成身份同步并提交开通申请，随后点击“矿机设置”激活设备并开始累计收益。';
 }
 
 export default function DownloadSection() {
@@ -189,8 +189,8 @@ export default function DownloadSection() {
       a: '首次注册需要绑定推荐人钱包，用于完成账户关系建立和团队统计。',
     },
     {
-      q: '机器码是什么？',
-      a: '机器码用于把你的手机设备和开通服务关联起来，提交给客服后即可进入激活流程。',
+      q: '现在还需要额外设备编码吗？',
+      a: '不需要。当前版本已取消额外编码流程，按 App 引导完成开通与激活即可。',
     },
     {
       q: '为什么会提示 Gas？',
@@ -214,7 +214,7 @@ export default function DownloadSection() {
           </div>
           <h2 className="mb-3 text-4xl font-bold tracking-tight text-white md:text-5xl">下载 Coin Planet App</h2>
           <p className="mx-auto max-w-2xl text-lg text-slate-300/90">
-            {loading ? '正在读取最新发布版本...' : '下载最新版 App，按“身份同步 → 提交机器码开通 → 激活设备 → 保持在线”完成准备并开始累计收益。'}
+            {loading ? '正在读取最新发布版本...' : '下载最新版 App，按“身份同步 → 完成账号开通 → 激活设备 → 保持在线”完成准备并开始累计收益。'}
           </p>
         </motion.div>
 

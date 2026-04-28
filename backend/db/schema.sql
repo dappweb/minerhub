@@ -18,20 +18,8 @@ CREATE TABLE IF NOT EXISTS devices (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS claims (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  amount TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  tx_hash TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
 CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet);
 CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
-CREATE INDEX IF NOT EXISTS idx_claims_user_id ON claims(user_id);
 
 CREATE TABLE IF NOT EXISTS gas_quotes (
   id TEXT PRIMARY KEY,
@@ -114,7 +102,13 @@ INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES
   ('user_agreement_title_en', 'User Agreement', datetime('now')),
   ('user_agreement_content_zh', '欢迎使用本应用。使用本服务即表示您已阅读并同意平台的服务条款、隐私政策以及相关的风险提示。管理员可随时更新本协议内容。', datetime('now')),
   ('user_agreement_content_en', 'Welcome. By using this service you acknowledge that you have read and agreed to the platform terms of service, privacy policy and related risk disclosures. The administrator may update this agreement at any time.', datetime('now')),
-  ('support_contacts_json', '[]', datetime('now'));
+  ('support_contacts_json', '[]', datetime('now')),
+  ('contract_required', '1', datetime('now')),
+  ('contract_version', '1.0.0', datetime('now')),
+  ('contract_title_zh', '用户挖矿合同', datetime('now')),
+  ('contract_title_en', 'Mining Contract', datetime('now')),
+  ('contract_content_zh', '感谢您购买我们的服务。本合同约定：\n\n1. 您已购买月卡并支付相关费用\n2. 激活后，您的账户开始累计挖矿收益\n3. 合同期限为所购周期（默认1095天）\n4. 期间保持设备在线以持续累计收益\n5. 合同到期后收益停止累计\n6. 本条款由平台管理方解释', datetime('now')),
+  ('contract_content_en', 'Thank you for purchasing our service. This contract stipulates:\n\n1. You have purchased a monthly card and paid the relevant fees\n2. After activation, your account begins to accrue mining rewards\n3. The contract term is the purchased period (default 1095 days)\n4. During this period, keep the device online to continue accruing rewards\n5. After the contract expires, reward accrual stops\n6. This clause is interpreted by the platform administrator', datetime('now'));
 
 CREATE TABLE IF NOT EXISTS user_agreement_acceptances (
   user_id TEXT NOT NULL,
@@ -159,10 +153,12 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   machine_code TEXT,
   contract_start_at TEXT,
   contract_end_at TEXT,
+  contract_type TEXT,
   contract_term_days INTEGER NOT NULL DEFAULT 1095,
   monthly_card_days INTEGER NOT NULL DEFAULT 30,
   contract_active INTEGER NOT NULL DEFAULT 0,
   agreement_accepted_at TEXT,
+  contract_agreement_accepted_version TEXT,
   activation_status TEXT NOT NULL DEFAULT 'pending',
   exchange_auto_enabled INTEGER NOT NULL DEFAULT 1,
   payout_wallets_json TEXT NOT NULL DEFAULT '[]',
@@ -170,23 +166,15 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   total_reward_usdt TEXT NOT NULL DEFAULT '0',
   total_reward_super TEXT NOT NULL DEFAULT '0',
   last_seen_at TEXT,
+  last_heartbeat_at TEXT,
+  last_reward_accrued_at TEXT,
+  total_online_seconds INTEGER NOT NULL DEFAULT 0,
   online_status TEXT NOT NULL DEFAULT 'offline',
   offline_alerted_at TEXT,
   notes TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS sub_accounts (
-  id TEXT PRIMARY KEY,
-  owner_user_id TEXT NOT NULL,
-  child_user_id TEXT NOT NULL,
-  label TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (owner_user_id) REFERENCES users(id),
-  FOREIGN KEY (child_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS payout_wallets (
@@ -229,10 +217,12 @@ CREATE TABLE IF NOT EXISTS reward_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_parent_user_id ON customer_profiles(parent_user_id);
 CREATE INDEX IF NOT EXISTS idx_customer_profiles_contract_active ON customer_profiles(contract_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_profiles_machine_code_normalized
+  ON customer_profiles(LOWER(TRIM(machine_code)))
+  WHERE TRIM(COALESCE(machine_code, '')) <> '';
 CREATE INDEX IF NOT EXISTS idx_announcements_publish_at ON announcements(publish_at);
 CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published, is_pinned);
 CREATE INDEX IF NOT EXISTS idx_announcement_reads_user_id ON announcement_reads(user_id);
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_owner_user_id ON sub_accounts(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_payout_wallets_user_id ON payout_wallets(user_id);
 CREATE INDEX IF NOT EXISTS idx_device_status_history_device_id ON device_status_history(device_id);
 CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_id ON reward_ledger(user_id);
@@ -401,6 +391,20 @@ CREATE TABLE IF NOT EXISTS owner_mint_counters (
   total_super TEXT NOT NULL DEFAULT '0',
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS owner_sub_admins (
+  wallet TEXT PRIMARY KEY,
+  note TEXT,
+  created_by TEXT,
+  updated_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  allowed_contract_types_json TEXT NOT NULL DEFAULT '[]',
+  contract_types_locked_at TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sub_admins_enabled ON owner_sub_admins(enabled);
 
 -- === Referral system ===
 CREATE TABLE IF NOT EXISTS referral_edges (

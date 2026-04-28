@@ -2,7 +2,9 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./AdminAccess.sol";
 
 /**
@@ -13,7 +15,7 @@ import "./AdminAccess.sol";
  * - 鎻愬彇鍐峰嵈鏈哄埗
  * - 闃蹭綔寮婃娴?
  */
-contract MiningPool is AdminAccess, ReentrancyGuard {
+contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     // SUPER 浠ｅ竵鍦板潃
     IERC20 public superToken;
     
@@ -23,14 +25,14 @@ contract MiningPool is AdminAccess, ReentrancyGuard {
     uint256 public constant MAX_HASHRATE = 10_000_000;               // 鏈€澶х畻鍔涳細10 MH/s
     
     // 濂栧姳鍙傛暟
-    uint256 public rewardPerHashPerDay = 1 * 10 ** 12;  // 姣忓ぉ姣忓崟浣嶇畻鍔涜幏寰楀鍔?
-    uint256 public claimCooldown = 1 days;              // 棰嗗彇鍐峰嵈鏃堕棿
-    uint256 public lockupPeriod = 7 days;               // 棣栨鎸栫熆閿佷粨鏈?
+    uint256 public rewardPerHashPerDay;  // 姣忓ぉ姣忓崟浣嶇畻鍔涜幏寰楀鍔?
+    uint256 public claimCooldown;        // 棰嗗彇鍐峰嵈鏃堕棿
+    uint256 public lockupPeriod;         // 棣栨鎸栫熆閿佷粨鏈?
     
     // 闅惧害璋冩暣
     uint256 public globalHashrate;
     uint256 public lastDifficultyAdjustment;
-    uint256 public difficultyAdjustmentPeriod = 7 days;
+    uint256 public difficultyAdjustmentPeriod;
     
     // 鐭垮伐淇℃伅缁撴瀯
     struct Miner {
@@ -61,9 +63,22 @@ contract MiningPool is AdminAccess, ReentrancyGuard {
     event RewardParametersUpdated(uint256 newRewardPerHash, uint256 newClaimCooldown);
     event SuspiciousActivityDetected(address indexed miner, uint256 score, string reason);
     
-    constructor(address _superToken) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _superToken, address initialAdmin) external initializer {
         require(_superToken != address(0), "Invalid SUPER token address");
+        require(initialAdmin != address(0), "Invalid admin address");
+        __AdminAccess_init(initialAdmin);
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
         superToken = IERC20(_superToken);
+        rewardPerHashPerDay = 1 * 10 ** 12;
+        claimCooldown = 1 days;
+        lockupPeriod = 7 days;
+        difficultyAdjustmentPeriod = 7 days;
         lastDifficultyAdjustment = block.timestamp;
     }
     
@@ -251,6 +266,8 @@ contract MiningPool is AdminAccess, ReentrancyGuard {
     ) {
         return (totalEmitted, totalActiveHashrate, totalMiners);
     }
+
+    function _authorizeUpgrade(address) internal override onlyAdmin {}
 }
 
 

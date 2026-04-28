@@ -7,7 +7,6 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Download as DownloadIcon, LayoutDashboard } from 'lucide-react';
 import React, { Suspense } from 'react';
 import type { Address } from 'viem';
-import { verifyMessage } from 'viem';
 import { useAccount, useChainId, useSignMessage, useSwitchChain } from 'wagmi';
 import BscBadge from './components/BscBadge';
 import Hero from './components/Hero';
@@ -30,6 +29,7 @@ const Roadmap = React.lazy(() => import('./components/Roadmap'));
 const MobileQrLogin = React.lazy(() => import('./components/MobileQrLogin'));
 
 type ViewMode = 'website' | 'admin';
+type AdminRole = 'owner' | 'subadmin';
 
 const NAV_LINKS = [
   { href: '#flow-steps', label: '开通流程' },
@@ -52,6 +52,10 @@ export default function App() {
   const [authorizedAdminAddresses, setAuthorizedAdminAddresses] = React.useState<string[]>([]);
   const [ownerAuthorityLoaded, setOwnerAuthorityLoaded] = React.useState<boolean>(false);
   const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
+  const [adminRole, setAdminRole] = React.useState<AdminRole | ''>(() => {
+    const raw = sessionStorage.getItem('ownerJwtRole');
+    return raw === 'owner' || raw === 'subadmin' ? raw : '';
+  });
   const [systemStatus, setSystemStatus] = React.useState<{ maintenanceEnabled: boolean; maintenanceMessageZh: string; maintenanceMessageEn: string } | null>(null);
   const { address, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSignaturePending } = useSignMessage();
@@ -241,30 +245,25 @@ export default function App() {
     Boolean(adminWallet) &&
     Boolean(verifiedOwnerWallet) &&
     adminWallet.toLowerCase() === verifiedOwnerWallet.toLowerCase();
-  const isOwnerLoggedIn = Boolean(adminWallet) && hasImmediateOwnerAccess(adminWallet) && isSignatureVerified;
+  const isOwnerLoggedIn = Boolean(adminWallet) && isSignatureVerified;
   const isAdminView = viewMode === 'admin';
   const maintenanceEnabled = systemStatus?.maintenanceEnabled === true;
 
   React.useEffect(() => {
     if (!adminWallet) {
       setVerifiedOwnerWallet('');
+      setAdminRole('');
+      sessionStorage.removeItem('ownerJwtRole');
       setAdminLoginStatus('请先使用钱包登录后台');
       setViewMode('website');
       return;
     }
 
-    if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(adminWallet)) {
-      setVerifiedOwnerWallet('');
-      setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
-      setViewMode('website');
-      return;
-    }
-
     if (!isSignatureVerified) {
-      setAdminLoginStatus('管理员钱包已连接，请完成链上签名验证后进入数据面板。');
+      setAdminLoginStatus('管理员钱包已连接，请完成签名验证后进入数据面板。');
       setViewMode('website');
     }
-  }, [adminWallet, hasImmediateOwnerAccess, isSignatureVerified, ownerAuthorityLoaded]);
+  }, [adminWallet, isSignatureVerified]);
 
   const verifyOwnerSignatureAndEnter = React.useCallback(
     async (walletAddress: string) => {
@@ -273,46 +272,51 @@ export default function App() {
         return;
       }
 
-      setAdminLoginStatus('正在校验链上管理员权限，通过后会弹出钱包签名。');
-      const hasOwnerAccess = await resolveOwnerAccess(walletAddress);
-      if (!hasOwnerAccess) {
-        setVerifiedOwnerWallet('');
-        setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
-        setViewMode('website');
-        return;
-      }
+      setAdminLoginStatus('正在请求钱包签名并验证后台管理员角色。');
 
       try {
+        const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
         const nonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-        const message = [
-          'Coin Planet Admin 登录签名验证',
-          `Address: ${walletAddress}`,
-          `Nonce: ${nonce}`,
-          'Purpose: 进入链上数据管理面板',
-        ].join('\n');
+        const ts = Date.now();
+        const message = `coinplanet-owner|login|${nonce}|${ts}`;
 
         const signature = await signAdminMessage(walletAddress, message);
-        const valid = await verifyMessage({
-          address: walletAddress as Address,
-          message,
-          signature,
+        const response = await fetch(`${baseUrl}/api/owner/auth/login`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ wallet: walletAddress, signature, nonce, ts }),
         });
 
-        if (!valid) {
-          throw new Error('签名验证失败');
+        if (!response.ok) {
+          throw new Error((await response.text()) || `Owner login failed: ${response.status}`);
+        }
+
+        const data = (await response.json()) as { token: string; expiresAt: string; wallet?: string; role?: AdminRole };
+        sessionStorage.setItem('ownerJwt', data.token);
+        sessionStorage.setItem('ownerJwtExp', data.expiresAt);
+        sessionStorage.setItem('ownerJwtWallet', (data.wallet || walletAddress).toLowerCase());
+        if (data.role === 'owner' || data.role === 'subadmin') {
+          sessionStorage.setItem('ownerJwtRole', data.role);
+          setAdminRole(data.role);
+        } else {
+          sessionStorage.removeItem('ownerJwtRole');
+          setAdminRole('');
         }
 
         setVerifiedOwnerWallet(walletAddress);
-        setAdminLoginStatus('链上签名验证成功，已进入 Coin Planet 管理后台。');
+        const roleLabel = data.role === 'owner' ? 'Owner 超级管理员' : data.role === 'subadmin' ? 'SubAdmin 子管理员' : '管理员';
+        setAdminLoginStatus(`签名验证成功，已以 ${roleLabel} 身份进入 Coin Planet 管理后台。`);
         setViewMode('admin');
       } catch (error) {
         setVerifiedOwnerWallet('');
+        setAdminRole('');
+        sessionStorage.removeItem('ownerJwtRole');
         const message = error instanceof Error ? error.message : '签名验证失败';
         setAdminLoginStatus(`签名验证失败：${message}`);
         setViewMode('website');
       }
     },
-    [resolveOwnerAccess, signAdminMessage],
+    [signAdminMessage],
   );
 
   const renderConnectAction = (className: string, showConnectedLabel: boolean) => (
@@ -320,20 +324,17 @@ export default function App() {
       {({ account, mounted, openConnectModal }) => {
         const ready = mounted;
         const connected = Boolean(ready && account);
-        const isAllowedAdmin = connected ? hasImmediateOwnerAccess(account.address) : false;
-        const buttonDisabled = isSignaturePending || (connected && !isAllowedAdmin);
+        const buttonDisabled = isSignaturePending;
 
         const label = !connected
           ? '连接钱包'
-          : hasImmediateOwnerAccess(account.address)
-            ? showConnectedLabel
-              ? isSignatureVerified
-                ? `已验证 ${formatWallet(account.address)}`
-                : `待签名 ${formatWallet(account.address)}`
-              : isSignaturePending
-                ? '签名验证中...'
-                : '签名验证进入后台'
-            : '非管理员钱包';
+          : showConnectedLabel
+            ? isSignatureVerified
+              ? `已验证 ${formatWallet(account.address)}${adminRole ? ` · ${adminRole === 'owner' ? 'Owner' : 'SubAdmin'}` : ''}`
+              : `待签名 ${formatWallet(account.address)}`
+            : isSignaturePending
+              ? '签名验证中...'
+              : '签名验证进入后台';
 
         return (
           <button
@@ -344,12 +345,6 @@ export default function App() {
 
               if (!connected) {
                 openConnectModal();
-                return;
-              }
-
-              if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(account.address)) {
-                setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
-                setViewMode('website');
                 return;
               }
 
@@ -377,7 +372,6 @@ export default function App() {
       {({ account, mounted, openConnectModal }) => {
         const ready = mounted;
         const connected = Boolean(ready && account);
-        const canEnter = connected && hasImmediateOwnerAccess(account.address);
         const label = isSignaturePending ? '验证中' : '数据面板';
 
         return (
@@ -392,12 +386,6 @@ export default function App() {
                 return;
               }
 
-              if (ownerAuthorityLoaded && !hasImmediateOwnerAccess(account.address)) {
-                setAdminLoginStatus('当前钱包不是链上管理员账户，无法进入管理后台。');
-                setViewMode('website');
-                return;
-              }
-
               if (isSignatureVerified) {
                 setViewMode('admin');
                 return;
@@ -405,7 +393,7 @@ export default function App() {
 
               void verifyOwnerSignatureAndEnter(account.address);
             }}
-            disabled={isSignaturePending || (connected && !canEnter)}
+            disabled={isSignaturePending}
             className={`${className} disabled:cursor-not-allowed disabled:opacity-60`}
             type="button"
             aria-busy={isSignaturePending}
@@ -486,7 +474,7 @@ export default function App() {
                     <p className="mt-3 max-w-2xl text-slate-400">新用户先下载 App 完成设备开通，管理员使用钱包签名进入数据面板。</p>
                   </div>
                   <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-slate-300" aria-live="polite">
-                    {adminWallet ? `当前钱包：${formatWallet(adminWallet)} · ${adminLoginStatus}` : adminLoginStatus}
+                    {adminWallet ? `当前钱包：${formatWallet(adminWallet)}${adminRole ? ` · 角色：${adminRole === 'owner' ? 'Owner' : 'SubAdmin'}` : ''} · ${adminLoginStatus}` : adminLoginStatus}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

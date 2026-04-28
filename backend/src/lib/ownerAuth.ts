@@ -6,18 +6,18 @@ import { unauthorized } from "./response";
 
 const OWNER_JWT_TTL_SECONDS = 2 * 60 * 60; // 2h
 const OWNER_JWT_ISS = "coinplanet-owner";
-const DEFAULT_ADMIN_WALLET = "0xca949919f03e3e52949d1436442312d8a023fe41";
 const ADMIN_ABI = ["function isAdmin(address) view returns (bool)"];
+export type AdminActorRole = "owner" | "subadmin";
 
-function secretKey(env: Env): Uint8Array {
-  const raw = env.JWT_SECRET;
+function secretKey(env: Env): Uint8Array | null {
+  const raw = (env.JWT_SECRET || "").trim();
+  if (!raw) return null;
   return new TextEncoder().encode(raw);
 }
 
 function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): boolean {
   if (!wallet) return false;
   const w = wallet.toLowerCase();
-  if (w === DEFAULT_ADMIN_WALLET) return true;
   if (env.ADMIN_ADDRESSES) {
     for (const entry of env.ADMIN_ADDRESSES.split(",")) {
       const a = entry.trim().toLowerCase();
@@ -25,6 +25,34 @@ function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): b
     }
   }
   return false;
+}
+
+function parseWalletCsv(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const wallets = new Set<string>();
+  for (const entry of raw.split(",")) {
+    const wallet = entry.trim().toLowerCase();
+    if (wallet) wallets.add(wallet);
+  }
+  return Array.from(wallets);
+}
+
+async function getConfiguredSubAdminWallets(env: Env): Promise<Set<string>> {
+  const result = new Set<string>(parseWalletCsv([env.SUB_ADMIN_ADDRESSES, env.ADMIN_ADDRESSES].filter(Boolean).join(",")));
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT wallet
+       FROM owner_sub_admins
+       WHERE enabled = 1`
+    ).all<{ wallet: string }>();
+    for (const row of results ?? []) {
+      const wallet = row.wallet?.trim().toLowerCase();
+      if (wallet) result.add(wallet);
+    }
+  } catch {
+    // Backward-compatible when table is not created yet.
+  }
+  return result;
 }
 
 export async function getPrimaryOwnerWallet(env: Env): Promise<string | null> {
@@ -36,6 +64,38 @@ export async function getPrimaryOwnerWallet(env: Env): Promise<string | null> {
   } catch {
     return fallback;
   }
+}
+
+export async function isReferrerWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
+  if (!wallet) return false;
+  const w = wallet.toLowerCase();
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok
+     FROM users u
+     INNER JOIN referral_edges re ON re.inviter_user_id = u.id
+     WHERE u.wallet = ? AND re.status = 'active'
+     LIMIT 1`
+  )
+    .bind(w)
+    .first<{ ok: number }>();
+  return Boolean(row?.ok);
+}
+
+export async function isSubAdminWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
+  if (!wallet) return false;
+  const configured = await getConfiguredSubAdminWallets(env);
+  if (configured.has(wallet.toLowerCase())) return true;
+  return isReferrerWallet(env, wallet);
+}
+
+export async function getAdminActorRole(env: Env, wallet: string | null | undefined): Promise<AdminActorRole | null> {
+  if (await isOwnerWallet(env, wallet)) return "owner";
+  if (await isSubAdminWallet(env, wallet)) return "subadmin";
+  return null;
+}
+
+export async function isAdminActorWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
+  return (await getAdminActorRole(env, wallet)) !== null;
 }
 
 export async function isOwnerWallet(env: Env, wallet: string | null | undefined): Promise<boolean> {
@@ -62,22 +122,55 @@ export async function issueOwnerJwt(
 ): Promise<{ token: string; expiresAt: string }> {
   const nowSec = Math.floor(Date.now() / 1000);
   const expSec = nowSec + OWNER_JWT_TTL_SECONDS;
-  const token = await new SignJWT({ wallet: wallet.toLowerCase(), role: "owner", sid: sessionId })
+  const key = secretKey(env);
+
+  // Fallback mode: when JWT_SECRET is not configured, use an opaque
+  // DB-backed session token so owner can still enter the admin system.
+  if (!key) {
+    return { token: `opaque:${sessionId}`, expiresAt: new Date(expSec * 1000).toISOString() };
+  }
+
+  const role = (await getAdminActorRole(env, wallet)) ?? "subadmin";
+  const token = await new SignJWT({ wallet: wallet.toLowerCase(), role, sid: sessionId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(OWNER_JWT_ISS)
     .setIssuedAt(nowSec)
     .setExpirationTime(expSec)
-    .sign(secretKey(env));
+    .sign(key);
   return { token, expiresAt: new Date(expSec * 1000).toISOString() };
 }
 
 export async function verifyOwnerJwt(env: Env, token: string): Promise<{ valid: boolean; wallet?: string; error?: string }> {
   try {
-    const { payload } = await jwtVerify(token, secretKey(env), { issuer: OWNER_JWT_ISS });
+    if (token.startsWith("opaque:")) {
+      const sessionId = token.slice("opaque:".length).trim();
+      if (!sessionId) return { valid: false, error: "Invalid owner session" };
+
+      const session = await env.DB.prepare(
+        `SELECT id, wallet
+         FROM owner_sessions
+         WHERE id = ?
+           AND revoked = 0
+           AND expires_at > ?
+         LIMIT 1`
+      )
+        .bind(sessionId, new Date().toISOString())
+        .first<{ id: string; wallet: string }>();
+
+      const wallet = session?.wallet?.toLowerCase() || null;
+      if (!wallet) return { valid: false, error: "Owner session expired or revoked" };
+      if (!(await isAdminActorWallet(env, wallet))) return { valid: false, error: "Not admin" };
+      return { valid: true, wallet };
+    }
+
+    const key = secretKey(env);
+    if (!key) return { valid: false, error: "Owner session secret not configured" };
+
+    const { payload } = await jwtVerify(token, key, { issuer: OWNER_JWT_ISS });
     const wallet = typeof payload.wallet === "string" ? payload.wallet : null;
     const sessionId = typeof payload.sid === "string" ? payload.sid : null;
     if (!wallet || !sessionId) return { valid: false, error: "Invalid owner session" };
-    if (!(await isOwnerWallet(env, wallet))) return { valid: false, error: "Not owner" };
+    if (!(await isAdminActorWallet(env, wallet))) return { valid: false, error: "Not admin" };
     const session = await env.DB.prepare(
       `SELECT id
        FROM owner_sessions
@@ -139,13 +232,13 @@ export async function requireOwnerAuth(
   const hasLegacyHeaders = request.headers.get("x-signature") && request.headers.get("x-nonce") && request.headers.get("x-wallet");
 
   if (!bearer && !hasLegacyHeaders) {
-    return { ok: false, response: unauthorized("Owner auth required") };
+    return { ok: false, response: unauthorized("Admin auth required") };
   }
 
   if (opts.sensitive || !bearer) {
     const sig = await extractAndVerifyAuth(request, env);
     if (!sig.valid) return { ok: false, response: unauthorized(sig.error || "Signature verification failed") };
-    if (!(await isOwnerWallet(env, sig.wallet ?? null))) return { ok: false, response: unauthorized("Owner wallet required") };
+    if (!(await isAdminActorWallet(env, sig.wallet ?? null))) return { ok: false, response: unauthorized("Admin wallet required") };
     if (walletFromJwt && walletFromJwt.toLowerCase() !== (sig.wallet || "").toLowerCase()) {
       return { ok: false, response: unauthorized("JWT/wallet mismatch") };
     }

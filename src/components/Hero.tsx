@@ -4,7 +4,7 @@ import BscBadge from './BscBadge';
 
 const setupItems = [
   '身份同步',
-  '机器码开通',
+  '账号开通',
   '激活设备',
   '收益在线',
 ];
@@ -48,7 +48,7 @@ export default function Hero() {
               transition={{ duration: 0.5, delay: 0.2 }}
               className="mb-10 text-lg leading-8 text-slate-300 sm:text-xl"
             >
-              下载 App 后按“身份同步 → 提交机器码开通 → 激活设备 → 保持在线”完成准备流程。
+              下载 App 后按“身份同步 → 完成账号开通 → 激活设备 → 保持在线”完成准备流程。
               基于 <span className="font-semibold text-[#F0B90B]">BNB Smart Chain</span> 的 SUPER 生态会将收益、兑换与团队数据统一沉淀到手机端。
             </motion.p>
 
