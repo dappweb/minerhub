@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 export type OnboardingLang = 'en' | 'zh';
 
@@ -71,7 +71,18 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [referralWallet, setReferralWallet] = useState(initialReferralWallet);
   const [referralError, setReferralError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const t = COPY[lang];
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const stepSummary = useMemo(() => {
     if (step === 1) return t.s1Title;
@@ -111,7 +122,7 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
 
   if (!visible) return null;
 
-  const { cardWidth, cardMaxHeight, scrollMaxHeight, paddingBottom, screenWidth } = getResponsiveDimensions();
+  const { cardWidth, cardMaxHeight, scrollMaxHeight, paddingBottom, screenWidth } = getResponsiveDimensions(keyboardVisible);
   
   // 动态样式（根据屏幕尺寸）
   const dynamicStyles = {
@@ -157,6 +168,11 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
       statusBarTranslucent
       onRequestClose={onMinimize}
     >
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
       <View style={[styles.modalBackdrop, dynamicStyles.modalBackdrop]}>
         <TouchableWithoutFeedback onPress={onMinimize}>
           <View style={StyleSheet.absoluteFillObject} />
@@ -175,7 +191,7 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
               </Pressable>
             </View>
 
-            <ScrollView style={[styles.scroll, dynamicStyles.scroll]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="always">
+            <ScrollView style={[styles.scroll, dynamicStyles.scroll]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
               {step === 1 && (
                 <>
                   <Text style={styles.title}>{t.s1Title}</Text>
@@ -209,6 +225,12 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
                     onChangeText={handleReferralChange}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    autoComplete="off"
+                    importantForAutofill="no"
+                    keyboardType={Platform.OS === 'ios' ? 'ascii-capable' : 'visible-password'}
+                    returnKeyType="done"
+                    spellCheck={false}
+                    textContentType="none"
                   />
                   {referralError && <Text style={styles.errorText}>{referralError}</Text>}
                 </>
@@ -230,12 +252,13 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
           </View>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 // 响应式尺寸计算
-const getResponsiveDimensions = () => {
+const getResponsiveDimensions = (keyboardVisible = false) => {
   const { width, height } = Dimensions.get('window');
   const isLandscape = width > height;
   
@@ -246,11 +269,11 @@ const getResponsiveDimensions = () => {
     // 弹窗宽度：屏幕宽度的 90%，但最大 520px，最小 280px
     cardWidth: Math.min(Math.max(width * 0.9, 280), 520),
     // 弹窗最大高度：屏幕高度的 85%（横屏）或 75%（竖屏）
-    cardMaxHeight: isLandscape ? height * 0.85 : height * 0.75,
+    cardMaxHeight: isLandscape ? height * 0.85 : keyboardVisible ? height * 0.62 : height * 0.75,
     // ScrollView 高度：动态计算
-    scrollMaxHeight: isLandscape ? height * 0.5 : height * 0.4,
+    scrollMaxHeight: isLandscape ? height * 0.5 : keyboardVisible ? height * 0.3 : height * 0.4,
     // 底部间距：在竖屏模式下固定96，横屏模式下为20
-    paddingBottom: isLandscape ? 20 : 96,
+    paddingBottom: isLandscape ? 20 : keyboardVisible ? 16 : 96,
   };
 };
 
@@ -262,6 +285,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 96,
+  },
+  keyboardWrap: {
+    flex: 1,
   },
   expandedWrap: {
     width: '100%',
