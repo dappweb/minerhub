@@ -257,6 +257,15 @@ export type GasIntentDto = {
   relay_order_id?: string | null;
 };
 
+type AgreementDocumentDto = {
+  required: boolean;
+  version: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+};
+
 export type SystemStatusDto = {
   maintenanceEnabled: boolean;
   maintenanceMessageZh: string;
@@ -268,14 +277,8 @@ export type SystemStatusDto = {
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
-  userAgreement?: {
-    required: boolean;
-    version: string;
-    titleZh: string;
-    titleEn: string;
-    contentZh: string;
-    contentEn: string;
-  };
+  userAgreement?: AgreementDocumentDto;
+  contract?: AgreementDocumentDto;
   supportContacts?: Array<{
     id: string;
     type: string;
@@ -325,6 +328,7 @@ export type UserDetailsDto = UserDto & {
   offlineAlertedAt?: string | null;
   notes?: string | null;
   agreementAcceptedVersion?: string | null;
+  contractAgreementAcceptedVersion?: string | null;
   devices?: Array<{
     id: string;
     device_id: string;

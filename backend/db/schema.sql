@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   machine_code TEXT,
   contract_start_at TEXT,
   contract_end_at TEXT,
+  contract_type TEXT,
   contract_term_days INTEGER NOT NULL DEFAULT 1095,
   monthly_card_days INTEGER NOT NULL DEFAULT 30,
   contract_active INTEGER NOT NULL DEFAULT 0,
@@ -398,6 +399,8 @@ CREATE TABLE IF NOT EXISTS owner_sub_admins (
   updated_by TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  allowed_contract_types_json TEXT NOT NULL DEFAULT '[]',
+  contract_types_locked_at TEXT,
   enabled INTEGER NOT NULL DEFAULT 1
 );
 

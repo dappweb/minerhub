@@ -6,7 +6,6 @@ import { unauthorized } from "./response";
 
 const OWNER_JWT_TTL_SECONDS = 2 * 60 * 60; // 2h
 const OWNER_JWT_ISS = "coinplanet-owner";
-const DEFAULT_ADMIN_WALLET = "0xca949919f03e3e52949d1436442312d8a023fe41";
 const ADMIN_ABI = ["function isAdmin(address) view returns (bool)"];
 export type AdminActorRole = "owner" | "subadmin";
 
@@ -19,7 +18,6 @@ function secretKey(env: Env): Uint8Array | null {
 function isConfiguredAdminWallet(env: Env, wallet: string | null | undefined): boolean {
   if (!wallet) return false;
   const w = wallet.toLowerCase();
-  if (w === DEFAULT_ADMIN_WALLET) return true;
   if (env.ADMIN_ADDRESSES) {
     for (const entry of env.ADMIN_ADDRESSES.split(",")) {
       const a = entry.trim().toLowerCase();

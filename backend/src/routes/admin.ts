@@ -1,4 +1,16 @@
 import { createId, nowIso } from "../lib/id";
+import {
+  addContractScopeClause,
+  canAccessCustomerContractType,
+  contractTypeFromTerm,
+  contractTypeFromYears,
+  ensureContractAccessColumns,
+  getSubAdminContractScope,
+  normalizeContractType,
+  resolveServiceContractType,
+  setCustomerContractTypeIfEmpty,
+  type ContractTypeScope,
+} from "../lib/contractAccess";
 import { getAdminActorRole, requireOwnerAuth, type AdminActorRole } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json } from "../lib/response";
@@ -16,6 +28,7 @@ type CustomerSummary = {
   nickname: string | null;
   contractStartAt: string | null;
   contractEndAt: string | null;
+  contractType: string | null;
   contractActive: number;
   activationStatus: string;
   exchangeAutoEnabled: number;
@@ -92,6 +105,7 @@ type AdminDeviceItem = {
   onlineStatus: string;
   contractActive: number;
   contractEndAt: string | null;
+  contractType: string | null;
   rewardRateUsdtPerHour: string;
   totalRewardUsdt: string;
   totalRewardSuper: string;
@@ -182,6 +196,16 @@ async function canManageUserByScope(env: Env, scopeUserId: string | null, target
   return Boolean(row?.ok);
 }
 
+async function canAccessUserByScope(
+  env: Env,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+  targetUserId: string,
+): Promise<boolean> {
+  if (!(await canManageUserByScope(env, scopeUserId, targetUserId))) return false;
+  return canAccessCustomerContractType(env, allowedTypes, targetUserId);
+}
+
 async function canManageDeviceByScope(env: Env, scopeUserId: string | null, deviceRecordId: string): Promise<boolean> {
   if (!scopeUserId) return true;
   const row = await env.DB.prepare(
@@ -194,6 +218,25 @@ async function canManageDeviceByScope(env: Env, scopeUserId: string | null, devi
     .bind(deviceRecordId, scopeUserId)
     .first<{ ok: number }>();
   return Boolean(row?.ok);
+}
+
+async function canAccessDeviceByScope(
+  env: Env,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+  deviceRecordId: string,
+): Promise<boolean> {
+  if (!(await canManageDeviceByScope(env, scopeUserId, deviceRecordId))) return false;
+  if (allowedTypes === null) return true;
+  const row = await env.DB.prepare(
+    `SELECT d.user_id AS user_id
+     FROM devices d
+     WHERE d.id = ?
+     LIMIT 1`
+  )
+    .bind(deviceRecordId)
+    .first<{ user_id: string }>();
+  return row?.user_id ? canAccessCustomerContractType(env, allowedTypes, row.user_id) : false;
 }
 
 async function ensureProfile(env: Env, userId: string): Promise<void> {
@@ -235,6 +278,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     `SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
       cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
@@ -250,7 +294,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
-             cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
+             cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`
@@ -285,7 +329,7 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
   );
 }
 
-async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: string): Promise<CustomerSummary[]> {
+async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: string, allowedTypes: ContractTypeScope): Promise<CustomerSummary[]> {
   const inviter = await env.DB.prepare("SELECT id FROM users WHERE wallet = ? LIMIT 1")
     .bind(inviterWallet.toLowerCase())
     .first<{ id: string }>();
@@ -294,10 +338,15 @@ async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: str
     return [];
   }
 
+  const clauses = ["rc.ancestor_user_id = ?", "rc.depth >= 1"];
+  const params: Array<string | number> = [inviter.id];
+  addContractScopeClause(clauses, params, allowedTypes);
+
   const { results } = await env.DB.prepare(
     `SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
       cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
@@ -313,13 +362,13 @@ async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: str
     INNER JOIN users u ON u.id = rc.descendant_user_id
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
-    WHERE rc.ancestor_user_id = ? AND rc.depth >= 1
+    WHERE ${clauses.join(" AND ")}
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
-             cp.contract_end_at, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
+             cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`
-  ).bind(inviter.id).all<CustomerSummary>();
+  ).bind(...params).all<CustomerSummary>();
 
   const baseRows = (results ?? []).map((row) => ({
     ...row,
@@ -380,6 +429,7 @@ async function getCustomerDetail(env: Env, userId: string): Promise<CustomerDeta
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
       cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
       cp.parent_user_id AS parentUserId, cp.agreement_accepted_at AS agreementAcceptedAt, cp.offline_alerted_at AS offlineAlertedAt, cp.notes AS notes,
+      cp.contract_type AS contractType,
       COALESCE(cp.contract_term_days, 1095) AS contractTermDays,
       COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
@@ -508,17 +558,36 @@ function calculateContractEnd(startAt: string, termDays: number): string {
   return new Date(new Date(startAt).getTime() + termDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
-async function handleCustomerList(env: Env, requesterWallet: string, role: AdminActorRole): Promise<Response> {
+async function applyServiceContractType(
+  env: Env,
+  allowedTypes: ContractTypeScope,
+  userId: string,
+  requestedType: string | null | undefined,
+): Promise<{ ok: true; contractType: string | null } | { ok: false; response: Response }> {
+  const resolved = await resolveServiceContractType(env, allowedTypes, userId, requestedType);
+  if (!resolved.ok) {
+    return { ok: false, response: resolved.status === 403 ? json({ error: resolved.error }, 403) : badRequest(resolved.error) };
+  }
+  await setCustomerContractTypeIfEmpty(env, userId, resolved.contractType);
+  return resolved;
+}
+
+async function handleCustomerList(env: Env, requesterWallet: string, role: AdminActorRole, allowedTypes: ContractTypeScope): Promise<Response> {
   const mineOnly = role !== "owner";
 
   const [items, admin] = await Promise.all([
-    mineOnly ? readCustomerSummariesByInviterWallet(env, requesterWallet) : readCustomerSummaries(env),
+    mineOnly ? readCustomerSummariesByInviterWallet(env, requesterWallet, allowedTypes) : readCustomerSummaries(env),
     readAdminSummary(env, requesterWallet),
   ]);
   return json({ items, admin });
 }
 
-async function readAdminDevices(env: Env, url: URL, scopeUserId: string | null): Promise<{ items: AdminDeviceItem[]; total: number }> {
+async function readAdminDevices(
+  env: Env,
+  url: URL,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+): Promise<{ items: AdminDeviceItem[]; total: number }> {
   const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
   const status = (url.searchParams.get("status") ?? "all").trim().toLowerCase();
   const limit = clampLimit(url.searchParams.get("limit"), 100, 200);
@@ -552,6 +621,7 @@ async function readAdminDevices(env: Env, url: URL, scopeUserId: string | null):
   if (scopeUserId) {
     clauses.push("EXISTS (SELECT 1 FROM referral_closure rc WHERE rc.ancestor_user_id = ? AND rc.descendant_user_id = d.user_id AND rc.depth >= 1)");
     params.push(scopeUserId);
+    addContractScopeClause(clauses, params, allowedTypes);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -573,6 +643,7 @@ async function readAdminDevices(env: Env, url: URL, scopeUserId: string | null):
       COALESCE(cp.online_status, 'offline') AS onlineStatus,
       COALESCE(cp.contract_active, 0) AS contractActive,
       cp.contract_end_at AS contractEndAt,
+      cp.contract_type AS contractType,
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper
@@ -643,6 +714,7 @@ async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<A
       COALESCE(cp.online_status, 'offline') AS onlineStatus,
       COALESCE(cp.contract_active, 0) AS contractActive,
       cp.contract_end_at AS contractEndAt,
+      cp.contract_type AS contractType,
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
       COALESCE(cp.total_reward_super, '0') AS totalRewardSuper
@@ -716,8 +788,13 @@ async function getAdminDeviceDetail(env: Env, deviceRecordId: string): Promise<A
   };
 }
 
-async function handleAdminDeviceList(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
-  const data = await readAdminDevices(env, new URL(request.url), scopeUserId);
+async function handleAdminDeviceList(
+  request: Request,
+  env: Env,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
+  const data = await readAdminDevices(env, new URL(request.url), scopeUserId, allowedTypes);
   return json(data);
 }
 
@@ -727,12 +804,18 @@ async function handleAdminDeviceDetail(env: Env, deviceRecordId: string): Promis
   return json(detail);
 }
 
-async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordId: string): Promise<Response> {
+async function handleAdminDeviceUpdate(
+  request: Request,
+  env: Env,
+  deviceRecordId: string,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     hashrate?: number;
     deviceStatus?: string;
     nickname?: string;
     notes?: string;
+    contractType?: string;
     rewardRateUsdtPerHour?: string | number;
     monthlyCardDays?: number;
     contractActive?: boolean;
@@ -761,6 +844,22 @@ async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordI
 
   await ensureProfile(env, current.user_id);
 
+  const touchesService =
+    allowedTypes !== null &&
+    (
+      body.contractType !== undefined ||
+      body.rewardRateUsdtPerHour !== undefined ||
+      body.monthlyCardDays !== undefined ||
+      body.contractActive !== undefined ||
+      body.contractEndAt !== undefined
+    );
+  if (touchesService) {
+    const service = await applyServiceContractType(env, allowedTypes, current.user_id, body.contractType ?? null);
+    if (!service.ok) return service.response;
+  } else if (!(await canAccessCustomerContractType(env, allowedTypes, current.user_id))) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
   if (typeof body.nickname === "string") {
     await updateProfileField(env, current.user_id, "nickname", body.nickname.trim() || null);
   }
@@ -788,9 +887,15 @@ async function handleAdminDeviceUpdate(request: Request, env: Env, deviceRecordI
   return handleAdminDeviceDetail(env, deviceRecordId);
 }
 
-async function handleAdminDeviceBulkUpdate(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
+async function handleAdminDeviceBulkUpdate(
+  request: Request,
+  env: Env,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     deviceIds?: string[];
+    contractType?: string;
     rewardRateUsdtPerHour?: string | number;
     extendDays?: number;
     mode?: "monthly" | "custom";
@@ -839,6 +944,13 @@ async function handleAdminDeviceBulkUpdate(request: Request, env: Env, scopeUser
 
     await ensureProfile(env, current.user_id);
 
+    if (scopeUserId && (hasRate || hasExtend)) {
+      const requestedType = normalizeContractType(body.contractType ?? null)
+        ?? (hasExtend ? contractTypeFromTerm(body.mode === "monthly" ? current.monthly_card_days : body.extendDays ?? null) : null);
+      const service = await applyServiceContractType(env, allowedTypes, current.user_id, requestedType);
+      if (!service.ok) continue;
+    }
+
     if (hasStatus) {
       await env.DB.prepare("UPDATE devices SET status = ?, updated_at = ? WHERE id = ?")
         .bind(String(body.deviceStatus).trim(), now, deviceRecordId)
@@ -878,11 +990,38 @@ async function handleCustomerDetail(env: Env, userId: string): Promise<Response>
   return json(detail);
 }
 
-async function handleCustomerUpdate(request: Request, env: Env, userId: string): Promise<Response> {
+async function handleCustomerUpdate(
+  request: Request,
+  env: Env,
+  userId: string,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return badRequest("Invalid JSON body");
 
   await ensureProfile(env, userId);
+
+  const touchesService =
+    allowedTypes !== null &&
+    (
+      body.contractType !== undefined ||
+      body.rewardRateUsdtPerHour !== undefined ||
+      body.monthlyCardDays !== undefined ||
+      body.contractTermDays !== undefined ||
+      body.contractActive !== undefined
+    );
+  if (touchesService) {
+    const requestedType = normalizeContractType(body.contractType)
+      ?? (typeof body.contractTermDays === "number" ? contractTypeFromTerm(body.contractTermDays) : null);
+    const service = await applyServiceContractType(env, allowedTypes, userId, requestedType);
+    if (!service.ok) return service.response;
+  } else if (!(await canAccessCustomerContractType(env, allowedTypes, userId))) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  if (allowedTypes === null && typeof body.contractType === "string") {
+    await updateProfileField(env, userId, "contract_type", normalizeContractType(body.contractType));
+  }
 
   if (typeof body.nickname === "string") {
     await updateProfileField(env, userId, "nickname", body.nickname.trim() || null);
@@ -993,8 +1132,14 @@ async function handleCustomerUpdate(request: Request, env: Env, userId: string):
   return handleCustomerDetail(env, userId);
 }
 
-async function handleCustomerActivate(request: Request, env: Env, userId: string): Promise<Response> {
+async function handleCustomerActivate(
+  request: Request,
+  env: Env,
+  userId: string,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
+    contractType?: string;
     contractTermYears?: number;
     contractTermDays?: number;
     contractStartAt?: string;
@@ -1011,6 +1156,11 @@ async function handleCustomerActivate(request: Request, env: Env, userId: string
     : Number.isFinite(body.contractTermYears ?? NaN)
       ? Math.max(1, Math.floor((body.contractTermYears as number) * 365))
       : 1095;
+  const requestedType = normalizeContractType(body.contractType)
+    ?? contractTypeFromTerm(termDays)
+    ?? contractTypeFromYears(body.contractTermYears);
+  const service = await applyServiceContractType(env, allowedTypes, userId, requestedType);
+  if (!service.ok) return service.response;
 
   await updateProfileField(env, userId, "contract_start_at", now);
   await updateProfileField(env, userId, "contract_end_at", calculateContractEnd(now, termDays));
@@ -1024,7 +1174,12 @@ async function handleCustomerActivate(request: Request, env: Env, userId: string
   return handleCustomerDetail(env, userId);
 }
 
-async function handleRewardAdjustment(request: Request, env: Env, userId: string): Promise<Response> {
+async function handleRewardAdjustment(
+  request: Request,
+  env: Env,
+  userId: string,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     rewardUsdt?: string | number;
     rewardSuper?: string | number;
@@ -1037,6 +1192,8 @@ async function handleRewardAdjustment(request: Request, env: Env, userId: string
   } | null;
 
   if (!body) return badRequest("Invalid JSON body");
+  const service = await applyServiceContractType(env, allowedTypes, userId, null);
+  if (!service.ok) return service.response;
 
   const rewardUsdt = Number(body.rewardUsdt ?? 0);
   const rewardSuper = Number(body.rewardSuper ?? 0);
@@ -1329,9 +1486,15 @@ async function handleExchangeRecords(env: Env, url: URL): Promise<Response> {
   return json({ items, limit });
 }
 
-async function handleBulkRate(request: Request, env: Env, scopeUserId: string | null): Promise<Response> {
+async function handleBulkRate(
+  request: Request,
+  env: Env,
+  scopeUserId: string | null,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     userIds?: string[];
+    contractType?: string;
     rewardRateUsdtPerHour?: string | number;
   } | null;
   if (!body?.userIds?.length) return badRequest("userIds required");
@@ -1349,14 +1512,24 @@ async function handleBulkRate(request: Request, env: Env, scopeUserId: string | 
       continue;
     }
     await ensureProfile(env, userId);
+    if (scopeUserId) {
+      const service = await applyServiceContractType(env, allowedTypes, userId, body.contractType ?? null);
+      if (!service.ok) continue;
+    }
     await updateProfileField(env, userId, "reward_rate_usdt_per_hour", rate);
     updated += 1;
   }
   return json({ ok: true, updated, rate });
 }
 
-async function handleContractExtend(request: Request, env: Env, userId: string): Promise<Response> {
+async function handleContractExtend(
+  request: Request,
+  env: Env,
+  userId: string,
+  allowedTypes: ContractTypeScope,
+): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
+    contractType?: string;
     extendDays?: number;
     mode?: "monthly" | "custom";
   } | null;
@@ -1373,6 +1546,10 @@ async function handleContractExtend(request: Request, env: Env, userId: string):
   const days = body?.mode === "monthly"
     ? monthlyDays
     : Math.max(1, Math.floor(Number(body?.extendDays ?? 30)));
+  const requestedType = normalizeContractType(body?.contractType)
+    ?? contractTypeFromTerm(body?.mode === "monthly" ? monthlyDays : days);
+  const service = await applyServiceContractType(env, allowedTypes, userId, requestedType);
+  if (!service.ok) return service.response;
 
   const currentEnd = existing?.contract_end_at ? new Date(existing.contract_end_at) : null;
   const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
@@ -1401,7 +1578,7 @@ type AdminAlertItem = {
   activeDeviceCount: number;
 };
 
-async function handleAdminAlerts(env: Env, scopeUserId: string | null): Promise<Response> {
+async function handleAdminAlerts(env: Env, scopeUserId: string | null, allowedTypes: ContractTypeScope): Promise<Response> {
   // Return customers whose heartbeat stopped while their contract is still active.
   // Uses a broad SQL pre-filter (older than online threshold) and then classifies
   // offline vs stale via the shared derivation to keep a single source of truth.
@@ -1415,6 +1592,7 @@ async function handleAdminAlerts(env: Env, scopeUserId: string | null): Promise<
   if (scopeUserId) {
     clauses.push("EXISTS (SELECT 1 FROM referral_closure rc WHERE rc.ancestor_user_id = ? AND rc.descendant_user_id = u.id AND rc.depth >= 1)");
     params.push(scopeUserId);
+    addContractScopeClause(clauses, params, allowedTypes);
   }
 
   const where = `WHERE ${clauses.join(" AND ")}`;
@@ -1491,6 +1669,7 @@ async function handleAdminAlerts(env: Env, scopeUserId: string | null): Promise<
 }
 
 export async function handleAdmin(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  await ensureContractAccessColumns(env);
   const ownerCheck = request.method === "GET"
     ? await requireOwnerRead(request, env)
     : await requireOwner(request, env);
@@ -1500,13 +1679,14 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
   if (!requesterRole) return json({ error: "Not admin wallet" }, 403);
   const isPrimaryOwner = requesterRole === "owner";
   const scopeUserId = isPrimaryOwner ? null : await ensureUserIdByWallet(env, requesterWallet);
+  const allowedTypes = isPrimaryOwner ? null : await getSubAdminContractScope(env, requesterWallet);
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
-    return handleCustomerList(env, requesterWallet, requesterRole);
+    return handleCustomerList(env, requesterWallet, requesterRole, allowedTypes);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "alerts") {
-    return handleAdminAlerts(env, scopeUserId);
+    return handleAdminAlerts(env, scopeUserId, allowedTypes);
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "machine-code-conflicts") {
@@ -1522,28 +1702,28 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
-    return handleAdminDeviceList(request, env, scopeUserId);
+    return handleAdminDeviceList(request, env, scopeUserId, allowedTypes);
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "devices" && pathParts[1] === "bulk-update") {
-    return handleAdminDeviceBulkUpdate(request, env, scopeUserId);
+    return handleAdminDeviceBulkUpdate(request, env, scopeUserId, allowedTypes);
   }
 
   if (pathParts.length === 2 && pathParts[0] === "devices") {
     const deviceRecordId = pathParts[1];
-    if (!(await canManageDeviceByScope(env, scopeUserId, deviceRecordId))) {
+    if (!(await canAccessDeviceByScope(env, scopeUserId, allowedTypes, deviceRecordId))) {
       return json({ error: "Forbidden" }, 403);
     }
     if (request.method === "GET") {
       return handleAdminDeviceDetail(env, deviceRecordId);
     }
     if (request.method === "PATCH") {
-      return handleAdminDeviceUpdate(request, env, deviceRecordId);
+      return handleAdminDeviceUpdate(request, env, deviceRecordId, allowedTypes);
     }
   }
 
   if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {
-    return handleBulkRate(request, env, scopeUserId);
+    return handleBulkRate(request, env, scopeUserId, allowedTypes);
   }
 
   if (!isPrimaryOwner && pathParts[0] === "records") {
@@ -1568,7 +1748,7 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
 
   if (pathParts.length >= 2 && pathParts[0] === "customers") {
     const userId = pathParts[1];
-    if (!(await canManageUserByScope(env, scopeUserId, userId))) {
+    if (!(await canAccessUserByScope(env, scopeUserId, allowedTypes, userId))) {
       return json({ error: "Forbidden" }, 403);
     }
 
@@ -1577,19 +1757,19 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
     }
 
     if (request.method === "PUT" && pathParts.length === 2) {
-      return handleCustomerUpdate(request, env, userId);
+      return handleCustomerUpdate(request, env, userId, allowedTypes);
     }
 
     if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "activate") {
-      return handleCustomerActivate(request, env, userId);
+      return handleCustomerActivate(request, env, userId, allowedTypes);
     }
 
     if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "extend") {
-      return handleContractExtend(request, env, userId);
+      return handleContractExtend(request, env, userId, allowedTypes);
     }
 
     if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "rewards") {
-      return handleRewardAdjustment(request, env, userId);
+      return handleRewardAdjustment(request, env, userId, allowedTypes);
     }
   }
 

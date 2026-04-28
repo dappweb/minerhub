@@ -23,6 +23,7 @@ async function ensureHeartbeatColumns(env: Env): Promise<void> {
   if (!columns.has("last_heartbeat_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_heartbeat_at TEXT");
   if (!columns.has("last_reward_accrued_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_reward_accrued_at TEXT");
   if (!columns.has("total_online_seconds")) statements.push("ALTER TABLE customer_profiles ADD COLUMN total_online_seconds INTEGER NOT NULL DEFAULT 0");
+  if (!columns.has("contract_agreement_accepted_version")) statements.push("ALTER TABLE customer_profiles ADD COLUMN contract_agreement_accepted_version TEXT");
   for (const statement of statements) {
     await env.DB.prepare(statement).run();
   }

@@ -1,5 +1,18 @@
-import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  LayoutChangeEvent,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 export type ContractModalLang = 'en' | 'zh';
 
@@ -14,37 +27,76 @@ type ContractModalProps = {
 
 const COPY = {
   en: {
-    scrollToBottom: 'Please scroll to the bottom to agree',
-    acceptBtn: 'I Accept',
+    eyebrow: 'Contract Review',
+    progress: 'Read progress',
+    scrollToBottom: 'Read the full contract to enable agreement',
+    scrollToEnd: 'Scroll to End',
+    acceptBtn: 'Agree and Continue',
     rejectBtn: 'Decline',
     submittingBtn: 'Submitting...',
+    acceptedHint: 'Full content reviewed. You can agree now.',
+    clauseHint: 'This agreement controls activation, rewards, device uptime, and settlement rules.',
   },
   zh: {
-    scrollToBottom: '请滑动到最底部后同意',
-    acceptBtn: '同意',
-    rejectBtn: '拒绝',
+    eyebrow: '合同确认',
+    progress: '阅读进度',
+    scrollToBottom: '请完整阅读合同后再同意',
+    scrollToEnd: '滑到底部',
+    acceptBtn: '同意并继续',
+    rejectBtn: '暂不同意',
     submittingBtn: '提交中...',
+    acceptedHint: '已阅读完整内容，可以继续确认。',
+    clauseHint: '该协议用于确认开通周期、收益累计、设备在线和结算规则。',
   },
 } as const;
 
 export default function ContractModal({ visible, lang, title, content, onAccept, onReject }: ContractModalProps) {
+  const { height } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
   const [scrollPos, setScrollPos] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const t = COPY[lang];
 
-  // Check if user has scrolled to bottom (within 10px threshold)
-  const isAtBottom = scrollPos >= contentHeight - 10;
+  const normalizedContent = useMemo(
+    () => (content || '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim(),
+    [content],
+  );
 
-  const handleScroll = (event: any) => {
-    setScrollPos(event.nativeEvent.contentOffset.y);
+  const availableSheetHeight = Math.max(360, height - 34);
+  const sheetHeight = Math.min(availableSheetHeight, Math.max(500, Math.floor(height * 0.84)));
+  const hasMeasuredScroll = contentHeight > 0 && viewportHeight > 0;
+  const scrollableDistance = hasMeasuredScroll ? Math.max(0, contentHeight - viewportHeight) : 0;
+  const progress = !hasMeasuredScroll
+    ? 0
+    : scrollableDistance <= 0
+      ? 1
+      : Math.min(1, scrollPos / scrollableDistance);
+  const progressPercent = Math.round(progress * 100);
+  const isAtBottom = hasMeasuredScroll && (scrollableDistance <= 0 || scrollPos >= scrollableDistance - 12);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    setScrollPos(Math.max(0, contentOffset.y));
+    setContentHeight(contentSize.height);
+    setViewportHeight(layoutMeasurement.height);
   };
 
-  const handleContentLayout = (event: any) => {
+  const handleContentLayout = (event: LayoutChangeEvent) => {
     setContentHeight(event.nativeEvent.layout.height);
   };
 
+  const handleViewportLayout = (event: LayoutChangeEvent) => {
+    setViewportHeight(event.nativeEvent.layout.height);
+  };
+
+  const scrollToEnd = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
+
   const handleAccept = async () => {
+    if (!isAtBottom || submitting) return;
     setSubmitting(true);
     try {
       await onAccept();
@@ -56,39 +108,58 @@ export default function ContractModal({ visible, lang, title, content, onAccept,
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-    >
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
       <View style={styles.backdrop}>
-        <View style={styles.container}>
+        <View style={[styles.container, { height: sheetHeight }]}>
+          <View style={styles.grabber} />
           <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <Text style={styles.eyebrow}>{t.eyebrow}</Text>
+              <Text style={styles.progressText}>
+                {t.progress} {progressPercent}%
+              </Text>
+            </View>
             <Text style={styles.title}>{title}</Text>
+            <Text style={styles.hint}>{t.clauseHint}</Text>
           </View>
 
           <ScrollView
+            ref={scrollRef}
             style={styles.contentScroll}
+            contentContainerStyle={styles.contentContainer}
             onScroll={handleScroll}
+            onLayout={handleViewportLayout}
             scrollEventThrottle={16}
+            showsVerticalScrollIndicator
           >
             <View onLayout={handleContentLayout}>
-              <Text style={styles.content}>{content}</Text>
+              <Text selectable style={styles.content}>
+                {normalizedContent || '...'}
+              </Text>
             </View>
           </ScrollView>
 
-          {!isAtBottom && (
-            <View style={styles.scrollPrompt}>
-              <Text style={styles.scrollPromptText}>{t.scrollToBottom}</Text>
-            </View>
-          )}
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
+
+          <View style={[styles.readState, isAtBottom ? styles.readStateDone : styles.readStatePending]}>
+            <Text style={[styles.readStateText, isAtBottom ? styles.readStateTextDone : styles.readStateTextPending]}>
+              {isAtBottom ? t.acceptedHint : t.scrollToBottom}
+            </Text>
+            {!isAtBottom && (
+              <Pressable style={styles.scrollEndBtn} onPress={scrollToEnd}>
+                <Text style={styles.scrollEndBtnText}>{t.scrollToEnd}</Text>
+              </Pressable>
+            )}
+          </View>
 
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.btn, styles.rejectBtn]}
               onPress={onReject}
               disabled={submitting}
+              activeOpacity={0.82}
             >
               <Text style={styles.rejectText}>{t.rejectBtn}</Text>
             </TouchableOpacity>
@@ -97,10 +168,16 @@ export default function ContractModal({ visible, lang, title, content, onAccept,
               style={[styles.btn, styles.acceptBtn, !isAtBottom && styles.acceptBtnDisabled]}
               onPress={handleAccept}
               disabled={!isAtBottom || submitting}
+              activeOpacity={0.82}
             >
-              <Text style={[styles.acceptText, !isAtBottom && styles.acceptTextDisabled]}>
-                {submitting ? t.submittingBtn : t.acceptBtn}
-              </Text>
+              {submitting ? (
+                <View style={styles.submittingRow}>
+                  <ActivityIndicator size="small" color="#083344" />
+                  <Text style={styles.acceptText}>{t.submittingBtn}</Text>
+                </View>
+              ) : (
+                <Text style={[styles.acceptText, !isAtBottom && styles.acceptTextDisabled]}>{t.acceptBtn}</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -112,54 +189,132 @@ export default function ContractModal({ visible, lang, title, content, onAccept,
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.9)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(2, 6, 23, 0.82)',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
   container: {
     width: '100%',
-    maxHeight: '90%',
-    backgroundColor: '#0f172a',
-    borderRadius: 18,
+    backgroundColor: '#061833',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
     borderWidth: 1,
-    borderColor: '#225b98',
+    borderColor: '#2f89d8',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
   },
+  grabber: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#3f77bc',
+    marginTop: 10,
+    marginBottom: 2,
+  },
   header: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 14,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#1e3a5f',
+    gap: 7,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  eyebrow: {
+    color: '#67e8f9',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  progressText: {
+    color: '#93c5fd',
+    fontSize: 12,
+    fontWeight: '700',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 21,
+    fontWeight: '800',
     color: '#e2f3ff',
+    lineHeight: 27,
+  },
+  hint: {
+    color: '#9cc6ff',
+    fontSize: 13,
+    lineHeight: 19,
   },
   contentScroll: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: '#071f46',
+  },
+  contentContainer: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   content: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#c9e1ff',
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#d8ecff',
   },
-  scrollPrompt: {
-    paddingVertical: 10,
+  progressTrack: {
+    height: 3,
+    backgroundColor: '#0f2d5c',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#22d3ee',
+  },
+  readState: {
+    minHeight: 48,
+    paddingVertical: 9,
     paddingHorizontal: 16,
-    backgroundColor: 'rgba(241, 186, 32, 0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f1ba20',
   },
-  scrollPromptText: {
+  readStatePending: {
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    borderTopColor: 'rgba(251, 191, 36, 0.42)',
+  },
+  readStateDone: {
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
+    borderTopColor: 'rgba(45, 212, 191, 0.35)',
+  },
+  readStateText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  readStateTextPending: {
+    color: '#fbbf24',
+  },
+  readStateTextDone: {
+    color: '#99f6e4',
+  },
+  scrollEndBtn: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  scrollEndBtnText: {
     fontSize: 12,
     color: '#fbbf24',
-    textAlign: 'center',
+    fontWeight: '800',
   },
   actions: {
     flexDirection: 'row',
@@ -171,9 +326,10 @@ const styles = StyleSheet.create({
   },
   btn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   rejectBtn: {
     backgroundColor: '#1e293b',
@@ -183,20 +339,26 @@ const styles = StyleSheet.create({
   rejectText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#94a3b8',
   },
   acceptBtn: {
     backgroundColor: '#22d3ee',
   },
   acceptBtnDisabled: {
-    backgroundColor: 'rgba(34, 211, 238, 0.3)',
+    backgroundColor: 'rgba(34, 211, 238, 0.24)',
   },
   acceptText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#083344',
   },
   acceptTextDisabled: {
-    color: 'rgba(8, 51, 68, 0.5)',
+    color: 'rgba(216, 244, 255, 0.46)',
+  },
+  submittingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
 });

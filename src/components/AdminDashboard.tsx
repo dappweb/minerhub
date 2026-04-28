@@ -36,6 +36,32 @@ type AdminDashboardProps = {
 
 type AdminSessionRole = 'owner' | 'subadmin';
 
+type OwnerSubAdminItem = {
+  wallet: string;
+  source: 'database' | 'environment';
+  note: string | null;
+  allowedContractTypes: string[] | null;
+  contractTypesLocked: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  canRemove: boolean;
+};
+
+const CONTRACT_TYPE_OPTIONS = [
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'one_year', label: '1 year' },
+  { id: 'two_year', label: '2 years' },
+  { id: 'three_year', label: '3 years' },
+] as const;
+
+function formatContractTypes(types: string[] | null | undefined): string {
+  if (types === null) return 'Unrestricted';
+  if (!types?.length) return 'Not set';
+  return types
+    .map((type) => CONTRACT_TYPE_OPTIONS.find((option) => option.id === type)?.label ?? type)
+    .join(' / ');
+}
+
 const HASHRATE_UNIT = 1000;
 
 function formatHashrate(hashrate: bigint): string {
@@ -551,6 +577,12 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [contractContentEn, setContractContentEn] = useState<string>('');
   const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
   const [systemSettingsDirty, setSystemSettingsDirty] = useState<boolean>(false);
+  const [ownerSubAdmins, setOwnerSubAdmins] = useState<OwnerSubAdminItem[]>([]);
+  const [newSubAdminWallet, setNewSubAdminWallet] = useState<string>('');
+  const [newSubAdminNote, setNewSubAdminNote] = useState<string>('');
+  const [newSubAdminContractTypes, setNewSubAdminContractTypes] = useState<string[]>(['three_year']);
+  const [subAdminAccessLoading, setSubAdminAccessLoading] = useState<boolean>(false);
+  const [subAdminAccessMessage, setSubAdminAccessMessage] = useState<string>('');
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(() => createEmptyAnnouncementForm());
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string>('');
@@ -1471,6 +1503,95 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const loadSubAdminAccess = useCallback(async () => {
+    if (ownerSessionRole !== 'owner') {
+      setOwnerSubAdmins([]);
+      return;
+    }
+
+    try {
+      setSubAdminAccessLoading(true);
+      setSubAdminAccessMessage('');
+      const response = await ownerReadRequest<{ items: OwnerSubAdminItem[] }>('/api/owner/subadmins');
+      setOwnerSubAdmins(response.items ?? []);
+    } catch (loadError) {
+      setSubAdminAccessMessage(loadError instanceof Error ? loadError.message : 'Failed to load SubAdmin list');
+    } finally {
+      setSubAdminAccessLoading(false);
+    }
+  }, [ownerReadRequest, ownerSessionRole]);
+
+  const handleAddSubAdmin = useCallback(async () => {
+    if (ownerSessionRole !== 'owner') {
+      setSubAdminAccessMessage('Only the Owner wallet can manage SubAdmins.');
+      return;
+    }
+
+    const wallet = newSubAdminWallet.trim();
+    if (!isAddress(wallet)) {
+      setSubAdminAccessMessage('Enter a valid SubAdmin wallet address.');
+      return;
+    }
+
+    if (newSubAdminContractTypes.length === 0) {
+      setSubAdminAccessMessage('请选择 SubAdmin 可使用的合同类型。');
+      return;
+    }
+
+    try {
+      setSubAdminAccessLoading(true);
+      setSubAdminAccessMessage('');
+      await signedRequest<{ ok: boolean; wallet: string }>('/api/owner/subadmins', 'POST', {
+        wallet,
+        note: newSubAdminNote.trim() || undefined,
+        allowedContractTypes: newSubAdminContractTypes,
+      });
+      setNewSubAdminWallet('');
+      setNewSubAdminNote('');
+      setNewSubAdminContractTypes(['three_year']);
+      setSubAdminAccessMessage('SubAdmin added.');
+      await loadSubAdminAccess();
+    } catch (error) {
+      setSubAdminAccessMessage(error instanceof Error ? error.message : 'Failed to add SubAdmin');
+    } finally {
+      setSubAdminAccessLoading(false);
+    }
+  }, [loadSubAdminAccess, newSubAdminContractTypes, newSubAdminNote, newSubAdminWallet, ownerSessionRole, signedRequest]);
+
+  const handleRemoveSubAdmin = useCallback(async (item: OwnerSubAdminItem) => {
+    if (ownerSessionRole !== 'owner') {
+      setSubAdminAccessMessage('Only the Owner wallet can manage SubAdmins.');
+      return;
+    }
+    if (!item.canRemove) {
+      setSubAdminAccessMessage('This SubAdmin comes from environment config and cannot be removed here.');
+      return;
+    }
+    if (!window.confirm(`Remove SubAdmin ${item.wallet}?`)) return;
+
+    try {
+      setSubAdminAccessLoading(true);
+      setSubAdminAccessMessage('');
+      await signedRequest<{ ok: boolean; removed: boolean }>(
+        `/api/owner/subadmins/${encodeURIComponent(item.wallet)}`,
+        'DELETE'
+      );
+      setSubAdminAccessMessage('SubAdmin removed.');
+      await loadSubAdminAccess();
+    } catch (error) {
+      setSubAdminAccessMessage(error instanceof Error ? error.message : 'Failed to remove SubAdmin');
+    } finally {
+      setSubAdminAccessLoading(false);
+    }
+  }, [loadSubAdminAccess, ownerSessionRole, signedRequest]);
+
+  useEffect(() => {
+    if (section !== 'system') return;
+    if (ownerSessionRole !== 'owner') return;
+    if (!hasValidOwnerSession()) return;
+    void loadSubAdminAccess();
+  }, [hasValidOwnerSession, loadSubAdminAccess, ownerSessionRole, section]);
+
   const buildSystemNumericFields = (): Record<string, number> => {
     const fields: Record<string, number> = {};
     const monthly = Number(monthlyCardDays);
@@ -2330,7 +2451,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </>
               ) : (
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
-                  当前以 SubAdmin 身份登录，仅展示你邀请范围内的客户与设备；交易记录、系统设置和资产操作仅 Owner 可见。
+                  当前以 SubAdmin 身份登录，仅展示你邀请范围内且合同类型允许的客户与设备；交易记录、系统设置和资产操作仅 Owner 可见。
                 </div>
               )}
 
@@ -2581,6 +2702,118 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <button onClick={handleSaveSystemParameters} disabled={adminActionLoading === 'systemSettings' || !systemStatus} className="mt-3 w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700">
                   保存系统参数
                 </button>
+              </div>
+
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-200">SubAdmin 管理</div>
+                    <p className="mt-1 text-xs text-amber-100/80">
+                      添加 SubAdmin 时必须指定可使用的合同类型；保存后合同类型不可修改。SubAdmin 只能管理自己推荐范围内且合同类型匹配的客户。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadSubAdminAccess()}
+                    disabled={subAdminAccessLoading}
+                    className="shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                  >
+                    {subAdminAccessLoading ? '刷新中...' : '刷新'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    value={newSubAdminWallet}
+                    onChange={(event) => setNewSubAdminWallet(event.target.value)}
+                    placeholder="SubAdmin 钱包地址 0x..."
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-amber-400"
+                  />
+                  <input
+                    value={newSubAdminNote}
+                    onChange={(event) => setNewSubAdminNote(event.target.value)}
+                    placeholder="备注（可选）"
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div className="mt-3 rounded-xl border border-amber-500/20 bg-slate-950/40 p-3">
+                  <div className="mb-2 text-xs font-medium text-amber-100">允许使用的合同类型</div>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    {CONTRACT_TYPE_OPTIONS.map((option) => (
+                      <label key={option.id} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={newSubAdminContractTypes.includes(option.id)}
+                          onChange={(event) => {
+                            setNewSubAdminContractTypes((current) => {
+                              if (event.target.checked) return Array.from(new Set([...current, option.id]));
+                              return current.filter((item) => item !== option.id);
+                            });
+                          }}
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleAddSubAdmin()}
+                  disabled={subAdminAccessLoading || !newSubAdminWallet.trim() || newSubAdminContractTypes.length === 0}
+                  className="mt-2 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+                >
+                  {subAdminAccessLoading ? '处理中...' : '添加 SubAdmin'}
+                </button>
+
+                {subAdminAccessMessage && (
+                  <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs text-cyan-200 break-all">
+                    {subAdminAccessMessage}
+                  </div>
+                )}
+
+                <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-slate-800 bg-slate-950/60">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-900 text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">钱包</th>
+                        <th className="px-3 py-2 font-medium">来源</th>
+                        <th className="px-3 py-2 font-medium">合同类型</th>
+                        <th className="px-3 py-2 font-medium">备注</th>
+                        <th className="px-3 py-2 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/70">
+                      {ownerSubAdmins.map((item) => (
+                        <tr key={`${item.source}-${item.wallet}`} className="align-top">
+                          <td className="px-3 py-2 font-mono text-slate-200 break-all">{item.wallet}</td>
+                          <td className="px-3 py-2 text-slate-400">
+                            {item.source === 'database' ? '面板添加' : '环境变量'}
+                          </td>
+                          <td className="px-3 py-2 text-slate-400">{formatContractTypes(item.allowedContractTypes)}</td>
+                          <td className="px-3 py-2 text-slate-400">{item.note || '--'}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveSubAdmin(item)}
+                              disabled={subAdminAccessLoading || !item.canRemove}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              <Trash2 size={12} />
+                              删除
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {ownerSubAdmins.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                            暂无 SubAdmin
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 xl:col-span-2">

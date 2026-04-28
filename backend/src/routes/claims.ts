@@ -1,6 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
+import { reconcileUserRewardTotals } from "../lib/rewards";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { isExchangeAutoEnabled, isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
@@ -109,16 +110,17 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
         .bind(withdrawalId, body.userId, body.wallet.toLowerCase(), amount, txHash, body.note?.trim() || null, now, now)
         .run();
 
-      await env.DB.prepare(
-        `UPDATE customer_profiles
-         SET total_reward_super = CAST(ROUND(CAST(total_reward_super AS REAL) - ?, 6) AS TEXT),
-             updated_at = ?
-         WHERE user_id = ?`
-      )
-        .bind(amount, now, body.userId)
-        .run();
+      const totals = await reconcileUserRewardTotals(env, body.userId, now);
 
-      return json({ ok: true, id: withdrawalId, amountSuper: amount.toString(), txHash, status: "confirmed", createdAt: now }, 201);
+      return json({
+        ok: true,
+        id: withdrawalId,
+        amountSuper: amount.toString(),
+        txHash,
+        status: "confirmed",
+        createdAt: now,
+        totalRewardSuper: totals.totalRewardSuper,
+      }, 201);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "withdraw failed";
       await restoreRewardSuper(env, body.userId, amount, nowIso());
@@ -129,6 +131,7 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
       )
         .bind(withdrawalId, body.userId, body.wallet.toLowerCase(), amount, msg, now, now)
         .run();
+      await reconcileUserRewardTotals(env, body.userId, nowIso());
 
       return json({ error: msg }, 500);
     }
@@ -293,20 +296,22 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
           now,
         )
         .run();
+      const totals = await reconcileUserRewardTotals(env, body.userId, now);
+      return json({
+        id: exchangeId,
+        mode,
+        status,
+        autoEnabled,
+        amountSuper: amountSuper.toString(),
+        amountUsdt: Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+        totalRewardSuper: totals.totalRewardSuper,
+        createdAt: now,
+      }, 201);
     } catch (err) {
       await restoreRewardSuper(env, body.userId, amountSuper, nowIso());
+      await reconcileUserRewardTotals(env, body.userId, nowIso());
       throw err;
     }
-
-    return json({
-      id: exchangeId,
-      mode,
-      status,
-      autoEnabled,
-      amountSuper: amountSuper.toString(),
-      amountUsdt: Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
-      createdAt: now,
-    }, 201);
   }
 
   if (request.method === "POST" && pathParts.length === 0) {

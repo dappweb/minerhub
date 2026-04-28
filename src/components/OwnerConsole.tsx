@@ -57,10 +57,27 @@ type SubAdminRow = {
   wallet: string;
   source: 'database' | 'environment';
   note: string | null;
+  allowedContractTypes: string[] | null;
+  contractTypesLocked: boolean;
   createdAt: string | null;
   updatedAt: string | null;
   canRemove: boolean;
 };
+
+const CONTRACT_TYPE_OPTIONS = [
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'one_year', label: '1 year' },
+  { id: 'two_year', label: '2 years' },
+  { id: 'three_year', label: '3 years' },
+] as const;
+
+function formatContractTypes(types: string[] | null | undefined): string {
+  if (types === null) return 'Unrestricted';
+  if (!types?.length) return 'Not set';
+  return types
+    .map((type) => CONTRACT_TYPE_OPTIONS.find((option) => option.id === type)?.label ?? type)
+    .join(' / ');
+}
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
 
@@ -151,6 +168,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   const [subAdmins, setSubAdmins] = useState<SubAdminRow[]>([]);
   const [subAdminWallet, setSubAdminWallet] = useState('');
   const [subAdminNote, setSubAdminNote] = useState('');
+  const [subAdminContractTypes, setSubAdminContractTypes] = useState<string[]>(['three_year']);
   const [subAdminLoading, setSubAdminLoading] = useState(false);
   const [subAdminMsg, setSubAdminMsg] = useState('');
   const loadOverview = useCallback(async () => {
@@ -253,6 +271,10 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       setSubAdminMsg('请输入有效的钱包地址');
       return;
     }
+    if (subAdminContractTypes.length === 0) {
+      setSubAdminMsg('Select at least one contract type.');
+      return;
+    }
     setSubAdminLoading(true);
     setSubAdminMsg('');
     try {
@@ -260,12 +282,13 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
         '/api/owner/subadmins',
         {
           method: 'POST',
-          body: JSON.stringify({ wallet, note: subAdminNote.trim() || undefined }),
+          body: JSON.stringify({ wallet, note: subAdminNote.trim() || undefined, allowedContractTypes: subAdminContractTypes }),
         },
         true
       );
       setSubAdminWallet('');
       setSubAdminNote('');
+      setSubAdminContractTypes(['three_year']);
       setSubAdminMsg('SubAdmin 添加成功');
       await loadSubAdmins();
     } catch (e) {
@@ -273,7 +296,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
     } finally {
       setSubAdminLoading(false);
     }
-  }, [authedFetch, loadSubAdmins, subAdminNote, subAdminWallet]);
+  }, [authedFetch, loadSubAdmins, subAdminContractTypes, subAdminNote, subAdminWallet]);
 
   const removeSubAdmin = useCallback(async (wallet: string) => {
     setSubAdminLoading(true);

@@ -1,5 +1,12 @@
 import { getAddress, isAddress } from "ethers";
 import { writeOwnerAudit } from "../lib/audit";
+import {
+  contractTypesEqual,
+  ensureContractAccessColumns,
+  normalizeContractTypes,
+  parseAllowedContractTypes,
+  serializeAllowedContractTypes,
+} from "../lib/contractAccess";
 import { createId, nowIso } from "../lib/id";
 import { refreshUserContractStateFromLocks } from "../lib/locks";
 import { getAdminActorRole, getPrimaryOwnerWallet, isAdminActorWallet, issueOwnerJwt, requireOwnerAuth, verifyLoginSignature } from "../lib/ownerAuth";
@@ -31,9 +38,12 @@ async function ensureSubAdminTable(env: Env): Promise<void> {
       updated_by TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      allowed_contract_types_json TEXT NOT NULL DEFAULT '[]',
+      contract_types_locked_at TEXT,
       enabled INTEGER NOT NULL DEFAULT 1
     )`
   ).run();
+  await ensureContractAccessColumns(env);
 }
 
 function normalizeAddr(addr: string): string | null {
@@ -779,6 +789,8 @@ type SubAdminItem = {
   wallet: string;
   source: "database" | "environment";
   note: string | null;
+  allowedContractTypes: string[] | null;
+  contractTypesLocked: boolean;
   createdAt: string | null;
   updatedAt: string | null;
   canRemove: boolean;
@@ -787,11 +799,18 @@ type SubAdminItem = {
 async function handleSubAdminList(env: Env): Promise<Response> {
   await ensureSubAdminTable(env);
   const dbRows = await env.DB.prepare(
-    `SELECT wallet, note, created_at, updated_at
+    `SELECT wallet, note, allowed_contract_types_json, contract_types_locked_at, created_at, updated_at
      FROM owner_sub_admins
      WHERE enabled = 1
      ORDER BY updated_at DESC`
-  ).all<{ wallet: string; note: string | null; created_at: string; updated_at: string }>();
+  ).all<{
+    wallet: string;
+    note: string | null;
+    allowed_contract_types_json: string | null;
+    contract_types_locked_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>();
 
   const items = new Map<string, SubAdminItem>();
   for (const row of dbRows.results ?? []) {
@@ -800,6 +819,8 @@ async function handleSubAdminList(env: Env): Promise<Response> {
       wallet,
       source: "database",
       note: row.note,
+      allowedContractTypes: parseAllowedContractTypes(row.allowed_contract_types_json),
+      contractTypesLocked: Boolean(row.contract_types_locked_at),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       canRemove: true,
@@ -819,6 +840,8 @@ async function handleSubAdminList(env: Env): Promise<Response> {
         wallet,
         source: "environment",
         note: "from env",
+        allowedContractTypes: null,
+        contractTypesLocked: false,
         createdAt: null,
         updatedAt: null,
         canRemove: false,
@@ -831,11 +854,15 @@ async function handleSubAdminList(env: Env): Promise<Response> {
 
 async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string): Promise<Response> {
   await ensureSubAdminTable(env);
-  const body = await parseJson<{ wallet?: string; note?: string }>(request);
+  const body = await parseJson<{ wallet?: string; note?: string; allowedContractTypes?: unknown; contractTypes?: unknown }>(request);
   if (!body?.wallet) return badRequest("wallet required");
 
   const wallet = normalizeAddr(body.wallet);
   if (!wallet) return badRequest("Invalid wallet");
+  const allowedContractTypes = normalizeContractTypes(body.allowedContractTypes ?? body.contractTypes);
+  if (allowedContractTypes.length === 0) {
+    return badRequest("allowedContractTypes required");
+  }
 
   const ownerWallet = await getPrimaryOwnerWallet(env);
   if (ownerWallet && wallet.toLowerCase() === ownerWallet.toLowerCase()) {
@@ -843,16 +870,41 @@ async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string
   }
 
   const now = nowIso();
+  const existing = await env.DB.prepare(
+    `SELECT wallet, allowed_contract_types_json, contract_types_locked_at
+     FROM owner_sub_admins
+     WHERE wallet = ?
+     LIMIT 1`
+  )
+    .bind(wallet)
+    .first<{ wallet: string; allowed_contract_types_json: string | null; contract_types_locked_at: string | null }>();
+
+  if (existing?.contract_types_locked_at) {
+    const existingTypes = parseAllowedContractTypes(existing.allowed_contract_types_json);
+    if (!contractTypesEqual(existingTypes, allowedContractTypes)) {
+      return badRequest("SubAdmin contract types are locked and cannot be changed");
+    }
+  }
+
+  const contractTypesJson = serializeAllowedContractTypes(allowedContractTypes);
   await env.DB.prepare(
-    `INSERT INTO owner_sub_admins (wallet, note, created_by, updated_by, created_at, updated_at, enabled)
-     VALUES (?, ?, ?, ?, ?, ?, 1)
+    `INSERT INTO owner_sub_admins (
+       wallet, note, created_by, updated_by, created_at, updated_at,
+       allowed_contract_types_json, contract_types_locked_at, enabled
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(wallet) DO UPDATE SET
        note = excluded.note,
        updated_by = excluded.updated_by,
        updated_at = excluded.updated_at,
+       allowed_contract_types_json = CASE
+         WHEN owner_sub_admins.contract_types_locked_at IS NULL THEN excluded.allowed_contract_types_json
+         ELSE owner_sub_admins.allowed_contract_types_json
+       END,
+       contract_types_locked_at = COALESCE(owner_sub_admins.contract_types_locked_at, excluded.contract_types_locked_at),
        enabled = 1`
   )
-    .bind(wallet, body.note?.trim() || null, actorWallet.toLowerCase(), actorWallet.toLowerCase(), now, now)
+    .bind(wallet, body.note?.trim() || null, actorWallet.toLowerCase(), actorWallet.toLowerCase(), now, now, contractTypesJson, now)
     .run();
 
   await env.DB.prepare(
@@ -867,11 +919,11 @@ async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string
     action: "subadmin.add",
     actorWallet,
     targetWallet: wallet,
-    payload: { note: body.note?.trim() || null },
+    payload: { note: body.note?.trim() || null, allowedContractTypes },
     request,
   });
 
-  return json({ ok: true, wallet });
+  return json({ ok: true, wallet, allowedContractTypes });
 }
 
 async function handleSubAdminRemove(request: Request, env: Env, actorWallet: string, walletParam: string): Promise<Response> {

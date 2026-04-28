@@ -77,6 +77,7 @@ const DEVICE_INSTALL_SEED_KEY = 'coinplanet.device_install_seed_v1';
 const MINER_READY_KEY = 'coinplanet.miner_ready';
 const USER_ID_KEY = 'coinplanet.user_id';
 const AGREEMENT_ACCEPTED_KEY = 'coinplanet.agreement_accepted_version';
+const CONTRACT_AGREEMENT_ACCEPTED_KEY = 'coinplanet.contract_agreement_accepted_version';
 const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
 const ONBOARDING_MINIMIZED_KEY = 'coinplanet.onboarding_minimized_v1';
 const ANNOUNCEMENT_READ_KEY = 'coinplanet.announcements.read_ids';
@@ -770,10 +771,10 @@ export default function App() {
   const contract = systemStatus?.contract;
   const contractRequired = Boolean(contract?.required && contract?.version);
   const acceptedContractVersion = userDetails?.contractAgreementAcceptedVersion ?? localContractAcceptedVersion ?? null;
-  const contractNeedsAcceptance = contractRequired
+  const contractNeedsAcceptance = Boolean(contractRequired
     && contract
     && hasActiveContract
-    && acceptedContractVersion !== contract.version;
+    && acceptedContractVersion !== contract.version);
   const announcementReadSet = useMemo(() => new Set(announcementReadIds), [announcementReadIds]);
   const visibleAnnouncements = useMemo(
     () => announcements.filter((item) => item.target === 'all' || hasActiveContract),
@@ -896,6 +897,7 @@ export default function App() {
       msg.includes('failed to fetch') ||
       msg.includes('timeout') ||
       msg.includes('api unavailable')
+    ) {
       return t.errNetwork;
     }
 
@@ -903,6 +905,7 @@ export default function App() {
       return t.errNetwork;
     }
 
+    return normalized;
   };
 
   const shortAddress = useMemo(() => {
@@ -910,8 +913,10 @@ export default function App() {
     return `${serverWalletAddress.slice(0, 6)}...${serverWalletAddress.slice(-4)}`;
   }, [serverWalletAddress, t.notInit]);
 
-    if (!walletAddress) return;
-    const ok = await copyToClipboard(walletAddress);
+  const handleCopyAddress = async () => {
+    const addressToCopy = serverWalletAddress || walletAddress;
+    if (!addressToCopy) return;
+    const ok = await copyToClipboard(addressToCopy);
     setCopyState(ok ? 'copied' : 'failed');
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     copyTimerRef.current = setTimeout(() => setCopyState('idle'), 1800);
@@ -1320,6 +1325,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const restoreContractAgreement = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(CONTRACT_AGREEMENT_ACCEPTED_KEY);
+        if (stored) setLocalContractAcceptedVersion(stored);
+      } catch {
+        // ignore
+      }
+    };
+    void restoreContractAgreement();
+  }, []);
+
+  useEffect(() => {
     const restoreAnnouncementReads = async () => {
       try {
         const stored = await AsyncStorage.getItem(ANNOUNCEMENT_READ_KEY);
@@ -1456,21 +1473,12 @@ export default function App() {
   const handleAcceptContract = async () => {
     if (!contract || !contract.version) return;
     if (contractSubmitting) return;
-    setContractSubmitting(true);
-    try {
-      if (!userId || !walletAddress) {
-        setLocalContractAcceptedVersion(contract.version);
-        return;
-      }
-      await acceptContractAgreement(userId, contract.version, walletAddress);
-      setLocalContractAcceptedVersion(contract.version);
-      const details = await getUserDetails(userId);
-      setUserDetails(details);
-    } catch {
-      // silent — user can retry by closing and reopening
-    } finally {
-      setContractSubmitting(false);
-    }
+    const acceptedVersion = contract.version;
+    setLocalContractAcceptedVersion(acceptedVersion);
+    setStatus(lang === 'zh' ? '合同已确认，正在后台同步。' : 'Contract accepted. Syncing in background.');
+    void AsyncStorage.setItem(CONTRACT_AGREEMENT_ACCEPTED_KEY, acceptedVersion).catch(() => null);
+
+    // Backend sync is handled by the effect below so the modal can close immediately.
   };
 
   // If accepted locally before identity was ready, sync to backend once it becomes ready.
@@ -1502,6 +1510,44 @@ export default function App() {
     userAgreement?.required,
     userAgreement?.version,
     userDetails?.agreementAcceptedVersion,
+  ]);
+
+  useEffect(() => {
+    if (!contract?.required || !contract.version) return;
+    if (!userId || !walletAddress) return;
+    if (localContractAcceptedVersion !== contract.version) return;
+    if (userDetails?.contractAgreementAcceptedVersion === contract.version) return;
+
+    let cancelled = false;
+    setContractSubmitting(true);
+    (async () => {
+      try {
+        await acceptContractAgreement(userId, contract.version, walletAddress);
+        if (cancelled) return;
+        const details = await getUserDetails(userId);
+        if (cancelled) return;
+        setUserDetails(details);
+      } catch (error) {
+        const message = toFriendlyErrorMessage(error);
+        if (!cancelled) {
+          setStatus(lang === 'zh' ? `合同已本地确认，后台同步失败：${message}` : `Contract accepted locally. Sync failed: ${message}`);
+        }
+      } finally {
+        if (!cancelled) setContractSubmitting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    userId,
+    walletAddress,
+    localContractAcceptedVersion,
+    contract?.required,
+    contract?.version,
+    lang,
+    userDetails?.contractAgreementAcceptedVersion,
   ]);
 
   const refreshSwapPrice = async (preferredStatus?: Awaited<ReturnType<typeof getSystemStatus>> | null) => {
