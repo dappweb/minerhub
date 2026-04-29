@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
   contract_type TEXT,
   contract_term_days INTEGER NOT NULL DEFAULT 1095,
   monthly_card_days INTEGER NOT NULL DEFAULT 30,
+  monthly_card_end_at TEXT,
   contract_active INTEGER NOT NULL DEFAULT 0,
   agreement_accepted_at TEXT,
   contract_agreement_accepted_version TEXT,

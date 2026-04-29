@@ -224,7 +224,10 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
         COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
         COALESCE(cp.total_online_seconds, 0) AS totalOnlineSeconds,
         cp.last_seen_at AS lastSeenAt, COALESCE(cp.online_status, 'offline') AS onlineStatus,
-        cp.agreement_accepted_at AS agreementAcceptedAt, cp.offline_alerted_at AS offlineAlertedAt, cp.notes
+        cp.agreement_accepted_at AS agreementAcceptedAt,
+        cp.contract_agreement_accepted_version AS contractAgreementAcceptedVersion,
+        cp.offline_alerted_at AS offlineAlertedAt,
+        cp.notes
       FROM users u
       LEFT JOIN customer_profiles cp ON cp.user_id = u.id
       LEFT JOIN referral_edges re ON re.invitee_user_id = u.id AND re.status = 'active'
@@ -278,7 +281,7 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       payoutWallets: wallets.results ?? [],
       agreementAcceptedVersion: acceptance?.version ?? null,
       agreementAcceptedAt: acceptance?.accepted_at ?? (user as { agreementAcceptedAt?: string | null }).agreementAcceptedAt ?? null,
-      contractAgreementAcceptedVersion: (user as { contract_agreement_accepted_version?: string | null }).contract_agreement_accepted_version ?? null,
+      contractAgreementAcceptedVersion: (user as { contractAgreementAcceptedVersion?: string | null }).contractAgreementAcceptedVersion ?? null,
       lockSummary: {
         total: Number(lockSummary?.total ?? 0),
         pending: Number(lockSummary?.pending ?? 0),

@@ -176,6 +176,22 @@ function parseDateTimeLocalInput(value: string): string | null {
   return parsed.toISOString();
 }
 
+function formatDateOnly(value?: string | null): string {
+  if (!value) return '--';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--';
+  return parsed.toLocaleDateString('zh-CN');
+}
+
+function formatMonthlyCardEndDate(monthlyCardEndAt?: string | null, contractStartAt?: string | null, monthlyCardDays?: number | null): string {
+  if (monthlyCardEndAt) return formatDateOnly(monthlyCardEndAt);
+  if (!contractStartAt) return '--';
+  const parsedStart = new Date(contractStartAt);
+  const parsedDays = Number(monthlyCardDays ?? 30);
+  if (Number.isNaN(parsedStart.getTime()) || !Number.isFinite(parsedDays) || parsedDays <= 0) return '--';
+  return new Date(parsedStart.getTime() + Math.floor(parsedDays) * 86_400_000).toLocaleDateString('zh-CN');
+}
+
 function createEmptyAnnouncementForm(): AnnouncementFormState {
   return {
     titleZh: '',
@@ -234,6 +250,7 @@ type CustomerItem = {
   machineCode: string | null;
   contractStartAt: string | null;
   contractEndAt: string | null;
+  monthlyCardEndAt: string | null;
   contractActive: number;
   activationStatus: string;
   exchangeAutoEnabled: number;
@@ -2032,6 +2049,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         devices: normalizedDevices,
       });
       await loadBackendData();
+      await loadDevices();
       setSelectedCustomerDetail(updated);
       setCustomerDetailForm({
         nickname: updated.nickname ?? '',
@@ -3481,7 +3499,9 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <th className="px-2 py-2 font-medium w-8"></th>
                         <th className="px-3 py-2 font-medium">钱包</th>
                         <th className="px-3 py-2 font-medium">设备标识</th>
-                        <th className="px-3 py-2 font-medium">合同到期</th>
+                        <th className="px-3 py-2 font-medium">合同开始</th>
+                        <th className="px-3 py-2 font-medium">合同结束</th>
+                        <th className="px-3 py-2 font-medium">月卡到期</th>
                         <th className="px-3 py-2 font-medium">状态</th>
                         <th className="px-3 py-2 font-medium">矿机注册</th>
                         <th className="px-3 py-2 font-medium">在线</th>
@@ -3529,10 +3549,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                               {customer.wallet}
                             </td>
                             <td className="px-3 py-2 font-mono text-slate-300">{customer.machineCode ?? '--'}</td>
-                            <td className={`px-3 py-2 ${expired ? 'text-red-300' : expiring ? 'text-amber-300' : 'text-slate-300'}`}>
+                            <td className="px-3 py-2 whitespace-nowrap text-slate-300">{formatDateOnly(customer.contractStartAt)}</td>
+                            <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-red-300' : expiring ? 'text-amber-300' : 'text-slate-300'}`}>
                               {customer.contractEndAt
-                                ? `${new Date(customer.contractEndAt).toLocaleDateString('zh-CN')}${remainDays !== null ? ` (${remainDays}天)` : ''}`
+                                ? `${formatDateOnly(customer.contractEndAt)}${remainDays !== null ? ` (${remainDays}天)` : ''}`
                                 : '未激活'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-slate-300">
+                              {formatMonthlyCardEndDate(customer.monthlyCardEndAt, customer.contractStartAt, customer.monthlyCardDays)}
                             </td>
                             <td className="px-3 py-2 text-slate-300">{customer.contractActive ? '有效' : '停用'}</td>
                             <td className="px-3 py-2">

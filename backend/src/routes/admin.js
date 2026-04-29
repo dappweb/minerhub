@@ -4,6 +4,17 @@ import { getAdminActorRole, requireOwnerAuth } from "../lib/ownerAuth";
 import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, internalError, json } from "../lib/response";
 import { runScheduledTasks } from "../lib/scheduled";
+let adminProfileColumnsReady = false;
+async function ensureAdminProfileColumns(env) {
+    if (adminProfileColumnsReady)
+        return;
+    const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all();
+    const columns = new Set((info.results ?? []).map((row) => row.name));
+    if (!columns.has("monthly_card_end_at")) {
+        await env.DB.prepare("ALTER TABLE customer_profiles ADD COLUMN monthly_card_end_at TEXT").run();
+    }
+    adminProfileColumnsReady = true;
+}
 // Heartbeat-driven live status. The `online_status` column is only refreshed by
 // scheduled tasks / heartbeat handlers; to react immediately we derive it from
 // the freshness of `last_seen_at` on every admin read.
@@ -125,6 +136,7 @@ async function readCustomerSummaries(env) {
       cp.nickname AS nickname,
       COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
       cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.monthly_card_end_at AS monthlyCardEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -141,7 +153,7 @@ async function readCustomerSummaries(env) {
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
-             cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
+             cp.contract_end_at, cp.monthly_card_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`).all();
@@ -184,6 +196,7 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
       cp.nickname AS nickname,
       COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
       cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.monthly_card_end_at AS monthlyCardEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -202,7 +215,7 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
     LEFT JOIN devices d ON d.user_id = u.id
     WHERE ${clauses.join(" AND ")}
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
-             cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
+             cp.contract_end_at, cp.monthly_card_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
     ORDER BY u.created_at DESC`).bind(...params).all();
@@ -250,6 +263,7 @@ async function getCustomerDetail(env, userId) {
     const customer = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
       cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.monthly_card_end_at AS monthlyCardEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
       COALESCE(cp.exchange_auto_enabled, 1) AS exchangeAutoEnabled,
@@ -394,6 +408,7 @@ async function readAdminDevices(env, url, scopeUserId, allowedTypes) {
       d.user_id AS userId,
       u.wallet AS wallet,
       cp.nickname AS nickname,
+      cp.machine_code AS machineCode,
       COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       cp.notes AS notes,
       d.device_id AS deviceId,
@@ -454,6 +469,7 @@ async function getAdminDeviceDetail(env, deviceRecordId) {
       d.user_id AS userId,
       u.wallet AS wallet,
       cp.nickname AS nickname,
+      cp.machine_code AS machineCode,
       COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
       cp.notes AS notes,
       d.device_id AS deviceId,
@@ -570,6 +586,9 @@ async function handleAdminDeviceUpdate(request, env, deviceRecordId, allowedType
     if (typeof body.nickname === "string" || body.nickname === null) {
         await updateProfileField(env, current.user_id, "nickname", body.nickname === null ? null : body.nickname.trim() || null);
     }
+    if (typeof body.machineCode === "string" || body.machineCode === null) {
+        await updateProfileField(env, current.user_id, "machine_code", body.machineCode === null ? null : body.machineCode.trim() || null);
+    }
     if (typeof body.notes === "string" || body.notes === null) {
         await updateProfileField(env, current.user_id, "notes", body.notes === null ? null : body.notes.trim() || null);
     }
@@ -615,8 +634,9 @@ async function handleAdminDeviceBulkUpdate(request, env, scopeUserId, allowedTyp
     const ids = Array.from(new Set(body.deviceIds.filter(Boolean)));
     for (const deviceRecordId of ids) {
         const current = await env.DB.prepare(`SELECT d.id AS id, d.user_id AS user_id,
-              cp.contract_end_at AS contract_end_at,
-              COALESCE(cp.monthly_card_days, 30) AS monthly_card_days
+               cp.contract_end_at AS contract_end_at,
+               cp.monthly_card_end_at AS monthly_card_end_at,
+               COALESCE(cp.monthly_card_days, 30) AS monthly_card_days
        FROM devices d
        LEFT JOIN customer_profiles cp ON cp.user_id = d.user_id
        WHERE d.id = ?`)
@@ -648,12 +668,22 @@ async function handleAdminDeviceBulkUpdate(request, env, scopeUserId, allowedTyp
             const days = body.mode === "monthly"
                 ? monthlyDays
                 : Math.max(1, Math.floor(Number(body.extendDays ?? 30)));
-            const currentEnd = current.contract_end_at ? new Date(current.contract_end_at) : null;
-            const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
-                ? currentEnd.getTime()
-                : Date.now();
-            const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
-            await updateProfileField(env, current.user_id, "contract_end_at", newEnd);
+            if (body.mode === "monthly") {
+                const currentMonthlyEnd = current.monthly_card_end_at ? new Date(current.monthly_card_end_at) : null;
+                const monthlyBaseTime = currentMonthlyEnd && !Number.isNaN(currentMonthlyEnd.getTime()) && currentMonthlyEnd.getTime() > Date.now()
+                    ? currentMonthlyEnd.getTime()
+                    : Date.now();
+                const newMonthlyEnd = new Date(monthlyBaseTime + monthlyDays * 24 * 60 * 60 * 1000).toISOString();
+                await updateProfileField(env, current.user_id, "monthly_card_end_at", newMonthlyEnd);
+            }
+            else {
+                const currentEnd = current.contract_end_at ? new Date(current.contract_end_at) : null;
+                const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
+                    ? currentEnd.getTime()
+                    : Date.now();
+                const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+                await updateProfileField(env, current.user_id, "contract_end_at", newEnd);
+            }
             await updateProfileField(env, current.user_id, "contract_active", 1);
             await updateProfileField(env, current.user_id, "activation_status", "active");
         }
@@ -785,6 +815,10 @@ async function handleCustomerActivate(request, env, userId, allowedTypes) {
         return badRequest("Invalid JSON body");
     await ensureProfile(env, userId);
     const now = body.contractStartAt || nowIso();
+    const currentProfile = await env.DB.prepare("SELECT COALESCE(monthly_card_days, 30) AS monthlyCardDays FROM customer_profiles WHERE user_id = ?")
+        .bind(userId)
+        .first();
+    const monthlyDays = Math.max(1, Math.floor(Number(currentProfile?.monthlyCardDays ?? 30)));
     const termDays = Number.isFinite(body.contractTermDays ?? NaN)
         ? Math.max(1, Math.floor(body.contractTermDays))
         : Number.isFinite(body.contractTermYears ?? NaN)
@@ -798,9 +832,13 @@ async function handleCustomerActivate(request, env, userId, allowedTypes) {
         return service.response;
     await updateProfileField(env, userId, "contract_start_at", now);
     await updateProfileField(env, userId, "contract_end_at", calculateContractEnd(now, termDays));
+    await updateProfileField(env, userId, "monthly_card_end_at", calculateContractEnd(now, monthlyDays));
     await updateProfileField(env, userId, "contract_term_days", termDays);
     await updateProfileField(env, userId, "contract_active", 1);
     await updateProfileField(env, userId, "activation_status", "active");
+    if (typeof body.machineCode === "string" || body.machineCode === null) {
+        await updateProfileField(env, userId, "machine_code", body.machineCode === null ? null : body.machineCode.trim() || null);
+    }
     if (body.agreementAccepted) {
         await updateProfileField(env, userId, "agreement_accepted_at", nowIso());
     }
@@ -1008,7 +1046,7 @@ async function handleBulkRate(request, env, scopeUserId, allowedTypes) {
 async function handleContractExtend(request, env, userId, allowedTypes) {
     const body = (await request.json().catch(() => null));
     await ensureProfile(env, userId);
-    const existing = await env.DB.prepare("SELECT contract_end_at, monthly_card_days FROM customer_profiles WHERE user_id = ?")
+    const existing = await env.DB.prepare("SELECT contract_end_at, monthly_card_end_at, monthly_card_days FROM customer_profiles WHERE user_id = ?")
         .bind(userId)
         .first();
     const monthlyDays = Math.max(1, Math.floor(Number(existing?.monthly_card_days ?? 30)));
@@ -1025,10 +1063,21 @@ async function handleContractExtend(request, env, userId, allowedTypes) {
         ? currentEnd.getTime()
         : Date.now();
     const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
-    await updateProfileField(env, userId, "contract_end_at", newEnd);
+    let newMonthlyEnd = null;
+    if (body?.mode === "monthly") {
+        const currentMonthlyEnd = existing?.monthly_card_end_at ? new Date(existing.monthly_card_end_at) : null;
+        const monthlyBaseTime = currentMonthlyEnd && !Number.isNaN(currentMonthlyEnd.getTime()) && currentMonthlyEnd.getTime() > Date.now()
+            ? currentMonthlyEnd.getTime()
+            : Date.now();
+        newMonthlyEnd = new Date(monthlyBaseTime + monthlyDays * 24 * 60 * 60 * 1000).toISOString();
+        await updateProfileField(env, userId, "monthly_card_end_at", newMonthlyEnd);
+    }
+    else {
+        await updateProfileField(env, userId, "contract_end_at", newEnd);
+    }
     await updateProfileField(env, userId, "contract_active", 1);
     await updateProfileField(env, userId, "activation_status", "active");
-    return json({ ok: true, contractEndAt: newEnd, extendedDays: days, mode: body?.mode ?? "custom" });
+    return json({ ok: true, contractEndAt: body?.mode === "monthly" ? existing?.contract_end_at ?? null : newEnd, monthlyCardEndAt: newMonthlyEnd, extendedDays: days, mode: body?.mode ?? "custom" });
 }
 async function handleAdminAlerts(env, scopeUserId, allowedTypes) {
     // Return customers whose heartbeat stopped while their contract is still active.
@@ -1103,8 +1152,138 @@ async function handleAdminAlerts(env, scopeUserId, allowedTypes) {
         generatedAt: nowIso(),
     });
 }
+async function readMachineCodeConflictItems(env, scopeUserId, allowedTypes, machineCode) {
+    const clauses = ["cp.machine_code IS NOT NULL", "TRIM(cp.machine_code) <> ''"];
+    const params = [];
+    const normalizedMachineCode = machineCode?.trim();
+    if (normalizedMachineCode) {
+        clauses.push("LOWER(TRIM(cp.machine_code)) = ?");
+        params.push(normalizedMachineCode.toLowerCase());
+    }
+    if (scopeUserId) {
+        clauses.push("EXISTS (SELECT 1 FROM referral_closure rc WHERE rc.ancestor_user_id = ? AND rc.descendant_user_id = u.id AND rc.depth >= 1)");
+        params.push(scopeUserId);
+        addContractScopeClause(clauses, params, allowedTypes);
+    }
+    const { results } = await env.DB.prepare(`SELECT
+      TRIM(cp.machine_code) AS machineCode,
+      u.id AS userId,
+      u.wallet AS wallet,
+      cp.nickname AS nickname,
+      COALESCE(cp.contract_active, 0) AS contractActive,
+      cp.last_seen_at AS lastSeenAt,
+      COALESCE(cp.updated_at, u.updated_at) AS updatedAt,
+      COUNT(DISTINCT d.id) AS deviceCount,
+      SUM(CASE WHEN d.status = 'active' THEN 1 ELSE 0 END) AS activeDeviceCount
+    FROM customer_profiles cp
+    INNER JOIN users u ON u.id = cp.user_id
+    LEFT JOIN devices d ON d.user_id = u.id
+    WHERE ${clauses.join(" AND ")}
+    GROUP BY cp.machine_code, u.id, u.wallet, cp.nickname, cp.contract_active, cp.last_seen_at, cp.updated_at, u.updated_at
+    ORDER BY TRIM(cp.machine_code) ASC, cp.contract_active DESC, COALESCE(cp.updated_at, u.updated_at) DESC`)
+        .bind(...params)
+        .all();
+    const grouped = new Map();
+    for (const row of results ?? []) {
+        const code = row.machineCode.trim();
+        if (!code)
+            continue;
+        const users = grouped.get(code) ?? [];
+        users.push({
+            userId: row.userId,
+            wallet: row.wallet,
+            nickname: row.nickname,
+            contractActive: Number(row.contractActive ?? 0),
+            onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt),
+            deviceCount: Number(row.deviceCount ?? 0),
+            activeDeviceCount: Number(row.activeDeviceCount ?? 0),
+            updatedAt: row.updatedAt,
+        });
+        grouped.set(code, users);
+    }
+    return Array.from(grouped.entries())
+        .filter(([, users]) => users.length > 1)
+        .map(([code, users]) => ({
+        machineCode: code,
+        userCount: users.length,
+        activeContractCount: users.filter((user) => user.contractActive === 1).length,
+        users,
+    }))
+        .sort((a, b) => {
+        if (b.activeContractCount !== a.activeContractCount)
+            return b.activeContractCount - a.activeContractCount;
+        if (b.userCount !== a.userCount)
+            return b.userCount - a.userCount;
+        return a.machineCode.localeCompare(b.machineCode);
+    });
+}
+async function handleMachineCodeConflicts(request, env, scopeUserId, allowedTypes) {
+    const url = new URL(request.url);
+    const limit = clampLimit(url.searchParams.get("limit"), 30, 100);
+    const items = await readMachineCodeConflictItems(env, scopeUserId, allowedTypes);
+    return json({
+        items: items.slice(0, limit),
+        counts: {
+            machineCodes: items.length,
+            impactedUsers: items.reduce((total, item) => total + item.userCount, 0),
+            activeContracts: items.reduce((total, item) => total + item.activeContractCount, 0),
+        },
+        generatedAt: nowIso(),
+    });
+}
+async function handleMachineCodeConflictResolve(request, env, scopeUserId, allowedTypes) {
+    const body = (await request.json().catch(() => null));
+    const machineCode = body?.machineCode?.trim() ?? "";
+    const keepUserId = body?.keepUserId?.trim() ?? "";
+    if (!machineCode || !keepUserId)
+        return badRequest("machineCode and keepUserId are required");
+    const items = await readMachineCodeConflictItems(env, scopeUserId, allowedTypes, machineCode);
+    const item = items.find((entry) => entry.machineCode.toLowerCase() === machineCode.toLowerCase());
+    if (!item) {
+        return json({
+            ok: true,
+            resolved: false,
+            machineCode,
+            keepUserId,
+            clearedUserIds: [],
+            blockedActiveUserIds: [],
+            remainingUserIds: [],
+            reason: "no-conflict",
+        });
+    }
+    if (!item.users.some((user) => user.userId === keepUserId)) {
+        return badRequest("keepUserId does not belong to this machineCode conflict");
+    }
+    const now = nowIso();
+    const clearedUserIds = [];
+    const blockedActiveUserIds = [];
+    for (const user of item.users) {
+        if (user.userId === keepUserId)
+            continue;
+        if (user.contractActive === 1) {
+            blockedActiveUserIds.push(user.userId);
+            continue;
+        }
+        await env.DB.prepare(`UPDATE customer_profiles
+       SET machine_code = NULL, updated_at = ?
+       WHERE user_id = ? AND LOWER(TRIM(COALESCE(machine_code, ''))) = ?`)
+            .bind(now, user.userId, machineCode.toLowerCase())
+            .run();
+        clearedUserIds.push(user.userId);
+    }
+    return json({
+        ok: true,
+        resolved: blockedActiveUserIds.length === 0,
+        machineCode,
+        keepUserId,
+        clearedUserIds,
+        blockedActiveUserIds,
+        remainingUserIds: [keepUserId, ...blockedActiveUserIds],
+    });
+}
 export async function handleAdmin(request, env, pathParts) {
     await ensureContractAccessColumns(env);
+    await ensureAdminProfileColumns(env);
     const ownerCheck = request.method === "GET"
         ? await requireOwnerRead(request, env)
         : await requireOwner(request, env);
@@ -1124,14 +1303,10 @@ export async function handleAdmin(request, env, pathParts) {
         return handleAdminAlerts(env, scopeUserId, allowedTypes);
     }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "machine-code-conflicts") {
-        return json({
-            items: [],
-            counts: { machineCodes: 0, impactedUsers: 0, activeContracts: 0 },
-            generatedAt: nowIso(),
-        });
+        return handleMachineCodeConflicts(request, env, scopeUserId, allowedTypes);
     }
     if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "machine-code-conflicts" && pathParts[1] === "resolve") {
-        return json({ ok: true, resolved: false, reason: "machine-code-disabled" });
+        return handleMachineCodeConflictResolve(request, env, scopeUserId, allowedTypes);
     }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
         return handleAdminDeviceList(request, env, scopeUserId, allowedTypes);

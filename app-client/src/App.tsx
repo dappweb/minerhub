@@ -6,6 +6,7 @@ import {
     AppState,
     Modal,
     Pressable,
+    RefreshControl,
     SafeAreaView,
     ScrollView,
     StatusBar,
@@ -111,6 +112,10 @@ const translations = {
     ruleHint: 'Rewards accrue by online duration and settle according to backend policy.',
     maintenanceTitle: 'Maintenance Mode',
     maintenanceBody: 'System maintenance in progress. Please try again later.',
+    globalRefresh: 'Refresh',
+    globalRefreshing: 'Refreshing...',
+    globalRefreshDone: 'Refresh complete',
+    globalRefreshFail: 'Refresh failed: ',
     swapPanelTitle: 'SUPER -> USDT',
     swapAmount: 'Swap Amount (SUPER)',
     swapAmountPlaceholder: 'Enter SUPER amount',
@@ -343,6 +348,10 @@ const translations = {
     ruleHint: '收益按在线时长累计，并按后台策略实时结算。',
     maintenanceTitle: '系统维护中',
     maintenanceBody: '系统正在维护，请稍后再试。',
+    globalRefresh: '刷新',
+    globalRefreshing: '正在刷新...',
+    globalRefreshDone: '刷新完成',
+    globalRefreshFail: '刷新失败：',
     swapPanelTitle: 'SUPER -> USDT',
     swapAmount: '兑换数量（SUPER）',
     swapAmountPlaceholder: '输入SUPER数量',
@@ -697,6 +706,7 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
   const [userDetails, setUserDetails] = useState<Awaited<ReturnType<typeof getUserDetails>> | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   
   // Wallet balances
   const [bnbBalance, setBnbBalance] = useState<string>('0');
@@ -738,6 +748,7 @@ export default function App() {
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementAutoShownRef = useRef(false);
+  const manualRefreshInFlightRef = useRef(false);
 
   const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
@@ -1950,6 +1961,53 @@ export default function App() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    if (manualRefreshInFlightRef.current) return;
+
+    manualRefreshInFlightRef.current = true;
+    setIsManualRefreshing(true);
+
+    try {
+      setStatus(t.globalRefreshing);
+
+      if (!walletAddress || !userId) {
+        await initializeAccount();
+        return;
+      }
+
+      const [nextStatus, announcementItems, details, balances] = await Promise.all([
+        getSystemStatus().catch(() => null),
+        getAnnouncements().catch(() => []),
+        getUserDetails(userId).catch(() => null),
+        getWalletBalances().catch(() => null),
+      ]);
+
+      if (nextStatus) setSystemStatus(nextStatus);
+      setAnnouncements(announcementItems);
+      if (details) setUserDetails(details);
+      if (balances) {
+        setBnbBalance(balances.bnb);
+        setSuperBalance(balances.super);
+        setUsdtBalance(balances.usdt);
+      }
+
+      await Promise.all([
+        refreshSwapPrice(nextStatus),
+        refreshGasFundedBalance(walletAddress),
+        refreshReferralSummary(userId),
+        refreshReferralMembers(userId, referralMembersPage),
+        refreshExchangeOrders(true),
+      ]);
+
+      setStatus(t.globalRefreshDone);
+    } catch (error) {
+      setStatus(`${t.globalRefreshFail}${toFriendlyErrorMessage(error)}`);
+    } finally {
+      manualRefreshInFlightRef.current = false;
+      setIsManualRefreshing(false);
+    }
+  };
+
   const hasPendingExchangeOrder = useMemo(
     () => exchangeOrders.some((item) => isExchangeOrderPendingStatus(item.status)),
     [exchangeOrders]
@@ -2400,6 +2458,16 @@ export default function App() {
     { key: 'profile', label: t.tabProfile },
   ];
 
+  const globalRefreshControl = (
+    <RefreshControl
+      refreshing={isManualRefreshing}
+      onRefresh={() => { void handleManualRefresh(); }}
+      tintColor="#7dd3fc"
+      colors={['#22d3ee']}
+      progressBackgroundColor="#082a5d"
+    />
+  );
+
   if (maintenanceEnabled) {
     const title = lang === 'zh' ? '系统维护中' : 'Maintenance Mode';
     const body = lang === 'zh'
@@ -2412,9 +2480,19 @@ export default function App() {
         <View style={styles.maintenanceWrap}>
           <Text style={styles.maintenanceTitle}>{title}</Text>
           <Text style={styles.maintenanceBody}>{body}</Text>
-          <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
-            <Text style={styles.langBtnText}>{t.langToggle}</Text>
-          </TouchableOpacity>
+          <View style={styles.maintenanceActions}>
+            <TouchableOpacity
+              style={[styles.refreshBtn, isManualRefreshing && styles.disabledBtn]}
+              onPress={() => { void handleManualRefresh(); }}
+              disabled={isManualRefreshing}
+            >
+              {isManualRefreshing && <ActivityIndicator color="#083344" size="small" />}
+              <Text style={styles.refreshBtnText}>{isManualRefreshing ? t.globalRefreshing : t.globalRefresh}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+              <Text style={styles.langBtnText}>{t.langToggle}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -2426,7 +2504,11 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ScrollView style={styles.mainScroll} contentContainerStyle={[styles.scrollContent, { padding: 24 }]}>
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={[styles.scrollContent, { padding: 24 }]}
+          refreshControl={globalRefreshControl}
+        >
           <Text style={{ color: '#67e8f9', fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
             {t.agreementModalTitle}
           </Text>
@@ -2482,15 +2564,29 @@ export default function App() {
         }}
       />
       <View style={styles.mainShell}>
-        <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={globalRefreshControl}
+        >
           <View style={styles.headerRow}>
-            <View>
+            <View style={styles.headerTitleWrap}>
               <Text style={styles.title}>{t.appTitle}</Text>
               <Text style={styles.subtitle}>{activeTab === 'home' ? t.subtitle : flowHint}</Text>
             </View>
-            <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
-              <Text style={styles.langBtnText}>{t.langToggle}</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={[styles.refreshBtn, isManualRefreshing && styles.disabledBtn]}
+                onPress={() => { void handleManualRefresh(); }}
+                disabled={isManualRefreshing}
+              >
+                {isManualRefreshing && <ActivityIndicator color="#083344" size="small" />}
+                <Text style={styles.refreshBtnText}>{isManualRefreshing ? t.globalRefreshing : t.globalRefresh}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.langBtn} onPress={toggleLang}>
+                <Text style={styles.langBtnText}>{t.langToggle}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {!(identityReady && minerReady && hasActiveContract) && !(onboardingVisible && !onboardingMinimized) && (
@@ -2858,6 +2954,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
+  maintenanceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
   agreementWrap: {
     flex: 1,
     paddingHorizontal: 20,
@@ -2959,6 +3062,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexShrink: 0,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     color: '#ecfeff',
@@ -2983,6 +3098,22 @@ const styles = StyleSheet.create({
     color: '#d9f9ff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  refreshBtn: {
+    minHeight: 32,
+    borderRadius: 999,
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  refreshBtnText: {
+    color: '#083344',
+    fontSize: 12,
+    fontWeight: '800',
   },
   flowHint: {
     color: '#87d9ff',

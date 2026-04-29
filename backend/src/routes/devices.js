@@ -93,7 +93,13 @@ async function accrueHourlyReward(env, userId, deviceId) {
         .bind(createId("dst"), deviceId, userId, Number(device.hashrate ?? 0), nowIsoValue, "heartbeat")
         .run();
 }
-async function updateHeartbeatPresence(env, userId, deviceId, deviceRecordId, hashrate, heartbeatAt, note) {
+function normalizeHeartbeatHashrate(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return 1000;
+    return Math.max(1, Math.floor(parsed));
+}
+async function updateHeartbeatPresence(env, userId, deviceId, deviceRecordId, hashrate, heartbeatAt, note, markDeviceActive = true, observedStatus = "active") {
     await env.DB.prepare(`UPDATE customer_profiles
      SET last_seen_at = ?,
          last_heartbeat_at = ?,
@@ -104,33 +110,41 @@ async function updateHeartbeatPresence(env, userId, deviceId, deviceRecordId, ha
         .bind(heartbeatAt, heartbeatAt, heartbeatAt, heartbeatAt, userId)
         .run();
     if (deviceRecordId) {
-        await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
-            .bind(heartbeatAt, deviceRecordId)
-            .run();
+        if (markDeviceActive) {
+            await env.DB.prepare("UPDATE devices SET updated_at = ?, status = 'active' WHERE id = ?")
+                .bind(heartbeatAt, deviceRecordId)
+                .run();
+        }
+        else {
+            await env.DB.prepare("UPDATE devices SET updated_at = ? WHERE id = ?")
+                .bind(heartbeatAt, deviceRecordId)
+                .run();
+        }
     }
     await env.DB.prepare(`INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
-     VALUES (?, ?, ?, 'active', ?, ?, ?)`)
-        .bind(createId("dst"), deviceId, userId, Number(hashrate ?? 0), heartbeatAt, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(createId("dst"), deviceId, userId, observedStatus, Number(hashrate ?? 0), heartbeatAt, note)
         .run();
 }
-async function accrueHeartbeatReward(env, userId, deviceId, heartbeatAt) {
-    const device = await env.DB.prepare(`SELECT id, hashrate FROM devices WHERE user_id = ? AND device_id = ?`)
+async function accrueHeartbeatReward(env, userId, deviceId, heartbeatAt, reportedHashrate) {
+    let device = await env.DB.prepare(`SELECT id, hashrate, status, updated_at FROM devices WHERE user_id = ? AND device_id = ?`)
         .bind(userId, deviceId)
         .first();
     if (!device) {
-        await env.DB.prepare(`UPDATE customer_profiles
-       SET last_seen_at = ?, last_heartbeat_at = ?, online_status = 'online', updated_at = ?
-       WHERE user_id = ?`)
-            .bind(heartbeatAt, heartbeatAt, heartbeatAt, userId)
+        const newDeviceId = createId("dev");
+        const hashrate = normalizeHeartbeatHashrate(reportedHashrate);
+        await env.DB.prepare(`INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?)`)
+            .bind(newDeviceId, userId, deviceId, hashrate, heartbeatAt, heartbeatAt)
             .run();
-        return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "device_not_found" };
+        await updateHeartbeatPresence(env, userId, deviceId, newDeviceId, hashrate, heartbeatAt, "heartbeat:device_created");
+        return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "device_created" };
     }
     const profile = await env.DB.prepare(`SELECT
        contract_active,
        contract_end_at,
        reward_rate_usdt_per_hour,
        last_heartbeat_at,
-       last_reward_accrued_at,
        COALESCE(total_online_seconds, 0) AS total_online_seconds
      FROM customer_profiles WHERE user_id = ?`)
         .bind(userId)
@@ -138,9 +152,14 @@ async function accrueHeartbeatReward(env, userId, deviceId, heartbeatAt) {
     if (!profile) {
         return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "profile_not_found" };
     }
+    if (device.status !== "active") {
+        await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:device_inactive", false, device.status);
+        return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "device_inactive" };
+    }
     const heartbeatMs = new Date(heartbeatAt).getTime();
-    const previousHeartbeatMs = profile.last_heartbeat_at ? new Date(profile.last_heartbeat_at).getTime() : NaN;
-    if (!profile.last_heartbeat_at || Number.isNaN(previousHeartbeatMs)) {
+    const previousHeartbeatAt = device.updated_at;
+    const previousHeartbeatMs = previousHeartbeatAt ? new Date(previousHeartbeatAt).getTime() : NaN;
+    if (!previousHeartbeatAt || Number.isNaN(previousHeartbeatMs)) {
         await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:first_seen");
         return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: false, reason: "first_heartbeat" };
     }
@@ -178,7 +197,7 @@ async function accrueHeartbeatReward(env, userId, deviceId, heartbeatAt) {
       id, user_id, device_id, reward_usdt, reward_super, rate_usdt_per_hour,
       accrued_from, accrued_to, source, note, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'heartbeat', ?, ?, ?)`)
-        .bind(createId("rwd"), userId, deviceId, rewardUsdt.toFixed(6), rewardSuper.toFixed(6), String(rate), profile.last_heartbeat_at, heartbeatAt, `continuous heartbeat reward (${accruedSeconds}s, hashrate=${device.hashrate}, price=${superPerUsdt})`, heartbeatAt, heartbeatAt)
+        .bind(createId("rwd"), userId, deviceId, rewardUsdt.toFixed(6), rewardSuper.toFixed(6), String(rate), previousHeartbeatAt, heartbeatAt, `continuous heartbeat reward (${accruedSeconds}s, hashrate=${device.hashrate}, price=${superPerUsdt})`, heartbeatAt, heartbeatAt)
         .run();
     await env.DB.prepare(`UPDATE customer_profiles
      SET total_reward_usdt = CAST(ROUND(CAST(total_reward_usdt AS REAL) + ?, 6) AS TEXT),
@@ -224,11 +243,13 @@ export async function handleDevices(request, env, pathParts) {
         }
         const id = createId("dev");
         const now = nowIso();
-        const existingDevice = await env.DB.prepare("SELECT id FROM devices WHERE user_id = ? AND device_id = ?")
+        const existingDevice = await env.DB.prepare("SELECT id, status FROM devices WHERE user_id = ? AND device_id = ?")
             .bind(body.userId, body.deviceId)
             .first();
         if (existingDevice) {
-            await env.DB.prepare("UPDATE devices SET hashrate = ?, status = 'active', updated_at = ? WHERE id = ?")
+            await env.DB.prepare(existingDevice.status === "inactive"
+                ? "UPDATE devices SET hashrate = ?, updated_at = ? WHERE id = ?"
+                : "UPDATE devices SET hashrate = ?, status = 'active', updated_at = ? WHERE id = ?")
                 .bind(body.hashrate, now, existingDevice.id)
                 .run();
         }
@@ -245,7 +266,13 @@ export async function handleDevices(request, env, pathParts) {
         await env.DB.prepare(`UPDATE customer_profiles SET last_seen_at = ?, online_status = 'online', updated_at = ? WHERE user_id = ?`)
             .bind(now, now, body.userId)
             .run();
-        return json({ id: existingDevice?.id ?? id, userId: body.userId, deviceId: body.deviceId, hashrate: body.hashrate, status: "active" }, existingDevice ? 200 : 201);
+        return json({
+            id: existingDevice?.id ?? id,
+            userId: body.userId,
+            deviceId: body.deviceId,
+            hashrate: body.hashrate,
+            status: existingDevice?.status === "inactive" ? "inactive" : "active",
+        }, existingDevice ? 200 : 201);
     }
     if (request.method === "POST" && pathParts.length === 2 && pathParts[1] === "heartbeat") {
         if (await isMaintenanceEnabled(env)) {
@@ -267,12 +294,12 @@ export async function handleDevices(request, env, pathParts) {
         }
         await ensureCustomerProfile(env, body.userId);
         const heartbeatAt = nowIso();
-        const reward = await accrueHeartbeatReward(env, body.userId, deviceId, heartbeatAt);
+        const reward = await accrueHeartbeatReward(env, body.userId, deviceId, heartbeatAt, body.hashrate);
         if (typeof body.status === "string") {
-            const current = await env.DB.prepare("SELECT id FROM devices WHERE user_id = ? AND device_id = ?")
+            const current = await env.DB.prepare("SELECT id, status FROM devices WHERE user_id = ? AND device_id = ?")
                 .bind(body.userId, deviceId)
                 .first();
-            if (current) {
+            if (current && current.status !== "inactive") {
                 const parts = [];
                 const values = [];
                 if (typeof body.status === "string") {
