@@ -545,6 +545,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [deviceFundingAddress, setDeviceFundingAddress] = useState<string>('');
   const [deviceFundingGas, setDeviceFundingGas] = useState<string>('0.01');
   const [deviceFundingSuper, setDeviceFundingSuper] = useState<string>('100');
+  const [customerRenewSuperAmount, setCustomerRenewSuperAmount] = useState<string>('100');
   const [activateCustomerId, setActivateCustomerId] = useState<string>('');
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(() => new Set());
   const [customerSearch, setCustomerSearch] = useState<string>('');
@@ -1926,6 +1927,41 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('');
     } catch (err) {
       setBackendError(err instanceof Error ? err.message : '按月续期失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleRenew30AndFundSuper = async (customer: CustomerItem) => {
+    const parsed = Number(customerRenewSuperAmount);
+    if (!isAddress(customer.wallet)) {
+      setBackendError('客户钱包地址不合法，无法充值 SUPER');
+      return;
+    }
+    if (!superAddress) {
+      setBackendError('未配置 SUPER 合约地址，无法充值 SUPER');
+      return;
+    }
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setBackendError('请输入有效的 SUPER 充值数量');
+      return;
+    }
+
+    const label = customer.nickname || shortWallet(customer.wallet);
+    if (!window.confirm(`确认为 ${label} 续期 30 天，并向 ${customer.wallet} 转入 ${customerRenewSuperAmount} SUPER？`)) return;
+
+    try {
+      setAdminActionLoading(`renew-fund-${customer.id}`);
+      setBackendError('');
+      await signedRequest(`/api/admin/customers/${customer.id}/extend`, 'POST', { extendDays: 30 });
+      await sendSuperToAddressOnChain(customer.wallet as `0x${string}`, customerRenewSuperAmount);
+      await loadBackendData();
+      await refreshOnChainData();
+      if (selectedCustomerDetailId === customer.id) {
+        await openCustomerDetailPanel(customer.id);
+      }
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '续期并充值 SUPER 失败');
     } finally {
       setAdminActionLoading('');
     }
@@ -3425,6 +3461,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     />
                     <span className="text-slate-400">天（点行末按钮）</span>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400">续期+充值</span>
+                    <input
+                      value={customerRenewSuperAmount}
+                      onChange={(e) => setCustomerRenewSuperAmount(e.target.value)}
+                      placeholder="100"
+                      className="h-8 w-20 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-amber-400"
+                    />
+                    <span className="text-slate-400">SUPER</span>
+                  </div>
                   <span className="ml-auto text-slate-400">当前显示 {visibleCustomers.length} / {customers.length}</span>
                 </div>
 
@@ -3536,6 +3582,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                   className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
                                 >
                                   {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRenew30AndFundSuper(customer)}
+                                  disabled={adminActionLoading === `renew-fund-${customer.id}` || !superAddress}
+                                  className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                                >
+                                  {adminActionLoading === `renew-fund-${customer.id}` ? '…' : '+30天+SUPER'}
                                 </button>
                                 <button
                                   type="button"
@@ -3696,6 +3750,16 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       >
                         {adminActionLoading === `extend-${selectedCustomerDetailId}` ? '处理中…' : `合约续期 +${extendDays || 30}天`}
                       </button>
+                      {selectedCustomerDetail && (
+                        <button
+                          type="button"
+                          onClick={() => void handleRenew30AndFundSuper(selectedCustomerDetail)}
+                          disabled={adminActionLoading === `renew-fund-${selectedCustomerDetailId}` || !superAddress}
+                          className="px-3 py-1.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs hover:bg-amber-500/30 disabled:opacity-50"
+                        >
+                          {adminActionLoading === `renew-fund-${selectedCustomerDetailId}` ? '处理中…' : `续期30天并充值 ${customerRenewSuperAmount || 0} SUPER`}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
