@@ -122,7 +122,9 @@ function isNormalizedPayoutWallet(item) {
 async function readCustomerSummaries(env) {
     const { results } = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
-      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.nickname AS nickname,
+      COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
+      cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -138,7 +140,7 @@ async function readCustomerSummaries(env) {
     FROM users u
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
-    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
+    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
@@ -179,7 +181,9 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
     addContractScopeClause(clauses, params, allowedTypes);
     const { results } = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
-      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.nickname AS nickname,
+      COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
+      cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -197,7 +201,7 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
     WHERE ${clauses.join(" AND ")}
-    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.contract_start_at,
+    GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
              cp.reward_rate_usdt_per_hour
@@ -563,11 +567,11 @@ async function handleAdminDeviceUpdate(request, env, deviceRecordId, allowedType
     else if (!(await canAccessCustomerContractType(env, allowedTypes, current.user_id))) {
         return json({ error: "Forbidden" }, 403);
     }
-    if (typeof body.nickname === "string") {
-        await updateProfileField(env, current.user_id, "nickname", body.nickname.trim() || null);
+    if (typeof body.nickname === "string" || body.nickname === null) {
+        await updateProfileField(env, current.user_id, "nickname", body.nickname === null ? null : body.nickname.trim() || null);
     }
-    if (typeof body.notes === "string") {
-        await updateProfileField(env, current.user_id, "notes", body.notes.trim() || null);
+    if (typeof body.notes === "string" || body.notes === null) {
+        await updateProfileField(env, current.user_id, "notes", body.notes === null ? null : body.notes.trim() || null);
     }
     if (typeof body.rewardRateUsdtPerHour === "string" || typeof body.rewardRateUsdtPerHour === "number") {
         await updateProfileField(env, current.user_id, "reward_rate_usdt_per_hour", String(body.rewardRateUsdtPerHour));
@@ -688,8 +692,8 @@ async function handleCustomerUpdate(request, env, userId, allowedTypes) {
     if (allowedTypes === null && typeof body.contractType === "string") {
         await updateProfileField(env, userId, "contract_type", normalizeContractType(body.contractType));
     }
-    if (typeof body.nickname === "string") {
-        await updateProfileField(env, userId, "nickname", body.nickname.trim() || null);
+    if (typeof body.nickname === "string" || body.nickname === null) {
+        await updateProfileField(env, userId, "nickname", body.nickname === null ? null : body.nickname.trim() || null);
     }
     if (typeof body.parentUserId === "string" || body.parentUserId === null) {
         await updateProfileField(env, userId, "parent_user_id", body.parentUserId ? String(body.parentUserId).trim() : null);
@@ -710,8 +714,8 @@ async function handleCustomerUpdate(request, env, userId, allowedTypes) {
         await updateProfileField(env, userId, "contract_active", body.contractActive ? 1 : 0);
         await updateProfileField(env, userId, "activation_status", body.contractActive ? "active" : "paused");
     }
-    if (typeof body.notes === "string") {
-        await updateProfileField(env, userId, "notes", body.notes.trim() || null);
+    if (typeof body.notes === "string" || body.notes === null) {
+        await updateProfileField(env, userId, "notes", body.notes === null ? null : body.notes.trim() || null);
     }
     if (Array.isArray(body.devices)) {
         const seenIds = new Set();
