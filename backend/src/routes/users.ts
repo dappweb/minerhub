@@ -159,6 +159,9 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
       .first<{ id: string; wallet: string; email: string | null }>();
     if (existing) {
       await ensureCustomerProfile(env, existing.id);
+      if (typeof body.referralWallet === "string" && body.referralWallet.trim()) {
+        await bindReferralRelation(env, existing.id, existing.wallet, body.referralWallet);
+      }
       return json({ id: existing.id, wallet: existing.wallet, email: existing.email ?? null });
     }
 
@@ -179,6 +182,9 @@ export async function handleUsers(request: Request, env: Env, pathParts: string[
         throw new Error("Failed to create user");
       }
       await ensureCustomerProfile(env, raced.id);
+      if (typeof body.referralWallet === "string" && body.referralWallet.trim()) {
+        await bindReferralRelation(env, raced.id, raced.wallet, body.referralWallet);
+      }
       return json({ id: raced.id, wallet: raced.wallet, email: raced.email ?? null });
     }
 

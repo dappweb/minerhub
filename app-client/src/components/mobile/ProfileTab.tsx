@@ -63,6 +63,7 @@ export interface ProfileTabProps {
     inviterTitle?: string;
     inviterWallet?: string;
     inviterEmpty?: string;
+    bindInviterButton?: string;
     referralTitle?: string;
     referralDirectCount?: string;
     referralDirectAmount?: string;
@@ -100,6 +101,7 @@ export interface ProfileTabProps {
     userId: string;
     wallet: string | null;
   } | null;
+  onOpenReferralSetup?: () => void;
   referralSummary?: {
     directCount: number;
     directAmountUsdt: string;
@@ -193,6 +195,7 @@ export default function ProfileTab({
   appVersion,
   onCheckUpdate,
   inviterInfo,
+  onOpenReferralSetup,
   referralSummary,
   referralMembers,
   referralMembersTotal = 0,
@@ -393,6 +396,11 @@ export default function ProfileTab({
         <Text style={styles.inviterValueText}>
           {inviterInfo?.wallet?.trim() || inviterInfo?.userId || t.inviterEmpty || 'No inviter bound yet'}
         </Text>
+        {!inviterInfo && onOpenReferralSetup && (
+          <TouchableOpacity style={styles.bindInviterBtn} onPress={onOpenReferralSetup}>
+            <Text style={styles.bindInviterBtnText}>{t.bindInviterButton ?? 'Bind Inviter'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {referralSummary && (
@@ -789,6 +797,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     marginTop: 6,
+  },
+  bindInviterBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#1f4f96',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+  },
+  bindInviterBtnText: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   memberTabRow: {
     flexDirection: 'row',

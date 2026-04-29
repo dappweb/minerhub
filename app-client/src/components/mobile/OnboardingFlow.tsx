@@ -31,11 +31,11 @@ const COPY = {
     s2Bullet1: '• Keep this floating guide available from any tab',
     s2Bullet2: '• Finish monthly-card activation with support',
     s2Bullet3: '• After activation, tap Setup Miner from the home guide',
-    s3Title: 'Bind Referrer (Optional)',
-    s3Body: 'Enter the wallet address of your referrer if you have one. This can be added later from the profile page.',
+    s3Title: 'Bind Referrer',
+    s3Body: 'Enter the wallet address of your referrer to complete registration setup.',
     s3Placeholder: 'Referrer wallet address (0x...)',
-    s3Optional: 'Optional: Leave empty to continue',
-    s3Invalid: 'Invalid wallet address',
+    s3Optional: 'Required: enter a valid referrer wallet address',
+    s3Invalid: 'Please enter a valid referrer wallet address',
     floatingTitle: 'Registration Setup',
   },
   zh: {
@@ -54,11 +54,11 @@ const COPY = {
     s2Bullet1: '• 这个悬浮引导可在任意页面继续打开',
     s2Bullet2: '• 联系客服完成月卡激活',
     s2Bullet3: '• 激活完成后，回到首页点击"矿机设置"',
-    s3Title: '绑定推荐人（可选）',
-    s3Body: '输入您的推荐人钱包地址，如果您有的话。也可以稍后在个人页面添加。',
+    s3Title: '绑定推荐人',
+    s3Body: '请输入推荐人的钱包地址，完成后才可以继续注册配置。',
     s3Placeholder: '推荐人钱包地址（0x...）',
-    s3Optional: '可选：留空可继续',
-    s3Invalid: '无效的钱包地址',
+    s3Optional: '必填：请输入有效的推荐人钱包地址（0x...）',
+    s3Invalid: '请输入有效的推荐人钱包地址',
     floatingTitle: '注册配置',
   },
 } as const;
@@ -99,9 +99,9 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
       setStep(3);
       return;
     }
-    // Step 3: Validate referral wallet (optional, can be empty)
+    // Step 3: Referral wallet is required before onboarding can complete.
     const normalized = referralWallet.trim().toLowerCase();
-    if (normalized && !isValidEthereumAddress(normalized)) {
+    if (!normalized || !isValidEthereumAddress(normalized)) {
       setReferralError(t.s3Invalid);
       return;
     }

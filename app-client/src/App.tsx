@@ -300,6 +300,7 @@ const translations = {
     inviterTitle: 'My Inviter',
     inviterWallet: 'Inviter Wallet',
     inviterEmpty: 'No inviter bound yet',
+    bindInviterButton: 'Bind Inviter',
     referralTitle: 'Referral Summary',
     referralDirectCount: 'Direct Accounts',
     referralDirectAmount: 'Direct Amount (USDT)',
@@ -531,6 +532,7 @@ const translations = {
     inviterTitle: '我的推荐人',
     inviterWallet: '推荐人钱包',
     inviterEmpty: '暂未绑定推荐人',
+    bindInviterButton: '绑定推荐人',
     referralTitle: '推荐统计',
     referralDirectCount: '直推账号数',
     referralDirectAmount: '直推金额(USDT)',
@@ -1278,11 +1280,21 @@ export default function App() {
 
   const handleOnboardingComplete = async (referralWallet: string) => {
     try {
+      const normalized = referralWallet.trim().toLowerCase();
+      if (!normalized) {
+        return;
+      }
+
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
       await AsyncStorage.removeItem(ONBOARDING_MINIMIZED_KEY);
-      const normalized = referralWallet.trim().toLowerCase();
       await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
       setPendingReferralWallet(normalized);
+      if (walletAddress && userId) {
+        await tryBindReferralIfNeeded(walletAddress, normalized);
+        const details = await getUserDetails(userId);
+        setUserDetails(details);
+        await refreshReferralSummary(userId);
+      }
     } catch {}
     setOnboardingMinimized(false);
     setOnboardingVisible(false);
@@ -1296,6 +1308,13 @@ export default function App() {
   const handleExpandOnboarding = () => {
     setOnboardingVisible(true);
     setOnboardingMinimized(false);
+    void AsyncStorage.setItem(ONBOARDING_MINIMIZED_KEY, '0').catch(() => null);
+  };
+
+  const handleOpenReferralSetup = () => {
+    setOnboardingVisible(true);
+    setOnboardingMinimized(false);
+    void AsyncStorage.removeItem(ONBOARDING_COMPLETED_KEY).catch(() => null);
     void AsyncStorage.setItem(ONBOARDING_MINIMIZED_KEY, '0').catch(() => null);
   };
 
@@ -1607,17 +1626,20 @@ export default function App() {
     setReferralMembersLoading(false);
   };
 
-  const tryBindReferralIfNeeded = async (wallet: string) => {
-    if (!pendingReferralWallet) return;
-    if (pendingReferralWallet.toLowerCase() === wallet.toLowerCase()) {
-      return;
+  const tryBindReferralIfNeeded = async (wallet: string, referralWalletOverride?: string): Promise<boolean> => {
+    const referralWallet = (referralWalletOverride ?? pendingReferralWallet).trim().toLowerCase();
+    if (!referralWallet) return false;
+    if (referralWallet === wallet.toLowerCase()) {
+      return false;
     }
     try {
-      await bindReferral(wallet, pendingReferralWallet);
+      await bindReferral(wallet, referralWallet);
       setPendingReferralWallet('');
       await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
+      return true;
     } catch {
       // keep local referral wallet for future retry
+      return false;
     }
   };
 
@@ -2657,6 +2679,7 @@ export default function App() {
                 userId: userDetails.parentUserId,
                 wallet: inviterWalletFromServer ?? inviterUser?.wallet ?? null,
               } : null}
+              onOpenReferralSetup={handleOpenReferralSetup}
               referralSummary={referralSummary}
               referralMembers={referralMembers}
               referralMembersTotal={referralMembersTotal}
