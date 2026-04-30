@@ -2674,6 +2674,7 @@ export default function App() {
               guideCtaLabel={guideCtaLabel}
               guideDescription={guideDescription}
               guideAction={guideAction}
+              onSetupMiner={startMining}
               setActiveTab={setActiveTab}
               onCopyAddress={handleCopyAddress}
               copyState={copyState}

@@ -19,14 +19,42 @@ export class OwnerRelayer {
     env;
     provider;
     wallet;
+    superDecimals = null;
+    usdtDecimals = null;
     address;
     constructor(env) {
         this.env = env;
         if (!env.RPC_URL)
             throw new Error("RPC_URL not configured");
-        this.provider = new JsonRpcProvider(env.RPC_URL);
+        this.provider = this.createProvider(env.RPC_URL);
         this.wallet = env.OWNER_PRIVATE_KEY ? new Wallet(env.OWNER_PRIVATE_KEY, this.provider) : null;
         this.address = this.wallet?.address ?? "";
+    }
+    createProvider(url) {
+        return new JsonRpcProvider(url, undefined, { staticNetwork: true });
+    }
+    getRpcUrls() {
+        const urls = [
+            this.env.RPC_URL,
+            ...(this.env.BSC_RPC_UPSTREAMS ?? "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+        ].filter(Boolean);
+        return Array.from(new Set(urls));
+    }
+    async withReadProvider(read) {
+        let lastError = null;
+        for (const url of this.getRpcUrls()) {
+            const provider = url === this.env.RPC_URL ? this.provider : this.createProvider(url);
+            try {
+                return await read(provider);
+            }
+            catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError instanceof Error ? lastError : new Error("All BSC RPC upstreams failed");
     }
     requireWallet() {
         if (!this.wallet)
@@ -45,22 +73,43 @@ export class OwnerRelayer {
         return new Contract(this.env.USDT_TOKEN_ADDRESS, ERC20_ABI, this.requireWallet());
     }
     async getNativeBalance(addr) {
-        const balance = await this.provider.getBalance(getAddress(addr));
+        const address = getAddress(addr);
+        const balance = await this.withReadProvider((provider) => provider.getBalance(address));
         return { raw: balance.toString(), formatted: formatUnits(balance, 18), decimals: 18 };
     }
     async getSuperBalance(addr) {
-        const c = this.superReader();
-        const [balRaw, decRaw] = await Promise.all([c.balanceOf(getAddress(addr)), c.decimals()]);
-        const decimals = Number(decRaw);
+        const address = getAddress(addr);
+        const [balRaw, decimals] = await Promise.all([
+            this.withReadProvider((provider) => new Contract(this.env.SUPER_TOKEN_ADDRESS, SUPER_ABI, provider).balanceOf(address)),
+            this.getSuperDecimals(),
+        ]);
         return { raw: balRaw.toString(), formatted: formatUnits(balRaw, decimals), decimals };
     }
     async getUsdtBalance(addr) {
         if (!this.env.USDT_TOKEN_ADDRESS)
             return null;
-        const c = new Contract(this.env.USDT_TOKEN_ADDRESS, ERC20_ABI, this.provider);
-        const [balRaw, decRaw] = await Promise.all([c.balanceOf(getAddress(addr)), c.decimals()]);
-        const decimals = Number(decRaw);
+        const address = getAddress(addr);
+        const [balRaw, decimals] = await Promise.all([
+            this.withReadProvider((provider) => new Contract(this.env.USDT_TOKEN_ADDRESS, ERC20_ABI, provider).balanceOf(address)),
+            this.getUsdtDecimals(),
+        ]);
         return { raw: balRaw.toString(), formatted: formatUnits(balRaw, decimals), decimals };
+    }
+    async getSuperDecimals() {
+        if (this.superDecimals !== null)
+            return this.superDecimals;
+        const decRaw = await this.withReadProvider((provider) => new Contract(this.env.SUPER_TOKEN_ADDRESS, SUPER_ABI, provider).decimals());
+        this.superDecimals = Number(decRaw);
+        return this.superDecimals;
+    }
+    async getUsdtDecimals() {
+        if (this.usdtDecimals !== null)
+            return this.usdtDecimals;
+        if (!this.env.USDT_TOKEN_ADDRESS)
+            return 18;
+        const decRaw = await this.withReadProvider((provider) => new Contract(this.env.USDT_TOKEN_ADDRESS, ERC20_ABI, provider).decimals());
+        this.usdtDecimals = Number(decRaw);
+        return this.usdtDecimals;
     }
     async getWalletBalances(addr) {
         const [bnb, usdt, superBalance] = await Promise.all([

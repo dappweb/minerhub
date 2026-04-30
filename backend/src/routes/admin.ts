@@ -314,6 +314,51 @@ function isNormalizedPayoutWallet(
   return item !== null && Boolean(item.walletAddress);
 }
 
+async function hydrateRowsWithBalances<T extends { wallet: string }>(
+  env: Env,
+  rows: T[],
+): Promise<Array<T & { bnbBalance: string | null; usdtBalance: string | null; superBalance: string | null }>> {
+  const withEmptyBalances = rows.map((row) => ({
+    ...row,
+    bnbBalance: null,
+    usdtBalance: null,
+    superBalance: null,
+  }));
+
+  const relayer = tryCreateRelayer(env);
+  if (!relayer || withEmptyBalances.length === 0) {
+    return withEmptyBalances;
+  }
+
+  const walletBalances = new Map<string, { bnb: string | null; usdt: string | null; super: string | null }>();
+  const uniqueWallets = Array.from(new Set(
+    withEmptyBalances
+      .map((item) => item.wallet.trim().toLowerCase())
+      .filter(Boolean)
+  ));
+  const batchSize = 5;
+
+  for (let i = 0; i < uniqueWallets.length; i += batchSize) {
+    const batch = uniqueWallets.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map(async (wallet) => {
+        const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+        walletBalances.set(wallet, balances);
+      })
+    );
+  }
+
+  return withEmptyBalances.map((row) => {
+    const balances = walletBalances.get(row.wallet.trim().toLowerCase()) ?? { bnb: null, usdt: null, super: null };
+    return {
+      ...row,
+      bnbBalance: balances.bnb,
+      usdtBalance: balances.usdt,
+      superBalance: balances.super,
+    };
+  });
+}
+
 async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
   const { results } = await env.DB.prepare(
     `SELECT
@@ -350,27 +395,9 @@ async function readCustomerSummaries(env: Env): Promise<CustomerSummary[]> {
     activeDeviceCount: Number((row as { activeDeviceCount?: number }).activeDeviceCount ?? 0),
     subAccountCount: Number((row as { subAccountCount?: number }).subAccountCount ?? 0),
     onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
-    bnbBalance: null,
-    usdtBalance: null,
-    superBalance: null,
   }));
 
-  const relayer = tryCreateRelayer(env);
-  if (!relayer) {
-    return baseRows;
-  }
-
-  return await Promise.all(
-    baseRows.map(async (row) => {
-      const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-      return {
-        ...row,
-        bnbBalance: balances.bnb,
-        usdtBalance: balances.usdt,
-        superBalance: balances.super,
-      };
-    })
-  );
+  return hydrateRowsWithBalances(env, baseRows);
 }
 
 async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: string, allowedTypes: ContractTypeScope): Promise<CustomerSummary[]> {
@@ -423,27 +450,9 @@ async function readCustomerSummariesByInviterWallet(env: Env, inviterWallet: str
     activeDeviceCount: Number((row as { activeDeviceCount?: number }).activeDeviceCount ?? 0),
     subAccountCount: Number((row as { subAccountCount?: number }).subAccountCount ?? 0),
     onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
-    bnbBalance: null,
-    usdtBalance: null,
-    superBalance: null,
   }));
 
-  const relayer = tryCreateRelayer(env);
-  if (!relayer) {
-    return baseRows;
-  }
-
-  return await Promise.all(
-    baseRows.map(async (row) => {
-      const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-      return {
-        ...row,
-        bnbBalance: balances.bnb,
-        usdtBalance: balances.usdt,
-        superBalance: balances.super,
-      };
-    })
-  );
+  return hydrateRowsWithBalances(env, baseRows);
 }
 
 async function readAdminSummary(env: Env, wallet: string | null): Promise<AdminSummary | null> {
@@ -712,35 +721,9 @@ async function readAdminDevices(
     contractActive: Number((row as { contractActive?: number }).contractActive ?? 0),
     monthlyCardDays: Number((row as { monthlyCardDays?: number }).monthlyCardDays ?? 30),
     onlineStatus: deriveLiveOnlineStatus((row as { lastSeenAt?: string | null }).lastSeenAt ?? null),
-    bnbBalance: null,
-    usdtBalance: null,
-    superBalance: null,
   }));
 
-  const relayer = tryCreateRelayer(env);
-  if (!relayer) {
-    return { items: baseRows, total: baseRows.length };
-  }
-
-  const walletBalances = new Map<string, { bnb: string | null; usdt: string | null; super: string | null }>();
-  const uniqueWallets = Array.from(new Set(baseRows.map((item) => item.wallet.toLowerCase())));
-
-  await Promise.all(
-    uniqueWallets.map(async (wallet) => {
-      const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-      walletBalances.set(wallet, balances);
-    })
-  );
-
-  const items = baseRows.map((row) => {
-    const balances = walletBalances.get(row.wallet.toLowerCase()) ?? { bnb: null, usdt: null, super: null };
-    return {
-      ...row,
-      bnbBalance: balances.bnb,
-      usdtBalance: balances.usdt,
-      superBalance: balances.super,
-    };
-  });
+  const items = await hydrateRowsWithBalances(env, baseRows);
 
   return { items, total: items.length };
 }

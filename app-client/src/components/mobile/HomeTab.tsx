@@ -21,6 +21,7 @@ export interface HomeTabProps {
   guideCtaLabel: string;
   guideDescription: string;
   guideAction: () => void;
+  onSetupMiner: () => void;
   setActiveTab: (tab: BottomTab) => void;
   onCopyAddress: () => void;
   copyState: 'idle' | 'copied' | 'failed';
@@ -39,6 +40,7 @@ export interface HomeTabProps {
     totalOnline: string;
     monthOnline: string;
     homePrimaryAction: string;
+    setupMiner: string;
     tabEarnings: string;
     tabExchange: string;
     copyAddress: string;
@@ -72,6 +74,7 @@ export default function HomeTab({
   guideCtaLabel,
   guideDescription,
   guideAction,
+  onSetupMiner,
   setActiveTab,
   onCopyAddress,
   copyState,
@@ -137,6 +140,13 @@ export default function HomeTab({
         </View>
 
         <View style={styles.secondaryActionsRow}>
+          <TouchableOpacity
+            style={[styles.secondaryActionBtn, (!identityReady || isBusy || contractExpired) && s.disabledBtn]}
+            onPress={onSetupMiner}
+            disabled={!identityReady || isBusy || contractExpired}
+          >
+            <Text style={styles.secondaryActionText}>{t.setupMiner}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryActionBtn} onPress={() => setActiveTab('earnings')}>
             <Text style={styles.secondaryActionText}>{t.tabEarnings}</Text>
           </TouchableOpacity>

@@ -22,13 +22,43 @@ const ERC20_ABI = [
 export class OwnerRelayer {
   private provider: JsonRpcProvider;
   private wallet: Wallet | null;
+  private superDecimals: number | null = null;
+  private usdtDecimals: number | null = null;
   readonly address: string;
 
   constructor(private env: Env) {
     if (!env.RPC_URL) throw new Error("RPC_URL not configured");
-    this.provider = new JsonRpcProvider(env.RPC_URL);
+    this.provider = this.createProvider(env.RPC_URL);
     this.wallet = env.OWNER_PRIVATE_KEY ? new Wallet(env.OWNER_PRIVATE_KEY, this.provider) : null;
     this.address = this.wallet?.address ?? "";
+  }
+
+  private createProvider(url: string): JsonRpcProvider {
+    return new JsonRpcProvider(url, undefined, { staticNetwork: true });
+  }
+
+  private getRpcUrls(): string[] {
+    const urls = [
+      this.env.RPC_URL,
+      ...(this.env.BSC_RPC_UPSTREAMS ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ].filter(Boolean);
+    return Array.from(new Set(urls));
+  }
+
+  private async withReadProvider<T>(read: (provider: JsonRpcProvider) => Promise<T>): Promise<T> {
+    let lastError: unknown = null;
+    for (const url of this.getRpcUrls()) {
+      const provider = url === this.env.RPC_URL ? this.provider : this.createProvider(url);
+      try {
+        return await read(provider);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("All BSC RPC upstreams failed");
   }
 
   private requireWallet(): Wallet {
@@ -50,23 +80,43 @@ export class OwnerRelayer {
   }
 
   async getNativeBalance(addr: string): Promise<{ raw: string; formatted: string; decimals: number }> {
-    const balance = await this.provider.getBalance(getAddress(addr));
+    const address = getAddress(addr);
+    const balance = await this.withReadProvider((provider) => provider.getBalance(address));
     return { raw: balance.toString(), formatted: formatUnits(balance, 18), decimals: 18 };
   }
 
   async getSuperBalance(addr: string): Promise<{ raw: string; formatted: string; decimals: number }> {
-    const c = this.superReader();
-    const [balRaw, decRaw] = await Promise.all([c.balanceOf(getAddress(addr)), c.decimals()]);
-    const decimals = Number(decRaw);
+    const address = getAddress(addr);
+    const [balRaw, decimals] = await Promise.all([
+      this.withReadProvider((provider) => new Contract(this.env.SUPER_TOKEN_ADDRESS, SUPER_ABI, provider).balanceOf(address)),
+      this.getSuperDecimals(),
+    ]);
     return { raw: balRaw.toString(), formatted: formatUnits(balRaw, decimals), decimals };
   }
 
   async getUsdtBalance(addr: string): Promise<{ raw: string; formatted: string; decimals: number } | null> {
     if (!this.env.USDT_TOKEN_ADDRESS) return null;
-    const c = new Contract(this.env.USDT_TOKEN_ADDRESS, ERC20_ABI, this.provider);
-    const [balRaw, decRaw] = await Promise.all([c.balanceOf(getAddress(addr)), c.decimals()]);
-    const decimals = Number(decRaw);
+    const address = getAddress(addr);
+    const [balRaw, decimals] = await Promise.all([
+      this.withReadProvider((provider) => new Contract(this.env.USDT_TOKEN_ADDRESS!, ERC20_ABI, provider).balanceOf(address)),
+      this.getUsdtDecimals(),
+    ]);
     return { raw: balRaw.toString(), formatted: formatUnits(balRaw, decimals), decimals };
+  }
+
+  private async getSuperDecimals(): Promise<number> {
+    if (this.superDecimals !== null) return this.superDecimals;
+    const decRaw = await this.withReadProvider((provider) => new Contract(this.env.SUPER_TOKEN_ADDRESS, SUPER_ABI, provider).decimals());
+    this.superDecimals = Number(decRaw);
+    return this.superDecimals;
+  }
+
+  private async getUsdtDecimals(): Promise<number> {
+    if (this.usdtDecimals !== null) return this.usdtDecimals;
+    if (!this.env.USDT_TOKEN_ADDRESS) return 18;
+    const decRaw = await this.withReadProvider((provider) => new Contract(this.env.USDT_TOKEN_ADDRESS!, ERC20_ABI, provider).decimals());
+    this.usdtDecimals = Number(decRaw);
+    return this.usdtDecimals;
   }
 
   async getWalletBalances(addr: string): Promise<{ bnb: string | null; usdt: string | null; super: string | null }> {

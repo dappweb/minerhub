@@ -94,10 +94,14 @@ export default function DeviceTab({
           </Text>
         </View>
         <View style={s.quickRow}>
-          <TouchableOpacity style={s.quickBtn} onPress={startMining} disabled={isBusy || !identityReady}>
+          <TouchableOpacity
+            style={[s.quickBtn, (isBusy || !identityReady) && s.disabledBtn]}
+            onPress={startMining}
+            disabled={isBusy || !identityReady}
+          >
             <Text style={s.quickBtnText}>{t.setupMiner}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.quickBtn} onPress={initializeAccount} disabled={isBusy}>
+          <TouchableOpacity style={[s.quickBtn, isBusy && s.disabledBtn]} onPress={initializeAccount} disabled={isBusy}>
             <Text style={s.quickBtnText}>{t.syncIdentity}</Text>
           </TouchableOpacity>
         </View>

@@ -153,6 +153,39 @@ function parsePayoutWallets(raw) {
 function isNormalizedPayoutWallet(item) {
     return item !== null && Boolean(item.walletAddress);
 }
+async function hydrateRowsWithBalances(env, rows) {
+    const withEmptyBalances = rows.map((row) => ({
+        ...row,
+        bnbBalance: null,
+        usdtBalance: null,
+        superBalance: null,
+    }));
+    const relayer = tryCreateRelayer(env);
+    if (!relayer || withEmptyBalances.length === 0) {
+        return withEmptyBalances;
+    }
+    const walletBalances = new Map();
+    const uniqueWallets = Array.from(new Set(withEmptyBalances
+        .map((item) => item.wallet.trim().toLowerCase())
+        .filter(Boolean)));
+    const batchSize = 5;
+    for (let i = 0; i < uniqueWallets.length; i += batchSize) {
+        const batch = uniqueWallets.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (wallet) => {
+            const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
+            walletBalances.set(wallet, balances);
+        }));
+    }
+    return withEmptyBalances.map((row) => {
+        const balances = walletBalances.get(row.wallet.trim().toLowerCase()) ?? { bnb: null, usdt: null, super: null };
+        return {
+            ...row,
+            bnbBalance: balances.bnb,
+            usdtBalance: balances.usdt,
+            superBalance: balances.super,
+        };
+    });
+}
 async function readCustomerSummaries(env) {
     const { results } = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
@@ -186,23 +219,8 @@ async function readCustomerSummaries(env) {
         activeDeviceCount: Number(row.activeDeviceCount ?? 0),
         subAccountCount: Number(row.subAccountCount ?? 0),
         onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
-        bnbBalance: null,
-        usdtBalance: null,
-        superBalance: null,
     }));
-    const relayer = tryCreateRelayer(env);
-    if (!relayer) {
-        return baseRows;
-    }
-    return await Promise.all(baseRows.map(async (row) => {
-        const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-        return {
-            ...row,
-            bnbBalance: balances.bnb,
-            usdtBalance: balances.usdt,
-            superBalance: balances.super,
-        };
-    }));
+    return hydrateRowsWithBalances(env, baseRows);
 }
 async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedTypes) {
     const inviter = await env.DB.prepare("SELECT id FROM users WHERE wallet = ? LIMIT 1")
@@ -248,23 +266,8 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
         activeDeviceCount: Number(row.activeDeviceCount ?? 0),
         subAccountCount: Number(row.subAccountCount ?? 0),
         onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
-        bnbBalance: null,
-        usdtBalance: null,
-        superBalance: null,
     }));
-    const relayer = tryCreateRelayer(env);
-    if (!relayer) {
-        return baseRows;
-    }
-    return await Promise.all(baseRows.map(async (row) => {
-        const balances = await relayer.getWalletBalances(row.wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-        return {
-            ...row,
-            bnbBalance: balances.bnb,
-            usdtBalance: balances.usdt,
-            superBalance: balances.super,
-        };
-    }));
+    return hydrateRowsWithBalances(env, baseRows);
 }
 async function readAdminSummary(env, wallet) {
     if (!wallet)
@@ -461,29 +464,8 @@ async function readAdminDevices(env, url, scopeUserId, allowedTypes) {
         contractActive: Number(row.contractActive ?? 0),
         monthlyCardDays: Number(row.monthlyCardDays ?? 30),
         onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
-        bnbBalance: null,
-        usdtBalance: null,
-        superBalance: null,
     }));
-    const relayer = tryCreateRelayer(env);
-    if (!relayer) {
-        return { items: baseRows, total: baseRows.length };
-    }
-    const walletBalances = new Map();
-    const uniqueWallets = Array.from(new Set(baseRows.map((item) => item.wallet.toLowerCase())));
-    await Promise.all(uniqueWallets.map(async (wallet) => {
-        const balances = await relayer.getWalletBalances(wallet).catch(() => ({ bnb: null, usdt: null, super: null }));
-        walletBalances.set(wallet, balances);
-    }));
-    const items = baseRows.map((row) => {
-        const balances = walletBalances.get(row.wallet.toLowerCase()) ?? { bnb: null, usdt: null, super: null };
-        return {
-            ...row,
-            bnbBalance: balances.bnb,
-            usdtBalance: balances.usdt,
-            superBalance: balances.super,
-        };
-    });
+    const items = await hydrateRowsWithBalances(env, baseRows);
     return { items, total: items.length };
 }
 async function getAdminDeviceDetail(env, deviceRecordId) {
@@ -1311,6 +1293,9 @@ export async function handleAdmin(request, env, pathParts) {
     const isPrimaryOwner = requesterRole === "owner";
     const scopeUserId = isPrimaryOwner ? null : await ensureUserIdByWallet(env, requesterWallet);
     const allowedTypes = isPrimaryOwner ? null : await getSubAdminContractScope(env, requesterWallet);
+    if (!isPrimaryOwner && request.method !== "GET") {
+        return json({ error: "SubAdmin is read-only. Owner permission is required for renewals and updates." }, 403);
+    }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
         return handleCustomerList(env, requesterWallet, requesterRole, allowedTypes);
     }
