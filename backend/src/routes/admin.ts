@@ -1942,6 +1942,10 @@ export async function handleAdmin(request: Request, env: Env, pathParts: string[
   const scopeUserId = isPrimaryOwner ? null : await ensureUserIdByWallet(env, requesterWallet);
   const allowedTypes = isPrimaryOwner ? null : await getSubAdminContractScope(env, requesterWallet);
 
+  if (!isPrimaryOwner && request.method !== "GET") {
+    return json({ error: "SubAdmin is read-only. Owner permission is required for renewals and updates." }, 403);
+  }
+
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
     return handleCustomerList(env, requesterWallet, requesterRole, allowedTypes);
   }

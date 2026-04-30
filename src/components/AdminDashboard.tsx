@@ -633,6 +633,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const poolAddress = getMiningPoolAddress();
   const superAddress = getSuperTokenAddress();
   const swapRouterAddress = getSwapRouterAddress();
+  const isSubAdminReadOnly = ownerSessionRole === 'subadmin';
+  const canOperateCustomers = ownerSessionRole === 'owner';
 
   const hasValidOwnerSession = useCallback(() => {
     if (!ownerSessionToken || !ownerSessionExpiresAt) return false;
@@ -978,6 +980,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const handleSaveDeviceDetail = async () => {
     if (!deviceDetail || !deviceDetailForm) return;
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能保存设备设置。');
+      return;
+    }
     const hashrateNum = Number(deviceDetailForm.hashrate);
     const monthlyDaysNum = Number(deviceDetailForm.monthlyCardDays);
     const rateNum = Number(deviceDetailForm.rewardRateUsdtPerHour);
@@ -1030,6 +1036,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleBulkDeviceUpdate = useCallback(async (mode: 'rate' | 'extend' | 'monthlyRenew' | 'status') => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能批量修改设备或续月卡。');
+      return;
+    }
     const deviceIds = Array.from(selectedDeviceIds);
     if (deviceIds.length === 0) {
       setBackendError('请先勾选至少一个设备');
@@ -1095,9 +1105,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     selectedDeviceId,
     loadDeviceDetail,
     loadBackendData,
+    canOperateCustomers,
   ]);
 
   const handleResolveMachineCodeConflict = useCallback(async (item: MachineCodeConflictItem) => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能处理设备标识冲突。');
+      return;
+    }
     const fallbackKeepUser =
       item.users.find((user) => user.contractActive === 1)?.userId
       ?? item.users[0]?.userId
@@ -1131,7 +1146,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setMachineCodeResolveLoading('');
     }
-  }, [loadBackendData, machineCodeKeepUserByCode, signedRequest]);
+  }, [canOperateCustomers, loadBackendData, machineCodeKeepUserByCode, signedRequest]);
 
   const refreshOnChainData = useCallback(async () => {
     if (!poolAddress || !adminWallet) {
@@ -1869,6 +1884,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleActivateCustomer = async () => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能激活客户或续月卡。');
+      return;
+    }
     if (!activateCustomerId) {
       setBackendError('请先选择客户');
       return;
@@ -1891,6 +1910,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleBulkRate = async () => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能修改收益率或续月卡。');
+      return;
+    }
     const ids = Array.from(selectedCustomerIds);
     if (ids.length === 0) {
       setBackendError('请先勾选客户');
@@ -1919,6 +1942,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleExtendContract = async (userId: string) => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能执行合约续期。');
+      return;
+    }
     const daysNum = Math.max(1, Math.floor(Number(extendDays) || 30));
     if (!window.confirm(`确认为该客户续期 ${daysNum} 天？`)) return;
     try {
@@ -1934,6 +1961,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleMonthlyRenew = async (userId: string, userMonthlyDays?: number) => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能续月卡。');
+      return;
+    }
     const fallbackDays = Math.max(1, Math.floor(Number(monthlyCardDays) || 30));
     const targetDays = Math.max(1, Math.floor(Number(userMonthlyDays) || fallbackDays));
     if (!window.confirm(`确认为该客户按月续期 ${targetDays} 天？`)) return;
@@ -1950,6 +1981,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   };
 
   const handleRenew30AndFundSuper = async (customer: CustomerItem) => {
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能续期或充值 SUPER。');
+      return;
+    }
     const parsed = Number(customerRenewSuperAmount);
     if (!isAddress(customer.wallet)) {
       setBackendError('客户钱包地址不合法，无法充值 SUPER');
@@ -2013,6 +2048,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const handleSaveCustomerDetail = async () => {
     if (!selectedCustomerDetailId || !customerDetailForm) return;
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能保存运营设置。');
+      return;
+    }
     const rateNum = Number(customerDetailForm.rewardRateUsdtPerHour);
     const monthlyDaysNum = Math.max(1, Math.floor(Number(customerDetailForm.monthlyCardDays) || 30));
     if (!Number.isFinite(rateNum) || rateNum < 0) {
@@ -2505,7 +2544,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </>
               ) : (
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
-                  当前以 SubAdmin 身份登录，仅展示你邀请范围内且合同类型允许的客户与设备；交易记录、系统设置和资产操作仅 Owner 可见。
+                  当前以 SubAdmin 身份登录，仅可查看你邀请范围内且合同类型允许的客户与设备；续月卡、续合约、充值和运营设置保存仅 Owner 可操作。
                 </div>
               )}
 
@@ -3387,7 +3426,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-4">
                   <div className="text-sm font-semibold text-amber-200 mb-2">系统管理员</div>
                   <div className="text-[11px] text-amber-100/80 mb-2">
-                    当前角色：{ownerSessionRole === 'owner' ? 'Owner 超级管理员（可见全部账户）' : ownerSessionRole === 'subadmin' ? 'SubAdmin 子管理员（仅可见自己推荐账户）' : '未识别（请重新钱包登录）'}
+                    当前角色：{ownerSessionRole === 'owner' ? 'Owner 超级管理员（可见全部账户，可操作续费）' : ownerSessionRole === 'subadmin' ? 'SubAdmin 子管理员（只读查看，不可续月卡）' : '未识别（请重新钱包登录）'}
                   </div>
                   <div className="text-xs text-slate-300 break-all font-mono mb-3">{adminSummary?.wallet ?? adminWallet}</div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
@@ -3451,44 +3490,52 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   >
                     清空
                   </button>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">批量收益率</span>
-                    <input
-                      value={bulkRate}
-                      onChange={(e) => setBulkRate(e.target.value)}
-                      placeholder="0.084"
-                      className="h-8 w-24 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-purple-400"
-                    />
-                    <span className="text-slate-400">USDT/h</span>
-                    <button
-                      type="button"
-                      onClick={handleBulkRate}
-                      disabled={adminActionLoading === 'bulkRate' || selectedCustomerIds.size === 0}
-                      className="px-2 py-1 rounded bg-purple-500 hover:bg-purple-400 text-slate-950 font-semibold disabled:opacity-50"
-                    >
-                      {adminActionLoading === 'bulkRate' ? '提交中…' : '应用'}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">续期天数</span>
-                    <input
-                      value={extendDays}
-                      onChange={(e) => setExtendDays(e.target.value)}
-                      placeholder="30"
-                      className="h-8 w-16 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-emerald-400"
-                    />
-                    <span className="text-slate-400">天（点行末按钮）</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">续期+充值</span>
-                    <input
-                      value={customerRenewSuperAmount}
-                      onChange={(e) => setCustomerRenewSuperAmount(e.target.value)}
-                      placeholder="100"
-                      className="h-8 w-20 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-amber-400"
-                    />
-                    <span className="text-slate-400">SUPER</span>
-                  </div>
+                  {canOperateCustomers ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">批量收益率</span>
+                        <input
+                          value={bulkRate}
+                          onChange={(e) => setBulkRate(e.target.value)}
+                          placeholder="0.084"
+                          className="h-8 w-24 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-purple-400"
+                        />
+                        <span className="text-slate-400">USDT/h</span>
+                        <button
+                          type="button"
+                          onClick={handleBulkRate}
+                          disabled={adminActionLoading === 'bulkRate' || selectedCustomerIds.size === 0}
+                          className="px-2 py-1 rounded bg-purple-500 hover:bg-purple-400 text-slate-950 font-semibold disabled:opacity-50"
+                        >
+                          {adminActionLoading === 'bulkRate' ? '提交中…' : '应用'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">续期天数</span>
+                        <input
+                          value={extendDays}
+                          onChange={(e) => setExtendDays(e.target.value)}
+                          placeholder="30"
+                          className="h-8 w-16 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-emerald-400"
+                        />
+                        <span className="text-slate-400">天（点行末按钮）</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">续期+充值</span>
+                        <input
+                          value={customerRenewSuperAmount}
+                          onChange={(e) => setCustomerRenewSuperAmount(e.target.value)}
+                          placeholder="100"
+                          className="h-8 w-20 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-amber-400"
+                        />
+                        <span className="text-slate-400">SUPER</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-400">
+                      SubAdmin 只读：不可批量修改或续月卡
+                    </span>
+                  )}
                   <span className="ml-auto text-slate-400">当前显示 {visibleCustomers.length} / {customers.length}</span>
                 </div>
 
@@ -3591,30 +3638,34 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             </td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleMonthlyRenew(customer.id, customer.monthlyCardDays)}
-                                  disabled={adminActionLoading === `extend-monthly-${customer.id}`}
-                                  className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
-                                >
-                                  {adminActionLoading === `extend-monthly-${customer.id}` ? '…' : '按月续期'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleExtendContract(customer.id)}
-                                  disabled={adminActionLoading === `extend-${customer.id}`}
-                                  className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                                >
-                                  {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleRenew30AndFundSuper(customer)}
-                                  disabled={adminActionLoading === `renew-fund-${customer.id}` || !superAddress}
-                                  className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
-                                >
-                                  {adminActionLoading === `renew-fund-${customer.id}` ? '…' : '+30天+SUPER'}
-                                </button>
+                                {canOperateCustomers && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMonthlyRenew(customer.id, customer.monthlyCardDays)}
+                                      disabled={adminActionLoading === `extend-monthly-${customer.id}`}
+                                      className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50"
+                                    >
+                                      {adminActionLoading === `extend-monthly-${customer.id}` ? '…' : '按月续期'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleExtendContract(customer.id)}
+                                      disabled={adminActionLoading === `extend-${customer.id}`}
+                                      className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                                    >
+                                      {adminActionLoading === `extend-${customer.id}` ? '…' : `+${extendDays || 30}天`}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleRenew30AndFundSuper(customer)}
+                                      disabled={adminActionLoading === `renew-fund-${customer.id}` || !superAddress}
+                                      className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                                    >
+                                      {adminActionLoading === `renew-fund-${customer.id}` ? '…' : '+30天+SUPER'}
+                                    </button>
+                                  </>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => void openCustomerDetailPanel(customer.id)}
@@ -3633,9 +3684,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 </div>
 
                 {selectedCustomerDetailId && customerDetailForm && (
-                  <div className="mt-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-indigo-100">用户运营操作面板</div>
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm">
+                    <div className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-indigo-500/30 bg-slate-950 shadow-2xl shadow-indigo-950/60">
+                    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-slate-950/95 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-indigo-100">用户运营设置</div>
+                        <div className="mt-1 text-[11px] text-slate-400">
+                          {isSubAdminReadOnly ? 'SubAdmin 只读查看，不可续月卡或保存修改' : '核对用户信息后，可保存标签、收益率和设备参数'}
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
@@ -3649,12 +3706,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       </button>
                     </div>
 
+                    <div className="p-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs mb-3">
                       <label className="flex flex-col gap-1">
                         <span className="text-slate-300">标签（昵称）</span>
                         <input
                           value={customerDetailForm.nickname}
                           onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, nickname: e.target.value } : prev)}
+                          readOnly={isSubAdminReadOnly}
                           placeholder="例如：高净值 / 重点跟进"
                           className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                         />
@@ -3664,6 +3723,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <input
                           value={customerDetailForm.notes}
                           onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, notes: e.target.value } : prev)}
+                          readOnly={isSubAdminReadOnly}
                           placeholder="例如：本周回访 / 重点续费"
                           className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                         />
@@ -3673,6 +3733,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <input
                           value={customerDetailForm.rewardRateUsdtPerHour}
                           onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, rewardRateUsdtPerHour: e.target.value } : prev)}
+                          readOnly={isSubAdminReadOnly}
                           className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                         />
                       </label>
@@ -3681,6 +3742,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <input
                           value={customerDetailForm.monthlyCardDays}
                           onChange={(e) => setCustomerDetailForm((prev) => prev ? { ...prev, monthlyCardDays: e.target.value } : prev)}
+                          readOnly={isSubAdminReadOnly}
                           className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                         />
                       </label>
@@ -3704,6 +3766,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                   ...prev,
                                   devices: prev.devices.map((item) => item.id === device.id ? { ...item, deviceId: e.target.value } : item),
                                 } : prev)}
+                                readOnly={isSubAdminReadOnly}
                                 className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                               />
                             </label>
@@ -3716,6 +3779,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                   devices: prev.devices.map((item) => item.id === device.id ? { ...item, hashrate: e.target.value } : item),
                                 } : prev)}
                                 inputMode="numeric"
+                                readOnly={isSubAdminReadOnly}
                                 className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                               />
                             </label>
@@ -3727,6 +3791,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                                   ...prev,
                                   devices: prev.devices.map((item) => item.id === device.id ? { ...item, status: e.target.value } : item),
                                 } : prev)}
+                                disabled={isSubAdminReadOnly}
                                 className="h-9 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                               >
                                 <option value="active">active</option>
@@ -3750,40 +3815,50 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSaveCustomerDetail}
-                        disabled={adminActionLoading === `save-customer-${selectedCustomerDetailId}`}
-                        className="px-3 py-1.5 rounded bg-indigo-500 text-slate-950 text-xs font-semibold hover:bg-indigo-400 disabled:opacity-50"
-                      >
-                        {adminActionLoading === `save-customer-${selectedCustomerDetailId}` ? '保存中…' : '保存标签/收益率设置'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMonthlyRenew(selectedCustomerDetailId, Number(customerDetailForm.monthlyCardDays) || undefined)}
-                        disabled={adminActionLoading === `extend-monthly-${selectedCustomerDetailId}`}
-                        className="px-3 py-1.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-xs hover:bg-cyan-500/30 disabled:opacity-50"
-                      >
-                        {adminActionLoading === `extend-monthly-${selectedCustomerDetailId}` ? '处理中…' : '按月续费'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleExtendContract(selectedCustomerDetailId)}
-                        disabled={adminActionLoading === `extend-${selectedCustomerDetailId}`}
-                        className="px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs hover:bg-emerald-500/30 disabled:opacity-50"
-                      >
-                        {adminActionLoading === `extend-${selectedCustomerDetailId}` ? '处理中…' : `合约续期 +${extendDays || 30}天`}
-                      </button>
-                      {selectedCustomerDetail && (
-                        <button
-                          type="button"
-                          onClick={() => void handleRenew30AndFundSuper(selectedCustomerDetail)}
-                          disabled={adminActionLoading === `renew-fund-${selectedCustomerDetailId}` || !superAddress}
-                          className="px-3 py-1.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs hover:bg-amber-500/30 disabled:opacity-50"
-                        >
-                          {adminActionLoading === `renew-fund-${selectedCustomerDetailId}` ? '处理中…' : `续期30天并充值 ${customerRenewSuperAmount || 0} SUPER`}
-                        </button>
+                      {canOperateCustomers ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleSaveCustomerDetail}
+                            disabled={adminActionLoading === `save-customer-${selectedCustomerDetailId}`}
+                            className="px-3 py-1.5 rounded bg-indigo-500 text-slate-950 text-xs font-semibold hover:bg-indigo-400 disabled:opacity-50"
+                          >
+                            {adminActionLoading === `save-customer-${selectedCustomerDetailId}` ? '保存中…' : '保存设置'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMonthlyRenew(selectedCustomerDetailId, Number(customerDetailForm.monthlyCardDays) || undefined)}
+                            disabled={adminActionLoading === `extend-monthly-${selectedCustomerDetailId}`}
+                            className="px-3 py-1.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 text-xs hover:bg-cyan-500/30 disabled:opacity-50"
+                          >
+                            {adminActionLoading === `extend-monthly-${selectedCustomerDetailId}` ? '处理中…' : '按月续费'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExtendContract(selectedCustomerDetailId)}
+                            disabled={adminActionLoading === `extend-${selectedCustomerDetailId}`}
+                            className="px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs hover:bg-emerald-500/30 disabled:opacity-50"
+                          >
+                            {adminActionLoading === `extend-${selectedCustomerDetailId}` ? '处理中…' : `合约续期 +${extendDays || 30}天`}
+                          </button>
+                          {selectedCustomerDetail && (
+                            <button
+                              type="button"
+                              onClick={() => void handleRenew30AndFundSuper(selectedCustomerDetail)}
+                              disabled={adminActionLoading === `renew-fund-${selectedCustomerDetailId}` || !superAddress}
+                              className="px-3 py-1.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs hover:bg-amber-500/30 disabled:opacity-50"
+                            >
+                              {adminActionLoading === `renew-fund-${selectedCustomerDetailId}` ? '处理中…' : `续期30天并充值 ${customerRenewSuperAmount || 0} SUPER`}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <div className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">
+                          SubAdmin 仅可查看，月卡续费和保存修改请联系 Owner 操作。
+                        </div>
                       )}
+                    </div>
+                    </div>
                     </div>
                   </div>
                 )}
