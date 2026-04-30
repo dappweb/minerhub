@@ -153,6 +153,32 @@ async function ensureAdminProfileColumns(env: Env): Promise<void> {
 // the freshness of `last_seen_at` on every admin read.
 const HEARTBEAT_ONLINE_MS = 90_000; // within 1.5× the client heartbeat (30s)
 const HEARTBEAT_STALE_MS = 5 * 60_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseValidTime(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function addDaysFromActiveEnd(endAt: string | null | undefined, days: number, nowMs: number): string {
+  const currentTime = parseValidTime(endAt);
+  const baseTime = currentTime !== null && currentTime > nowMs ? currentTime : nowMs;
+  return new Date(baseTime + days * DAY_MS).toISOString();
+}
+
+function laterIsoDate(a: string | null | undefined, b: string): string {
+  const aTime = parseValidTime(a);
+  const bTime = parseValidTime(b) ?? 0;
+  return new Date(Math.max(aTime ?? 0, bTime)).toISOString();
+}
+
+const EFFECTIVE_CONTRACT_END_SQL = `CASE
+  WHEN cp.contract_end_at IS NULL THEN cp.monthly_card_end_at
+  WHEN cp.monthly_card_end_at IS NULL THEN cp.contract_end_at
+  WHEN cp.monthly_card_end_at > cp.contract_end_at THEN cp.monthly_card_end_at
+  ELSE cp.contract_end_at
+END`;
 
 export function deriveLiveOnlineStatus(lastSeenAt: string | null | undefined): "online" | "stale" | "offline" {
   if (!lastSeenAt) return "offline";
@@ -636,7 +662,7 @@ async function readAdminDevices(
   } else if (status === "contract_active") {
     clauses.push("COALESCE(cp.contract_active, 0) = 1");
   } else if (status === "contract_expired") {
-    clauses.push("cp.contract_end_at IS NOT NULL AND cp.contract_end_at <= ?");
+    clauses.push(`${EFFECTIVE_CONTRACT_END_SQL} IS NOT NULL AND ${EFFECTIVE_CONTRACT_END_SQL} <= ?`);
     params.push(nowIso());
   }
 
@@ -991,23 +1017,18 @@ async function handleAdminDeviceBulkUpdate(
     }
 
     if (hasExtend) {
+      const nowMs = Date.now();
       const monthlyDays = Math.max(1, Math.floor(Number(current.monthly_card_days ?? 30)));
       const days = body.mode === "monthly"
         ? monthlyDays
         : Math.max(1, Math.floor(Number(body.extendDays ?? 30)));
       if (body.mode === "monthly") {
-        const currentMonthlyEnd = current.monthly_card_end_at ? new Date(current.monthly_card_end_at) : null;
-        const monthlyBaseTime = currentMonthlyEnd && !Number.isNaN(currentMonthlyEnd.getTime()) && currentMonthlyEnd.getTime() > Date.now()
-          ? currentMonthlyEnd.getTime()
-          : Date.now();
-        const newMonthlyEnd = new Date(monthlyBaseTime + monthlyDays * 24 * 60 * 60 * 1000).toISOString();
+        const newMonthlyEnd = addDaysFromActiveEnd(current.monthly_card_end_at, monthlyDays, nowMs);
+        const newContractEnd = laterIsoDate(current.contract_end_at, newMonthlyEnd);
         await updateProfileField(env, current.user_id, "monthly_card_end_at", newMonthlyEnd);
+        await updateProfileField(env, current.user_id, "contract_end_at", newContractEnd);
       } else {
-        const currentEnd = current.contract_end_at ? new Date(current.contract_end_at) : null;
-        const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
-          ? currentEnd.getTime()
-          : Date.now();
-        const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+        const newEnd = addDaysFromActiveEnd(current.contract_end_at, days, nowMs);
         await updateProfileField(env, current.user_id, "contract_end_at", newEnd);
       }
       await updateProfileField(env, current.user_id, "contract_active", 1);
@@ -1598,27 +1619,24 @@ async function handleContractExtend(
   const service = await applyServiceContractType(env, allowedTypes, userId, requestedType);
   if (!service.ok) return service.response;
 
-  const currentEnd = existing?.contract_end_at ? new Date(existing.contract_end_at) : null;
-  const baseTime = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd.getTime() > Date.now()
-    ? currentEnd.getTime()
-    : Date.now();
-  const newEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+  const nowMs = Date.now();
+  const newEnd = addDaysFromActiveEnd(existing?.contract_end_at, days, nowMs);
 
   let newMonthlyEnd: string | null = null;
+  let contractEndAt = newEnd;
   if (body?.mode === "monthly") {
-    const currentMonthlyEnd = existing?.monthly_card_end_at ? new Date(existing.monthly_card_end_at) : null;
-    const monthlyBaseTime = currentMonthlyEnd && !Number.isNaN(currentMonthlyEnd.getTime()) && currentMonthlyEnd.getTime() > Date.now()
-      ? currentMonthlyEnd.getTime()
-      : Date.now();
-    newMonthlyEnd = new Date(monthlyBaseTime + monthlyDays * 24 * 60 * 60 * 1000).toISOString();
+    newMonthlyEnd = addDaysFromActiveEnd(existing?.monthly_card_end_at, monthlyDays, nowMs);
+    contractEndAt = laterIsoDate(existing?.contract_end_at, newMonthlyEnd);
     await updateProfileField(env, userId, "monthly_card_end_at", newMonthlyEnd);
+    await updateProfileField(env, userId, "contract_end_at", contractEndAt);
   } else {
-    await updateProfileField(env, userId, "contract_end_at", newEnd);
+    contractEndAt = newEnd;
+    await updateProfileField(env, userId, "contract_end_at", contractEndAt);
   }
   await updateProfileField(env, userId, "contract_active", 1);
   await updateProfileField(env, userId, "activation_status", "active");
 
-  return json({ ok: true, contractEndAt: body?.mode === "monthly" ? existing?.contract_end_at ?? null : newEnd, monthlyCardEndAt: newMonthlyEnd, extendedDays: days, mode: body?.mode ?? "custom" });
+  return json({ ok: true, contractEndAt, monthlyCardEndAt: newMonthlyEnd, extendedDays: days, mode: body?.mode ?? "custom" });
 }
 
 type AdminAlertItem = {

@@ -17,6 +17,13 @@ const CHAIN_ID = process.env.CHAIN_ID || '56';
 const HEARTBEAT_CONTINUITY_MS = 90_000;
 const MAX_HEARTBEAT_REWARD_MS = 90_000;
 
+function isContractExpiredAt(profile, referenceMs) {
+  const endTimes = [profile?.contract_end_at, profile?.monthly_card_end_at]
+    .map((value) => (value ? new Date(value).getTime() : NaN))
+    .filter((value) => Number.isFinite(value));
+  return endTimes.length > 0 && Math.max(...endTimes) < referenceMs;
+}
+
 // ─── 数据库初始化 ──────────────────────────────────────────────────────────────
 const dbPath = join(__dirname, 'dev.sqlite');
 const db = new Database(dbPath);
@@ -332,7 +339,7 @@ function accrueHeartbeatReward(userId, deviceId, heartbeatAt) {
   }
 
   const profile = db.prepare(
-    `SELECT contract_active, contract_end_at, reward_rate_usdt_per_hour, last_heartbeat_at
+    `SELECT contract_active, contract_end_at, monthly_card_end_at, reward_rate_usdt_per_hour, last_heartbeat_at
      FROM customer_profiles WHERE user_id = ?`
   ).get(userId);
 
@@ -359,7 +366,7 @@ function accrueHeartbeatReward(userId, deviceId, heartbeatAt) {
     return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'contract_inactive' };
   }
 
-  if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < heartbeatMs) {
+  if (isContractExpiredAt(profile, heartbeatMs)) {
     updateHeartbeatPresence(userId, deviceId, device.id, device.hashrate, heartbeatAt, 'heartbeat:contract_expired');
     return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: 'contract_expired' };
   }

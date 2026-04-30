@@ -9,17 +9,38 @@ type OfflineRow = {
   nickname: string | null;
   last_seen_at: string | null;
 };
+let scheduledProfileColumnsReady = false;
+
+async function ensureScheduledProfileColumns(env: Env): Promise<void> {
+  if (scheduledProfileColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  if (!columns.has("monthly_card_end_at")) {
+    await env.DB.prepare("ALTER TABLE customer_profiles ADD COLUMN monthly_card_end_at TEXT").run();
+  }
+  scheduledProfileColumnsReady = true;
+}
+
+const EFFECTIVE_CONTRACT_END_SQL = `CASE
+  WHEN contract_end_at IS NULL THEN monthly_card_end_at
+  WHEN monthly_card_end_at IS NULL THEN contract_end_at
+  WHEN monthly_card_end_at > contract_end_at THEN monthly_card_end_at
+  ELSE contract_end_at
+END`;
 
 /**
- * Expire contracts whose contract_end_at passed, and mark devices inactive.
+ * Expire contracts whose effective contract/monthly-card end time passed, and mark devices inactive.
  * Returns number of profiles updated.
  */
 export async function expireOverdueContracts(env: Env): Promise<{ expired: number }> {
+  await ensureScheduledProfileColumns(env);
   const now = nowIso();
 
   const { results: expiredProfiles } = await env.DB.prepare(
     `SELECT user_id FROM customer_profiles
-     WHERE contract_active = 1 AND contract_end_at IS NOT NULL AND contract_end_at < ?`
+     WHERE contract_active = 1
+       AND ${EFFECTIVE_CONTRACT_END_SQL} IS NOT NULL
+       AND ${EFFECTIVE_CONTRACT_END_SQL} < ?`
   )
     .bind(now)
     .all<ExpiredRow>();

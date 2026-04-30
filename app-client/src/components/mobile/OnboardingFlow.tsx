@@ -128,7 +128,7 @@ export default function OnboardingFlow({ visible, minimized, lang, initialReferr
   const dynamicStyles = {
     modalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(2, 6, 23, 0.68)',
+      backgroundColor: 'rgba(2, 6, 23, 0.94)',
       justifyContent: 'flex-end' as const,
       alignItems: 'center' as const,
       paddingHorizontal: Math.max(12, screenWidth * 0.05),
@@ -280,7 +280,7 @@ const getResponsiveDimensions = (keyboardVisible = false) => {
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.68)',
+    backgroundColor: 'rgba(2, 6, 23, 0.94)',
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 16,

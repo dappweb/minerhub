@@ -5,7 +5,7 @@
 -- - Remove heartbeat reward rows whose accrued interval is invalid or > 90 seconds.
 -- - Recompute customer reward totals from remaining ledger rows.
 -- - Mark stale online profiles/devices offline/inactive after 15 minutes without heartbeat.
--- - Expire active profiles whose contract_end_at has passed.
+-- - Expire active profiles whose effective contract/monthly-card end time has passed.
 -- - Backfill heartbeat bookkeeping fields from last_seen_at when missing.
 
 BEGIN TRANSACTION;
@@ -61,8 +61,22 @@ SET
   online_status = 'offline',
   updated_at = datetime('now')
 WHERE contract_active = 1
-  AND contract_end_at IS NOT NULL
-  AND contract_end_at < datetime('now');
+  AND (
+    CASE
+      WHEN contract_end_at IS NULL THEN monthly_card_end_at
+      WHEN monthly_card_end_at IS NULL THEN contract_end_at
+      WHEN monthly_card_end_at > contract_end_at THEN monthly_card_end_at
+      ELSE contract_end_at
+    END
+  ) IS NOT NULL
+  AND (
+    CASE
+      WHEN contract_end_at IS NULL THEN monthly_card_end_at
+      WHEN monthly_card_end_at IS NULL THEN contract_end_at
+      WHEN monthly_card_end_at > contract_end_at THEN monthly_card_end_at
+      ELSE contract_end_at
+    END
+  ) < datetime('now');
 
 UPDATE devices
 SET

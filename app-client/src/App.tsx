@@ -674,6 +674,19 @@ function formatDate(input: Date) {
   return `${y}.${m}.${d}`;
 }
 
+function getLatestValidDateIso(values: Array<string | null | undefined>): string | null {
+  let latest: { value: string; time: number } | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    const time = new Date(value).getTime();
+    if (Number.isNaN(time)) continue;
+    if (!latest || time > latest.time) {
+      latest = { value, time };
+    }
+  }
+  return latest?.value ?? null;
+}
+
 function toDateKey(input: Date) {
   const y = input.getFullYear();
   const m = `${input.getMonth() + 1}`.padStart(2, '0');
@@ -770,7 +783,11 @@ export default function App() {
     ? userDetails.inviterWallet.trim()
     : null;
   const maintenanceEnabled = systemStatus?.maintenanceEnabled === true;
-  const contractExpired = Boolean(userDetails?.contractEndAt && new Date(userDetails.contractEndAt).getTime() < Date.now());
+  const effectiveContractEndAt = useMemo(
+    () => getLatestValidDateIso([userDetails?.contractEndAt, userDetails?.monthlyCardEndAt]),
+    [userDetails?.contractEndAt, userDetails?.monthlyCardEndAt],
+  );
+  const contractExpired = Boolean(effectiveContractEndAt && new Date(effectiveContractEndAt).getTime() < Date.now());
   const actionsBlocked = maintenanceEnabled || contractExpired;
 
   const userAgreement = systemStatus?.userAgreement;
@@ -947,17 +964,17 @@ export default function App() {
   }, [serverUserId]);
 
   const expireDate = useMemo(() => {
-    if (!userDetails?.contractEndAt) {
+    if (!effectiveContractEndAt) {
       return '----';
     }
 
-    const end = new Date(userDetails.contractEndAt);
+    const end = new Date(effectiveContractEndAt);
     if (Number.isNaN(end.getTime())) {
       return '----';
     }
 
     return formatDate(end);
-  }, [userDetails?.contractEndAt]);
+  }, [effectiveContractEndAt]);
 
   const deviceHashrate = useMemo(() => {
     const raw = userDetails?.devices?.[0]?.hashrate;
@@ -1138,7 +1155,7 @@ export default function App() {
 
   const lockCycleDays = useMemo(() => {
     const startMs = userDetails?.contractStartAt ? new Date(userDetails.contractStartAt).getTime() : NaN;
-    const endMs = userDetails?.contractEndAt ? new Date(userDetails.contractEndAt).getTime() : NaN;
+    const endMs = effectiveContractEndAt ? new Date(effectiveContractEndAt).getTime() : NaN;
 
     if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
       return Math.max(1, Math.ceil((endMs - startMs) / 86400_000));
@@ -1155,19 +1172,19 @@ export default function App() {
     }
 
     return DEFAULT_CONTRACT_TERM_DAYS;
-  }, [systemStatus?.contractTermDaysDefault, userDetails?.contractEndAt, userDetails?.contractStartAt, userDetails?.contractTermDays]);
+  }, [effectiveContractEndAt, systemStatus?.contractTermDaysDefault, userDetails?.contractStartAt, userDetails?.contractTermDays]);
 
   const lockRemainingDays = useMemo(() => {
-    if (!userDetails?.contractEndAt) return null;
-    const endMs = new Date(userDetails.contractEndAt).getTime();
+    if (!effectiveContractEndAt) return null;
+    const endMs = new Date(effectiveContractEndAt).getTime();
     if (Number.isNaN(endMs)) return null;
     const diff = endMs - Date.now();
     if (diff <= 0) return 0;
     return Math.ceil(diff / 86400_000);
-  }, [userDetails?.contractEndAt]);
+  }, [effectiveContractEndAt]);
 
   const lockStatusText = useMemo(() => {
-    if (!userDetails?.contractStartAt || !userDetails?.contractEndAt) {
+    if (!userDetails?.contractStartAt || !effectiveContractEndAt) {
       return lang === 'zh' ? '未激活' : 'Not Activated';
     }
     if (lockRemainingDays === null) {
@@ -1177,7 +1194,7 @@ export default function App() {
       return lang === 'zh' ? `合同有效（剩余 ${lockRemainingDays} 天）` : `Active (${lockRemainingDays} days left)`;
     }
     return lang === 'zh' ? '合同已到期，请续期' : 'Expired, renewal required';
-  }, [lang, lockRemainingDays, userDetails?.contractEndAt, userDetails?.contractStartAt]);
+  }, [effectiveContractEndAt, lang, lockRemainingDays, userDetails?.contractStartAt]);
 
   const rewardRateDailyChange = yesterdayRewardUsdt > 0
     ? ((todayRewardUsdt - yesterdayRewardUsdt) / yesterdayRewardUsdt) * 100
@@ -2467,6 +2484,7 @@ export default function App() {
       progressBackgroundColor="#082a5d"
     />
   );
+  const onboardingExpanded = onboardingChecked && onboardingVisible && !onboardingMinimized;
 
   if (maintenanceEnabled) {
     const title = lang === 'zh' ? '系统维护中' : 'Maintenance Mode';
@@ -2563,7 +2581,7 @@ export default function App() {
           // User can close the modal later; contract acceptance is required for continued mining rewards
         }}
       />
-      <View style={styles.mainShell}>
+      {!onboardingExpanded && <View style={styles.mainShell}>
         <ScrollView
           style={styles.mainScroll}
           contentContainerStyle={styles.scrollContent}
@@ -2812,7 +2830,7 @@ export default function App() {
         </ScrollView>
 
         <BottomNav activeTab={activeTab} tabs={bottomTabs} onChange={setActiveTab} />
-      </View>
+      </View>}
 
       <Modal
         visible={announcementVisible && Boolean(selectedAnnouncement)}

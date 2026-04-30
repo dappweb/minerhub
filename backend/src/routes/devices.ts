@@ -8,6 +8,16 @@ const HEARTBEAT_CONTINUITY_MS = 90_000;
 const MAX_HEARTBEAT_REWARD_MS = 90_000;
 let heartbeatColumnsReady = false;
 
+function isContractExpiredAt(
+  profile: { contract_end_at?: string | null; monthly_card_end_at?: string | null },
+  referenceMs: number,
+): boolean {
+  const endTimes = [profile.contract_end_at, profile.monthly_card_end_at]
+    .map((value) => (value ? new Date(value).getTime() : NaN))
+    .filter((value) => Number.isFinite(value));
+  return endTimes.length > 0 && Math.max(...endTimes) < referenceMs;
+}
+
 async function ensureHeartbeatColumns(env: Env): Promise<void> {
   if (heartbeatColumnsReady) return;
   const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all<{ name: string }>();
@@ -16,6 +26,7 @@ async function ensureHeartbeatColumns(env: Env): Promise<void> {
   if (!columns.has("last_heartbeat_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_heartbeat_at TEXT");
   if (!columns.has("last_reward_accrued_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN last_reward_accrued_at TEXT");
   if (!columns.has("total_online_seconds")) statements.push("ALTER TABLE customer_profiles ADD COLUMN total_online_seconds INTEGER NOT NULL DEFAULT 0");
+  if (!columns.has("monthly_card_end_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN monthly_card_end_at TEXT");
   for (const statement of statements) {
     await env.DB.prepare(statement).run();
   }
@@ -54,16 +65,16 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   if (!device) return;
 
   const profile = await env.DB.prepare(
-    `SELECT contract_active, contract_end_at, reward_rate_usdt_per_hour FROM customer_profiles WHERE user_id = ?`
+    `SELECT contract_active, contract_end_at, monthly_card_end_at, reward_rate_usdt_per_hour FROM customer_profiles WHERE user_id = ?`
   )
     .bind(userId)
-    .first<{ contract_active: number; contract_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
+    .first<{ contract_active: number; contract_end_at: string | null; monthly_card_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
 
   // 收益累计仅依赖"合约态"：contract_active=1 且未到期。
   // token_locks 只管 SUPER 代币锁仓/释放，不再作为心跳收益的前置条件，
   // 以避免后台手动激活（未下发 SUPER）的客户静默失败。
   if (!profile || Number(profile.contract_active ?? 0) !== 1) return;
-  if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < Date.now()) return;
+  if (isContractExpiredAt(profile, Date.now())) return;
 
   const lastAt = new Date(device.updated_at).getTime();
   const now = Date.now();
@@ -212,6 +223,7 @@ async function accrueHeartbeatReward(
     `SELECT
        contract_active,
        contract_end_at,
+       monthly_card_end_at,
        reward_rate_usdt_per_hour,
        last_heartbeat_at,
        COALESCE(total_online_seconds, 0) AS total_online_seconds
@@ -221,6 +233,7 @@ async function accrueHeartbeatReward(
     .first<{
       contract_active: number;
       contract_end_at: string | null;
+      monthly_card_end_at: string | null;
       reward_rate_usdt_per_hour: string | null;
       last_heartbeat_at: string | null;
       total_online_seconds: number;
@@ -259,7 +272,7 @@ async function accrueHeartbeatReward(
     return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "contract_inactive" };
   }
 
-  if (profile.contract_end_at && new Date(profile.contract_end_at).getTime() < heartbeatMs) {
+  if (isContractExpiredAt(profile, heartbeatMs)) {
     await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:contract_expired");
     return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "contract_expired" };
   }

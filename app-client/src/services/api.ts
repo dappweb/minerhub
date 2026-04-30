@@ -313,6 +313,7 @@ export type UserDetailsDto = UserDto & {
   inviterWallet?: string | null;
   contractStartAt?: string | null;
   contractEndAt?: string | null;
+  monthlyCardEndAt?: string | null;
   contractTermDays?: number;
   monthlyCardDays?: number;
   contractActive?: number;

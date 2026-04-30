@@ -27,6 +27,8 @@ async function ensureHeartbeatColumns(env) {
         statements.push("ALTER TABLE customer_profiles ADD COLUMN total_online_seconds INTEGER NOT NULL DEFAULT 0");
     if (!columns.has("contract_agreement_accepted_version"))
         statements.push("ALTER TABLE customer_profiles ADD COLUMN contract_agreement_accepted_version TEXT");
+    if (!columns.has("monthly_card_end_at"))
+        statements.push("ALTER TABLE customer_profiles ADD COLUMN monthly_card_end_at TEXT");
     for (const statement of statements) {
         await env.DB.prepare(statement).run();
     }
@@ -183,6 +185,7 @@ export async function handleUsers(request, env, pathParts) {
         const user = await env.DB.prepare(`SELECT
         u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
         cp.nickname, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+        cp.monthly_card_end_at AS monthlyCardEndAt,
         COALESCE(cp.contract_term_days, 1095) AS contractTermDays,
         COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
         COALESCE(cp.contract_active, 0) AS contractActive,

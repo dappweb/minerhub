@@ -2,7 +2,7 @@
 -- Policy:
 -- - Heartbeat reward rows are dirty if the accrued interval is invalid or > 90 seconds.
 -- - Online profiles are stale if last_seen_at is older than 15 minutes.
--- - Active contracts are dirty if contract_end_at is already in the past.
+-- - Active contracts are dirty if their effective end time is already in the past.
 
 SELECT
   COUNT(*) AS dirty_heartbeat_reward_rows,
@@ -28,8 +28,22 @@ SELECT
   COUNT(*) AS expired_active_profiles
 FROM customer_profiles
 WHERE contract_active = 1
-  AND contract_end_at IS NOT NULL
-  AND contract_end_at < datetime('now');
+  AND (
+    CASE
+      WHEN contract_end_at IS NULL THEN monthly_card_end_at
+      WHEN monthly_card_end_at IS NULL THEN contract_end_at
+      WHEN monthly_card_end_at > contract_end_at THEN monthly_card_end_at
+      ELSE contract_end_at
+    END
+  ) IS NOT NULL
+  AND (
+    CASE
+      WHEN contract_end_at IS NULL THEN monthly_card_end_at
+      WHEN monthly_card_end_at IS NULL THEN contract_end_at
+      WHEN monthly_card_end_at > contract_end_at THEN monthly_card_end_at
+      ELSE contract_end_at
+    END
+  ) < datetime('now');
 
 SELECT
   COUNT(*) AS orphan_profiles
