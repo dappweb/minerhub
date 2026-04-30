@@ -19,6 +19,7 @@ const AppPreview = React.lazy(() => import('./components/AppPreview'));
 const DappSwap = React.lazy(() => import('./components/DappSwap'));
 const Download = React.lazy(() => import('./components/Download'));
 const Features = React.lazy(() => import('./components/Features'));
+const AdminAppSyncGuide = React.lazy(() => import('./components/AdminAppSyncGuide'));
 const Architecture = React.lazy(() => import('./components/Architecture'));
 const Economics = React.lazy(() => import('./components/Economics'));
 const FlowSteps = React.lazy(() => import('./components/FlowSteps'));
@@ -32,6 +33,7 @@ type ViewMode = 'website' | 'admin';
 type AdminRole = 'owner' | 'subadmin';
 
 const NAV_LINKS = [
+  { href: '#sync-guide', label: '同步指南' },
   { href: '#flow-steps', label: '开通流程' },
   { href: '#download', label: 'APP 下载' },
   { href: '#onchain-proof', label: '链上数据' },
@@ -465,6 +467,7 @@ export default function App() {
             <div id="flow-steps">
               <FlowSteps />
             </div>
+            <AdminAppSyncGuide />
             <OnchainProof />
             <section id="quick-entry" className="py-16 border-y border-slate-800/50 bg-slate-900/40">
               <div className="max-w-7xl mx-auto px-6">
