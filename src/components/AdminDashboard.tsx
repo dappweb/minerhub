@@ -124,6 +124,11 @@ function isWalletSignRejected(error: unknown): boolean {
   );
 }
 
+function isPrimaryOwnerAccessError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Only primary owner can access owner console APIs');
+}
+
 type SupportContact = {
   id: string;
   type: string;
@@ -627,6 +632,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [newSubAdminContractTypes, setNewSubAdminContractTypes] = useState<string[]>(['three_year']);
   const [subAdminAccessLoading, setSubAdminAccessLoading] = useState<boolean>(false);
   const [subAdminAccessMessage, setSubAdminAccessMessage] = useState<string>('');
+  const [subAdminManagementAllowed, setSubAdminManagementAllowed] = useState<boolean>(true);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(() => createEmptyAnnouncementForm());
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string>('');
@@ -1611,8 +1617,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setSubAdminAccessLoading(true);
       setSubAdminAccessMessage('');
       const response = await ownerReadRequest<{ items: OwnerSubAdminItem[] }>('/api/owner/subadmins');
+      setSubAdminManagementAllowed(true);
       setOwnerSubAdmins(response.items ?? []);
     } catch (loadError) {
+      if (isPrimaryOwnerAccessError(loadError)) {
+        setSubAdminManagementAllowed(false);
+        setOwnerSubAdmins([]);
+        setSubAdminAccessMessage('');
+        return;
+      }
       setSubAdminAccessMessage(loadError instanceof Error ? loadError.message : 'Failed to load SubAdmin list');
     } finally {
       setSubAdminAccessLoading(false);
@@ -1622,6 +1635,10 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const handleAddSubAdmin = useCallback(async () => {
     if (ownerSessionRole !== 'owner') {
       setSubAdminAccessMessage('Only the Owner wallet can manage SubAdmins.');
+      return;
+    }
+    if (!subAdminManagementAllowed) {
+      setSubAdminAccessMessage('Only the primary owner wallet can manage SubAdmins.');
       return;
     }
 
@@ -1654,11 +1671,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setSubAdminAccessLoading(false);
     }
-  }, [loadSubAdminAccess, newSubAdminContractTypes, newSubAdminNote, newSubAdminWallet, ownerSessionRole, signedRequest]);
+  }, [loadSubAdminAccess, newSubAdminContractTypes, newSubAdminNote, newSubAdminWallet, ownerSessionRole, signedRequest, subAdminManagementAllowed]);
 
   const handleRemoveSubAdmin = useCallback(async (item: OwnerSubAdminItem) => {
     if (ownerSessionRole !== 'owner') {
       setSubAdminAccessMessage('Only the Owner wallet can manage SubAdmins.');
+      return;
+    }
+    if (!subAdminManagementAllowed) {
+      setSubAdminAccessMessage('Only the primary owner wallet can manage SubAdmins.');
       return;
     }
     if (!item.canRemove) {
@@ -1681,7 +1702,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setSubAdminAccessLoading(false);
     }
-  }, [loadSubAdminAccess, ownerSessionRole, signedRequest]);
+  }, [loadSubAdminAccess, ownerSessionRole, signedRequest, subAdminManagementAllowed]);
 
   useEffect(() => {
     if (section !== 'system') return;
@@ -3012,23 +3033,31 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   <button
                     type="button"
                     onClick={() => void loadSubAdminAccess()}
-                    disabled={subAdminAccessLoading}
+                    disabled={subAdminAccessLoading || !subAdminManagementAllowed}
                     className="shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
                   >
                     {subAdminAccessLoading ? '刷新中...' : '刷新'}
                   </button>
                 </div>
 
+                {!subAdminManagementAllowed && (
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-slate-950/70 px-3 py-2 text-xs text-amber-100">
+                    当前钱包不是 Primary Owner，已隐藏 SubAdmin 管理；系统参数、协议、公告和客服配置仍可正常使用。
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <input
                     value={newSubAdminWallet}
                     onChange={(event) => setNewSubAdminWallet(event.target.value)}
+                    disabled={!subAdminManagementAllowed}
                     placeholder="SubAdmin 钱包地址 0x..."
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-amber-400"
                   />
                   <input
                     value={newSubAdminNote}
                     onChange={(event) => setNewSubAdminNote(event.target.value)}
+                    disabled={!subAdminManagementAllowed}
                     placeholder="备注（可选）"
                     className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-amber-400"
                   />
@@ -3040,6 +3069,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       <label key={option.id} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200">
                         <input
                           type="checkbox"
+                          disabled={!subAdminManagementAllowed}
                           checked={newSubAdminContractTypes.includes(option.id)}
                           onChange={(event) => {
                             setNewSubAdminContractTypes((current) => {
@@ -3056,7 +3086,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <button
                   type="button"
                   onClick={() => void handleAddSubAdmin()}
-                  disabled={subAdminAccessLoading || !newSubAdminWallet.trim() || newSubAdminContractTypes.length === 0}
+                  disabled={!subAdminManagementAllowed || subAdminAccessLoading || !newSubAdminWallet.trim() || newSubAdminContractTypes.length === 0}
                   className="mt-2 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
                 >
                   {subAdminAccessLoading ? '处理中...' : '添加 SubAdmin'}
@@ -3092,7 +3122,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             <button
                               type="button"
                               onClick={() => void handleRemoveSubAdmin(item)}
-                              disabled={subAdminAccessLoading || !item.canRemove}
+                              disabled={!subAdminManagementAllowed || subAdminAccessLoading || !item.canRemove}
                               className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs text-red-200 hover:bg-red-500/20 disabled:opacity-50"
                             >
                               <Trash2 size={12} />
