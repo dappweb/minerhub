@@ -39,6 +39,9 @@ const miningPoolAddress =
 const swapRouterAddress =
   (process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined) ??
   (process.env.EXPO_PUBLIC_SWAP_CONTRACT_ADDRESS as Address | undefined);
+const superTokenAddress =
+  (process.env.EXPO_PUBLIC_SUPER_ADDRESS as Address | undefined) ??
+  (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined);
 const GAS_BUFFER_NUMERATOR = 12n;
 const GAS_BUFFER_DENOMINATOR = 10n;
 
@@ -208,6 +211,27 @@ const minerAbi = [
     inputs: [],
     outputs: [],
   },
+  {
+    type: 'function',
+    name: 'minSuperStakeForReward',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'stakedSuper',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'isRewardEligible',
+    stateMutability: 'view',
+    inputs: [{ name: '_miner', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
 ] as const;
 
 const swapAbi = [
@@ -324,6 +348,41 @@ export async function claimRewardOnChain() {
   }
 }
 
+export async function getMiningStakeRequirement(): Promise<{
+  minSuperStakeForReward: string;
+  stakedSuper: string;
+  isRewardEligible: boolean;
+}> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const { account, publicClient } = await getWalletClients();
+
+  const [minStake, staked, eligible] = await Promise.all([
+    publicClient.readContract({
+      address: pool,
+      abi: minerAbi,
+      functionName: 'minSuperStakeForReward',
+    }),
+    publicClient.readContract({
+      address: pool,
+      abi: minerAbi,
+      functionName: 'stakedSuper',
+      args: [account.address],
+    }),
+    publicClient.readContract({
+      address: pool,
+      abi: minerAbi,
+      functionName: 'isRewardEligible',
+      args: [account.address],
+    }).catch(() => false),
+  ]);
+
+  return {
+    minSuperStakeForReward: formatUnits(minStake as bigint, 18),
+    stakedSuper: formatUnits(staked as bigint, 18),
+    isRewardEligible: Boolean(eligible),
+  };
+}
+
 export async function swapUsdtToSuperOnChain(amount: string) {
   if (!swapRouterAddress) {
     throw new Error('缺少 EXPO_PUBLIC_SWAP_ROUTER_ADDRESS。');
@@ -405,6 +464,40 @@ export async function sendNativeTokenOnChain(to: Address, amountEth: string) {
 
 // ===== Balance Queries (余额查询) =====
 
+export async function sendSuperToAddressOnChain(to: Address, amount: string) {
+  const superToken = requireAddress(superTokenAddress, 'EXPO_PUBLIC_SUPER_ADDRESS');
+  const normalizedAmount = Number(amount);
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+    throw new Error('请输入有效的 SUPER 数量。');
+  }
+
+  try {
+    const { account, walletClient, publicClient } = await getWalletClients();
+    const args = [to, parseUnits(amount, 18)] as const;
+    const gas = await assertSufficientBalanceForContractTx({
+      account: account.address,
+      contractAddress: superToken,
+      abi: erc20Abi,
+      functionName: 'transfer',
+      args,
+    });
+
+    const hash = await walletClient.writeContract({
+      account,
+      address: superToken,
+      abi: erc20Abi,
+      functionName: 'transfer',
+      args,
+      gas,
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
+    return hash;
+  } catch (error) {
+    throw normalizeTxError(error);
+  }
+}
+
 const erc20Abi = [
   {
     type: 'function',
@@ -419,6 +512,16 @@ const erc20Abi = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'uint8' }],
+  },
+  {
+    type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
   },
 ] as const;
 

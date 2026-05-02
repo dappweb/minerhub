@@ -19,6 +19,8 @@ import {
     mintSuperOnChain,
     sendGasToAddressOnChain,
     sendSuperToAddressOnChain,
+    sendUsdtToAddressOnChain,
+    setMinSuperStakeForRewardOnChain,
     startMiningOnChain,
     type MiningPoolGlobalStats,
     type MiningPoolMinerInfo,
@@ -246,6 +248,7 @@ type CustomerItem = {
   email: string | null;
   role: string | null;
   status: string | null;
+  referrerWallet?: string | null;
   nickname: string | null;
   machineCode: string | null;
   contractStartAt: string | null;
@@ -449,6 +452,23 @@ type ExchangeRecord = {
   updatedAt: string;
 };
 
+type FundCollectionRecord = {
+  id: string;
+  requesterWallet: string;
+  requesterRole: string;
+  sourceUserIds: string[];
+  sourceDeviceCount: number;
+  targetWallet: string;
+  amountUsdt: string;
+  amountSuper: string;
+  status: string;
+  txHash: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
 type AdminDeviceItem = {
   id: string;
   userId: string;
@@ -543,6 +563,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [withdrawalRecords, setWithdrawalRecords] = useState<WithdrawalRecord[]>([]);
   const [exchangeRecords, setExchangeRecords] = useState<ExchangeRecord[]>([]);
+  const [collectionRecords, setCollectionRecords] = useState<FundCollectionRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState<boolean>(false);
   const [recordsError, setRecordsError] = useState<string>('');
   const [showRecordsDetail, setShowRecordsDetail] = useState<boolean>(false);
@@ -556,16 +577,21 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [registerHashrate, setRegisterHashrate] = useState<string>('1000');
   const [mintRecipient, setMintRecipient] = useState<string>(adminWallet);
   const [mintAmount, setMintAmount] = useState<string>('1000');
+  const [minSuperStakeForReward, setMinSuperStakeForReward] = useState<string>('0');
   const [liquiditySuper, setLiquiditySuper] = useState<string>('1000');
   const [liquidityUsdt, setLiquidityUsdt] = useState<string>('1');
   const [ecosystemRecipient, setEcosystemRecipient] = useState<string>(adminWallet);
   const [deviceFundingAddress, setDeviceFundingAddress] = useState<string>('');
   const [deviceFundingGas, setDeviceFundingGas] = useState<string>('0.01');
   const [deviceFundingSuper, setDeviceFundingSuper] = useState<string>('100');
+  const [collectionTargetWallet, setCollectionTargetWallet] = useState<string>('');
+  const [collectionNote, setCollectionNote] = useState<string>('');
   const [customerRenewSuperAmount, setCustomerRenewSuperAmount] = useState<string>('100');
   const [activateCustomerId, setActivateCustomerId] = useState<string>('');
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(() => new Set());
   const [customerSearch, setCustomerSearch] = useState<string>('');
+  const [customerReferrerFilter, setCustomerReferrerFilter] = useState<string>('');
+  const [appliedCustomerReferrerFilter, setAppliedCustomerReferrerFilter] = useState<string>('');
   const [customerStatusFilter, setCustomerStatusFilter] = useState<'all' | 'needs_action' | 'expired' | 'expiring' | 'offline' | 'low_gas'>('needs_action');
   const [customerSortBy, setCustomerSortBy] = useState<'recommend' | 'expiry' | 'reward' | 'rate'>('recommend');
   const [bulkRate, setBulkRate] = useState<string>('0.084');
@@ -816,6 +842,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setBackendError('');
       setBackendLoading(true);
 
+      const customerQuery = new URLSearchParams();
+      if (appliedCustomerReferrerFilter) {
+        customerQuery.set('referrerWallet', appliedCustomerReferrerFilter);
+      }
+      const customersPath = `/api/admin/customers${customerQuery.toString() ? `?${customerQuery.toString()}` : ''}`;
       const announcementsPath = `/api/announcements/admin${announcementFilter === 'all' ? '' : `?status=${announcementFilter}`}`;
       const warnings: string[] = [];
       const announcementsPromise = ownerReadRequest<{ items: AnnouncementItem[] }>(announcementsPath)
@@ -840,7 +871,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
       const [statusResponse, customersResponse, announcementsResponse, alertsResponse, machineCodeConflictsResponse] = await Promise.all([
         statusPromise,
-        ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>('/api/admin/customers'),
+        ownerReadRequest<{ items: CustomerItem[]; admin: AdminWalletSummary | null }>(customersPath),
         announcementsPromise,
         ownerReadRequest<AdminAlertResponse>('/api/admin/alerts').catch((err: unknown) => {
           warnings.push(`掉线告警同步失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -866,7 +897,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setBackendLoading(false);
     }
-  }, [adminWallet, apiBaseUrl, announcementFilter, hasValidOwnerSession, ownerReadRequest]);
+  }, [adminWallet, apiBaseUrl, announcementFilter, appliedCustomerReferrerFilter, hasValidOwnerSession, ownerReadRequest]);
 
   const reloginOwnerSession = useCallback(async () => {
     try {
@@ -881,10 +912,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const loadRecords = useCallback(async () => {
     if (!adminWallet) return;
-    if (ownerSessionRole !== 'owner') {
-      setRecordsError('当前角色无权访问交易记录，请使用 Owner 钱包登录。');
-      return;
-    }
     if (!hasValidOwnerSession()) {
       setRecordsError('管理数据未登录，请先重新钱包登录。');
       return;
@@ -893,14 +920,22 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     try {
       setRecordsError('');
       setRecordsLoading(true);
-      const [recharges, withdrawals, exchanges] = await Promise.all([
-        ownerReadRequest<{ items: RechargeRecord[] }>('/api/admin/records/recharges?limit=200'),
-        ownerReadRequest<{ items: WithdrawalRecord[] }>('/api/admin/records/withdrawals?limit=200'),
-        ownerReadRequest<{ items: ExchangeRecord[] }>('/api/admin/records/exchanges?limit=200'),
-      ]);
-      setRechargeRecords(recharges.items ?? []);
-      setWithdrawalRecords(withdrawals.items ?? []);
-      setExchangeRecords(exchanges.items ?? []);
+      const collections = await ownerReadRequest<{ items: FundCollectionRecord[] }>('/api/admin/collection-requests?limit=200');
+      setCollectionRecords(collections.items ?? []);
+      if (ownerSessionRole === 'owner') {
+        const [recharges, withdrawals, exchanges] = await Promise.all([
+          ownerReadRequest<{ items: RechargeRecord[] }>('/api/admin/records/recharges?limit=200'),
+          ownerReadRequest<{ items: WithdrawalRecord[] }>('/api/admin/records/withdrawals?limit=200'),
+          ownerReadRequest<{ items: ExchangeRecord[] }>('/api/admin/records/exchanges?limit=200'),
+        ]);
+        setRechargeRecords(recharges.items ?? []);
+        setWithdrawalRecords(withdrawals.items ?? []);
+        setExchangeRecords(exchanges.items ?? []);
+      } else {
+        setRechargeRecords([]);
+        setWithdrawalRecords([]);
+        setExchangeRecords([]);
+      }
     } catch (loadError) {
       setRecordsError(loadError instanceof Error ? loadError.message : '读取交易记录失败');
     } finally {
@@ -1185,6 +1220,11 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   }, [adminWallet, poolAddress, superAddress, swapRouterAddress]);
 
   useEffect(() => {
+    if (!globalStats?.stakeGateSupported) return;
+    setMinSuperStakeForReward(formatTokenAmount(globalStats.minSuperStakeForReward).replace(/,/g, ''));
+  }, [globalStats?.minSuperStakeForReward, globalStats?.stakeGateSupported]);
+
+  useEffect(() => {
     setMintRecipient(adminWallet);
     setEcosystemRecipient(adminWallet);
   }, [adminWallet]);
@@ -1406,6 +1446,31 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       await refreshOnChainData();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : 'SUPER 增发失败';
+      setError(message);
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleSaveMinSuperStakeForReward = async () => {
+    const parsed = Number(minSuperStakeForReward);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setError('请输入有效的挖矿最小抵押 SUPER 数量。');
+      return;
+    }
+    if (!globalStats?.stakeGateSupported) {
+      setError('当前矿池合约不支持 SUPER 抵押门槛配置，请先升级合约。');
+      return;
+    }
+    if (!window.confirm(`确认将 SUPER 抵押挖矿最小额设置为 ${minSuperStakeForReward || '0'} SUPER？`)) return;
+
+    try {
+      setAdminActionLoading('minSuperStakeForReward');
+      setError('');
+      await setMinSuperStakeForRewardOnChain(minSuperStakeForReward || '0');
+      await refreshOnChainData();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : '保存 SUPER 抵押挖矿最小额失败';
       setError(message);
     } finally {
       setAdminActionLoading('');
@@ -2152,6 +2217,120 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const handleCreateCollectionRequest = async () => {
+    const userIds = Array.from(selectedCustomerIds);
+    if (userIds.length === 0) {
+      setBackendError('请先在客户列表勾选需要归集资金的客户。');
+      return;
+    }
+    if (!isAddress(collectionTargetWallet)) {
+      setBackendError('请输入有效的归集目标账户。');
+      return;
+    }
+
+    try {
+      setBackendError('');
+      setRecordsError('');
+      setAdminActionLoading('collection-create');
+      await signedRequest<{ ok: boolean; id: string }>('/api/admin/collection-requests', 'POST', {
+        userIds,
+        targetWallet: collectionTargetWallet,
+        note: collectionNote.trim() || null,
+      });
+      setCollectionNote('');
+      await loadRecords();
+      setBackendError(`归集申请已创建：${userIds.length} 位客户，目标 ${shortWallet(collectionTargetWallet)}。`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '创建归集申请失败';
+      setBackendError(message);
+      setRecordsError(message);
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleApproveCollectionRequest = async (requestId: string) => {
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('只有 Owner 可以批准归集申请。');
+      return;
+    }
+    if (!window.confirm(`确认批准归集申请 ${requestId}？`)) return;
+    try {
+      setAdminActionLoading(`collection-approve-${requestId}`);
+      await signedRequest(`/api/admin/collection-requests/${requestId}/approve`, 'POST', {});
+      await loadRecords();
+      setRecordsError('');
+    } catch (err) {
+      setRecordsError(err instanceof Error ? err.message : '批准归集申请失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleRejectCollectionRequest = async (requestId: string) => {
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('只有 Owner 可以拒绝归集申请。');
+      return;
+    }
+    const note = window.prompt('拒绝原因，可留空：', '');
+    if (note === null) return;
+    try {
+      setAdminActionLoading(`collection-reject-${requestId}`);
+      await signedRequest(`/api/admin/collection-requests/${requestId}/reject`, 'POST', {
+        note: note.trim() || undefined,
+      });
+      await loadRecords();
+      setRecordsError('');
+    } catch (err) {
+      setRecordsError(err instanceof Error ? err.message : '拒绝归集申请失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
+  const handleCompleteCollectionRequest = async (record: FundCollectionRecord) => {
+    if (ownerSessionRole !== 'owner') {
+      setRecordsError('只有 Owner 可以完成归集打款。');
+      return;
+    }
+    const amountUsdt = parseNumberOrDefault(record.amountUsdt);
+    const amountSuper = parseNumberOrDefault(record.amountSuper);
+    if (amountUsdt <= 0 && amountSuper <= 0) {
+      setRecordsError('归集金额为 0，无法完成打款。');
+      return;
+    }
+    const transferSummary = [
+      amountUsdt > 0 ? `${record.amountUsdt} USDT` : null,
+      amountSuper > 0 ? `${record.amountSuper} SUPER` : null,
+    ].filter(Boolean).join(' / ');
+    if (!window.confirm(`确认从当前 Owner 钱包向 ${shortWallet(record.targetWallet)} 转出 ${transferSummary} 并完成归集？`)) return;
+
+    try {
+      setAdminActionLoading(`collection-complete-${record.id}`);
+      const txHashes: Array<{ token: string; hash: string }> = [];
+      if (amountUsdt > 0) {
+        const hash = await sendUsdtToAddressOnChain(record.targetWallet as `0x${string}`, record.amountUsdt);
+        txHashes.push({ token: 'USDT', hash });
+      }
+      if (amountSuper > 0) {
+        const hash = await sendSuperToAddressOnChain(record.targetWallet as `0x${string}`, record.amountSuper);
+        txHashes.push({ token: 'SUPER', hash });
+      }
+      const primaryTx = txHashes[txHashes.length - 1]?.hash;
+      const note = txHashes.map((item) => `${item.token}: ${item.hash}`).join('\n');
+      await signedRequest(`/api/admin/collection-requests/${record.id}/complete`, 'POST', {
+        txHash: primaryTx,
+        note: note || undefined,
+      });
+      await loadRecords();
+      setRecordsError('');
+    } catch (err) {
+      setRecordsError(err instanceof Error ? err.message : '完成归集打款失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
   const toggleCustomerSelection = (id: string) => {
     setSelectedCustomerIds((prev) => {
       const next = new Set(prev);
@@ -2301,6 +2480,31 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
     return filtered;
   }, [customerInsights, customerSearch, customerSortBy, customerStatusFilter]);
+
+  const referrerOptions = useMemo(() => {
+    return Array.from(new Set(
+      customers
+        .map((customer) => customer.referrerWallet?.trim().toLowerCase() ?? '')
+        .filter((wallet) => wallet && isAddress(wallet))
+    )).sort();
+  }, [customers]);
+
+  const selectedCollectionEstimate = useMemo(() => {
+    let customerCount = 0;
+    let deviceCount = 0;
+    let amountUsdt = 0;
+    let amountSuper = 0;
+
+    for (const customer of customers) {
+      if (!selectedCustomerIds.has(customer.id)) continue;
+      customerCount += 1;
+      deviceCount += Number(customer.deviceCount ?? 0);
+      amountUsdt += Number(customer.totalRewardUsdt ?? '0') || 0;
+      amountSuper += Number(customer.totalRewardSuper ?? '0') || 0;
+    }
+
+    return { customerCount, deviceCount, amountUsdt, amountSuper };
+  }, [customers, selectedCustomerIds]);
 
   const deviceMetricsByUserId = useMemo(() => {
     const map = new Map<string, {
@@ -3455,6 +3659,62 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     className="h-8 w-56 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
                   />
                   <select
+                    value={customerReferrerFilter}
+                    onChange={(e) => setCustomerReferrerFilter(e.target.value)}
+                    className="h-8 w-52 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                  >
+                    <option value="">推荐人列表</option>
+                    {referrerOptions.map((wallet) => (
+                      <option key={wallet} value={wallet}>{shortWallet(wallet)}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={customerReferrerFilter}
+                    onChange={(e) => setCustomerReferrerFilter(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      const value = customerReferrerFilter.trim();
+                      if (value && !isAddress(value)) {
+                        setBackendError('请输入有效的推荐人钱包地址。');
+                        return;
+                      }
+                      setBackendError('');
+                      setAppliedCustomerReferrerFilter(value.toLowerCase());
+                      setSelectedCustomerIds(new Set());
+                    }}
+                    placeholder="推荐人钱包 0x..."
+                    className="h-8 w-48 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const value = customerReferrerFilter.trim();
+                      if (value && !isAddress(value)) {
+                        setBackendError('请输入有效的推荐人钱包地址。');
+                        return;
+                      }
+                      setBackendError('');
+                      setAppliedCustomerReferrerFilter(value.toLowerCase());
+                      setSelectedCustomerIds(new Set());
+                    }}
+                    className="px-2 py-1 rounded border border-indigo-500/40 bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/30"
+                  >
+                    筛选推荐人
+                  </button>
+                  {appliedCustomerReferrerFilter && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerReferrerFilter('');
+                        setAppliedCustomerReferrerFilter('');
+                        setSelectedCustomerIds(new Set());
+                      }}
+                      className="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    >
+                      清除推荐人
+                    </button>
+                  )}
+                  <select
                     value={customerStatusFilter}
                     onChange={(e) => setCustomerStatusFilter(e.target.value as 'all' | 'needs_action' | 'expired' | 'expiring' | 'offline' | 'low_gas')}
                     className="h-8 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-indigo-400"
@@ -3490,6 +3750,28 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   >
                     清空
                   </button>
+                  <div className="flex flex-wrap items-center gap-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1">
+                    <span className="text-emerald-100">
+                      归集 {selectedCollectionEstimate.customerCount} 客户 / {selectedCollectionEstimate.deviceCount} 设备
+                    </span>
+                    <span className="text-emerald-200">
+                      {selectedCollectionEstimate.amountUsdt.toFixed(3)} USDT / {selectedCollectionEstimate.amountSuper.toFixed(3)} SUPER
+                    </span>
+                    <input
+                      value={collectionTargetWallet}
+                      onChange={(event) => setCollectionTargetWallet(event.target.value)}
+                      placeholder="目标账户 0x..."
+                      className="h-8 w-56 rounded border border-slate-700 bg-slate-900 px-2 text-slate-100 outline-none focus:border-emerald-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateCollectionRequest()}
+                      disabled={adminActionLoading === 'collection-create' || selectedCustomerIds.size === 0}
+                      className="px-2 py-1 rounded bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 disabled:opacity-50"
+                    >
+                      {adminActionLoading === 'collection-create' ? '创建中...' : '创建归集申请'}
+                    </button>
+                  </div>
                   {canOperateCustomers ? (
                     <>
                       <div className="flex items-center gap-1">
@@ -3561,13 +3843,12 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                         <th className="px-3 py-2 font-medium">SUPER</th>
                         <th className="px-3 py-2 font-medium">收益率</th>
                         <th className="px-3 py-2 font-medium">累计 USDT</th>
-                        <th className="px-3 py-2 font-medium">推荐</th>
                         <th className="px-3 py-2 font-medium">操作</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {visibleCustomers.map((entry) => {
-                        const { customer, remainDays, expiring, expired, priority, actionLabel, reasons, score } = entry;
+                        const { customer, remainDays, expiring, expired } = entry;
                         const registerBadge = getMinerRegisterBadge(customer);
                         const deviceMetrics = deviceMetricsByUserId.get(customer.id);
                         const statusSummary = deviceMetrics
@@ -3627,15 +3908,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                             <td className="px-3 py-2 text-slate-300">{formatDecimalString(customer.superBalance, 4)}</td>
                             <td className="px-3 py-2 text-slate-300">{customer.rewardRateUsdtPerHour ?? '-'}</td>
                             <td className="px-3 py-2 text-slate-300">{Number(customer.totalRewardUsdt || '0').toFixed(3)}</td>
-                            <td className="px-3 py-2 text-slate-300">
-                              <div className="flex flex-col gap-1">
-                                <span className={`w-fit rounded px-1.5 py-0.5 text-[11px] font-semibold ${priority === 'P0' ? 'bg-red-500/20 text-red-200' : priority === 'P1' ? 'bg-amber-500/20 text-amber-200' : priority === 'P2' ? 'bg-sky-500/20 text-sky-200' : 'bg-slate-700 text-slate-200'}`}>
-                                  {priority} · {score}
-                                </span>
-                                <span className="text-[11px] text-indigo-200">{actionLabel}</span>
-                                <span className="text-[11px] text-slate-500 line-clamp-2">{reasons.join('，') || '无'}</span>
-                              </div>
-                            </td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-1">
                                 {canOperateCustomers && (
@@ -3916,6 +4188,30 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   </button>
                   {!superAddress && <span className="text-xs text-amber-200">缺少 VITE_SUPER_ADDRESS，暂不可管理。</span>}
                 </div>
+
+                <div className="mt-4 rounded-xl border border-blue-400/30 bg-slate-950/50 p-3">
+                  <div className="mb-2 text-xs font-semibold text-blue-100">SUPER 抵押挖矿最小额</div>
+                  <div className="mb-2 text-[11px] text-slate-400">
+                    当前门槛：{globalStats?.stakeGateSupported ? `${formatTokenAmount(globalStats.minSuperStakeForReward)} SUPER` : '当前矿池合约不支持'}
+                  </div>
+                  <div className="flex flex-col gap-2 md:flex-row">
+                    <input
+                      value={minSuperStakeForReward}
+                      onChange={(event) => setMinSuperStakeForReward(event.target.value)}
+                      inputMode="decimal"
+                      placeholder="例如 100"
+                      className="h-10 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-blue-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveMinSuperStakeForReward}
+                      disabled={adminActionLoading === 'minSuperStakeForReward' || !globalStats?.stakeGateSupported}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-blue-400 disabled:opacity-60"
+                    >
+                      {adminActionLoading === 'minSuperStakeForReward' ? '保存中...' : '保存最小额'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
@@ -4110,6 +4406,103 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 </button>
               </div>
 
+
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="text-sm font-semibold text-emerald-200 mb-2">客户资金归集申请（{collectionRecords.length}）</div>
+                <p className="mb-3 text-xs text-emerald-100/80">
+                  SubAdmin 可在客户列表勾选客户并提交归集申请；Owner 在这里批准、拒绝或完成 USDT / SUPER 打款到指定账户。
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <input
+                    value={collectionTargetWallet}
+                    onChange={(event) => setCollectionTargetWallet(event.target.value)}
+                    placeholder="目标账户 0x..."
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                  <input
+                    value={collectionNote}
+                    onChange={(event) => setCollectionNote(event.target.value)}
+                    placeholder="备注，可选"
+                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateCollectionRequest()}
+                    disabled={adminActionLoading === 'collection-create' || selectedCustomerIds.size === 0}
+                    className="h-10 rounded-lg bg-emerald-500 px-4 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    {adminActionLoading === 'collection-create' ? '创建中...' : `创建申请（${selectedCustomerIds.size} 客户）`}
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs text-left">
+                    <thead className="text-slate-400">
+                      <tr>
+                        <th className="px-2 py-1.5">创建时间</th>
+                        <th className="px-2 py-1.5">申请人</th>
+                        <th className="px-2 py-1.5">范围</th>
+                        <th className="px-2 py-1.5">目标账户</th>
+                        <th className="px-2 py-1.5">USDT</th>
+                        <th className="px-2 py-1.5">SUPER</th>
+                        <th className="px-2 py-1.5">状态</th>
+                        <th className="px-2 py-1.5">Tx</th>
+                        <th className="px-2 py-1.5">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-200">
+                      {collectionRecords.length === 0 ? (
+                        <tr><td colSpan={9} className="px-2 py-3 text-slate-500">暂无归集申请</td></tr>
+                      ) : collectionRecords.map((record) => (
+                        <tr key={record.id} className="border-t border-slate-700/50">
+                          <td className="px-2 py-1.5 whitespace-nowrap">{record.createdAt}</td>
+                          <td className="px-2 py-1.5 font-mono">{shortWallet(record.requesterWallet)} / {record.requesterRole}</td>
+                          <td className="px-2 py-1.5">{record.sourceUserIds.length} 客户 / {record.sourceDeviceCount} 设备</td>
+                          <td className="px-2 py-1.5 font-mono">{shortWallet(record.targetWallet)}</td>
+                          <td className="px-2 py-1.5">{record.amountUsdt}</td>
+                          <td className="px-2 py-1.5">{record.amountSuper}</td>
+                          <td className="px-2 py-1.5">{record.status}</td>
+                          <td className="px-2 py-1.5 font-mono">{record.txHash ? `${record.txHash.slice(0, 8)}...` : '-'}</td>
+                          <td className="px-2 py-1.5">
+                            {ownerSessionRole === 'owner' && record.status === 'pending' && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleApproveCollectionRequest(record.id)}
+                                  disabled={adminActionLoading === `collection-approve-${record.id}`}
+                                  className="rounded border border-emerald-500/50 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-50"
+                                >
+                                  {adminActionLoading === `collection-approve-${record.id}` ? '...' : '批准'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRejectCollectionRequest(record.id)}
+                                  disabled={adminActionLoading === `collection-reject-${record.id}`}
+                                  className="rounded border border-rose-500/50 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
+                                >
+                                  {adminActionLoading === `collection-reject-${record.id}` ? '...' : '拒绝'}
+                                </button>
+                              </div>
+                            )}
+                            {ownerSessionRole === 'owner' && record.status === 'approved' && (
+                              <button
+                                type="button"
+                                onClick={() => void handleCompleteCollectionRequest(record)}
+                                disabled={adminActionLoading === `collection-complete-${record.id}`}
+                                className="rounded border border-sky-500/50 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-500/10 disabled:opacity-50"
+                              >
+                                {adminActionLoading === `collection-complete-${record.id}` ? '...' : '完成'}
+                              </button>
+                            )}
+                            {!(ownerSessionRole === 'owner' && (record.status === 'pending' || record.status === 'approved')) && (
+                              <span className="text-slate-500">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
               {/* Recharge */}
               <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">

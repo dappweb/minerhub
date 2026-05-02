@@ -5,6 +5,11 @@ export type MiningPoolGlobalStats = {
   totalEmitted: bigint;
   totalActiveHashrate: bigint;
   totalMiners: bigint;
+  totalEligibleHashrate: bigint;
+  totalStakedSuper: bigint;
+  minSuperStakeForReward: bigint;
+  availableRewardBalance: bigint;
+  stakeGateSupported: boolean;
 };
 
 export type MiningPoolMinerInfo = {
@@ -14,6 +19,8 @@ export type MiningPoolMinerInfo = {
   active: boolean;
   suspiciousScore: bigint;
   registered: boolean;
+  stakedSuper: bigint;
+  rewardEligible: boolean;
 };
 
 export type RegisterMinerOptions = {
@@ -106,6 +113,62 @@ const minerAbi = [
   },
   {
     type: 'function',
+    name: 'stakeSuper',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'unstakeSuper',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setMinSuperStakeForReward',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'minSuperStakeForReward',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'totalEligibleHashrate',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'totalStakedSuper',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'availableRewardBalance',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'isRewardEligible',
+    stateMutability: 'view',
+    inputs: [{ name: '_miner', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'getGlobalStats',
     stateMutability: 'view',
     inputs: [],
@@ -113,6 +176,10 @@ const minerAbi = [
       { name: 'totalEm', type: 'uint256' },
       { name: 'totalActive', type: 'uint256' },
       { name: 'minerCount', type: 'uint256' },
+      { name: 'totalEligible', type: 'uint256' },
+      { name: 'totalStaked', type: 'uint256' },
+      { name: 'minStakeForReward', type: 'uint256' },
+      { name: 'rewardBalance', type: 'uint256' },
     ],
   },
   {
@@ -126,6 +193,8 @@ const minerAbi = [
       { name: 'totalClaimed', type: 'uint256' },
       { name: 'active', type: 'bool' },
       { name: 'suspiciousScore', type: 'uint256' },
+      { name: 'stakedAmount', type: 'uint256' },
+      { name: 'rewardEligible', type: 'bool' },
     ],
   },
   {
@@ -351,6 +420,30 @@ const erc20Abi = [
     ],
     outputs: [{ name: '', type: 'bool' }],
   },
+  {
+    type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+const legacyGlobalStatsAbi = [
+  {
+    type: 'function',
+    name: 'getGlobalStats',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'totalEm', type: 'uint256' },
+      { name: 'totalActive', type: 'uint256' },
+      { name: 'minerCount', type: 'uint256' },
+    ],
+  },
 ] as const;
 
 const adminAbi = [
@@ -414,6 +507,8 @@ const swapContractAddress =
   (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined);
 const superTokenAddress =
   (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined);
+const usdtTokenAddress =
+  (import.meta.env.VITE_USDT_ADDRESS as Address | undefined);
 
 function getWalletClient() {
   if (!window.ethereum) {
@@ -502,6 +597,19 @@ function requireSuperAddress(): Address {
   return superTokenAddress;
 }
 
+async function requireUsdtAddress(): Promise<Address> {
+  if (usdtTokenAddress) {
+    return usdtTokenAddress;
+  }
+  const router = requireSwapRouterAddress();
+  const publicClient = getPublicClient();
+  return publicClient.readContract({
+    address: router,
+    abi: swapAbi,
+    functionName: 'usdtToken',
+  }) as Promise<Address>;
+}
+
 export async function getMiningPoolOwnerOnChain(): Promise<Address> {
   const miningPool = requireMiningPoolAddress();
 
@@ -587,16 +695,49 @@ export async function getGlobalStatsOnChain(): Promise<MiningPoolGlobalStats> {
   }
 
   const publicClient = getPublicClient();
-  const [totalEmitted, totalActiveHashrate, totalMiners] = await publicClient.readContract({
+  let stakeGateSupported = true;
+  const result = await publicClient.readContract({
     address: minerContractAddress,
     abi: minerAbi,
     functionName: 'getGlobalStats',
+  }).catch(async () => {
+    stakeGateSupported = false;
+    const legacy = await publicClient.readContract({
+      address: minerContractAddress,
+      abi: legacyGlobalStatsAbi,
+      functionName: 'getGlobalStats',
+    });
+    const [totalEmitted, totalActiveHashrate, totalMiners] = legacy;
+    return [
+      totalEmitted,
+      totalActiveHashrate,
+      totalMiners,
+      0n,
+      0n,
+      0n,
+      0n,
+    ] as const;
   });
+
+  const [
+    totalEmitted,
+    totalActiveHashrate,
+    totalMiners,
+    totalEligibleHashrate = 0n,
+    totalStakedSuper = 0n,
+    minSuperStakeForReward = 0n,
+    availableRewardBalance = 0n,
+  ] = result;
 
   return {
     totalEmitted,
     totalActiveHashrate,
     totalMiners,
+    totalEligibleHashrate,
+    totalStakedSuper,
+    minSuperStakeForReward,
+    availableRewardBalance,
+    stakeGateSupported,
   };
 }
 
@@ -621,15 +762,26 @@ export async function getMinerInfoOnChain(minerAddress: Address): Promise<Mining
       active: false,
       suspiciousScore: 0n,
       registered: false,
+      stakedSuper: 0n,
+      rewardEligible: false,
     };
   }
 
-  const [hashrate, pendingReward, totalClaimed, active, suspiciousScore] = await publicClient.readContract({
+  const result = await publicClient.readContract({
     address: minerContractAddress,
     abi: minerAbi,
     functionName: 'getMinerInfo',
     args: [minerAddress],
   });
+  const [
+    hashrate,
+    pendingReward,
+    totalClaimed,
+    active,
+    suspiciousScore,
+    stakedSuper = 0n,
+    rewardEligible = false,
+  ] = result;
 
   return {
     hashrate,
@@ -638,7 +790,96 @@ export async function getMinerInfoOnChain(minerAddress: Address): Promise<Mining
     active,
     suspiciousScore,
     registered: true,
+    stakedSuper,
+    rewardEligible,
   };
+}
+
+export async function setMinSuperStakeForRewardOnChain(superAmount: string) {
+  const miningPool = requireMiningPoolAddress();
+  const parsedAmount = Number(superAmount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    throw new Error('请输入有效的 SUPER 最低抵押额。');
+  }
+
+  const publicClient = getPublicClient();
+  await publicClient.readContract({
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'minSuperStakeForReward',
+  }).catch(() => {
+    throw new Error('当前链上矿池合约尚未升级，不支持 SUPER 抵押收益门槛。请先升级 MiningPool 实现后再保存。');
+  });
+
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+  const hash = await walletClient.writeContract({
+    account,
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'setMinSuperStakeForReward',
+    args: [parseUnits(superAmount || '0', 18)],
+  });
+
+  await waitForTx(hash as Hex);
+  return hash;
+}
+
+export async function stakeSuperOnChain(superAmount: string): Promise<Hex[]> {
+  const miningPool = requireMiningPoolAddress();
+  const superToken = requireSuperAddress();
+  const parsedAmount = Number(superAmount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error('请输入有效的 SUPER 抵押数量。');
+  }
+
+  const amount = parseUnits(superAmount, 18);
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+  const hashes: Hex[] = [];
+
+  const approveHash = await walletClient.writeContract({
+    account,
+    address: superToken,
+    abi: superAbi,
+    functionName: 'approve',
+    args: [miningPool, amount],
+  });
+  await waitForTx(approveHash as Hex);
+  hashes.push(approveHash as Hex);
+
+  const stakeHash = await walletClient.writeContract({
+    account,
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'stakeSuper',
+    args: [amount],
+  });
+  await waitForTx(stakeHash as Hex);
+  hashes.push(stakeHash as Hex);
+
+  return hashes;
+}
+
+export async function unstakeSuperOnChain(superAmount: string) {
+  const miningPool = requireMiningPoolAddress();
+  const parsedAmount = Number(superAmount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error('请输入有效的 SUPER 赎回数量。');
+  }
+
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+  const hash = await walletClient.writeContract({
+    account,
+    address: miningPool,
+    abi: minerAbi,
+    functionName: 'unstakeSuper',
+    args: [parseUnits(superAmount, 18)],
+  });
+
+  await waitForTx(hash as Hex);
+  return hash;
 }
 
 export async function startMiningOnChain(options?: RegisterMinerOptions) {
@@ -753,20 +994,22 @@ export async function getSwapPoolStatsOnChain(): Promise<SwapPoolStats> {
 }
 
 export async function getSuperTokenStatsOnChain(): Promise<SuperTokenStats> {
-  const router = requireSwapRouterAddress();
   const superToken = requireSuperAddress();
   const publicClient = getPublicClient();
 
+  const router = swapContractAddress;
   const [totalSupply, totalMinted, remainingSupply, routerBalance] = await Promise.all([
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'totalSupply' }),
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'totalMinted' }),
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'remainingSupply' }),
-    publicClient.readContract({
-      address: superToken,
-      abi: superAbi,
-      functionName: 'balanceOf',
-      args: [router],
-    }),
+    router
+      ? publicClient.readContract({
+          address: superToken,
+          abi: superAbi,
+          functionName: 'balanceOf',
+          args: [router],
+        })
+      : Promise.resolve(0n),
   ]);
 
   return {
@@ -953,6 +1196,28 @@ export async function sendSuperToAddressOnChain(recipient: Address, amount: stri
     account,
     address: superToken,
     abi: superAbi,
+    functionName: 'transfer',
+    args: [recipient, parseUnits(amount, 18)],
+  })) as Hex;
+
+  await waitForTx(hash);
+  return hash;
+}
+
+export async function sendUsdtToAddressOnChain(recipient: Address, amount: string) {
+  const usdtToken = await requireUsdtAddress();
+  const parsed = Number(amount);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('请输入有效的 USDT 数量（大于 0）。');
+  }
+
+  const account = await ensureConnectedAddress();
+  const walletClient = getWalletClient();
+
+  const hash = (await walletClient.writeContract({
+    account,
+    address: usdtToken,
+    abi: erc20Abi,
     functionName: 'transfer',
     args: [recipient, parseUnits(amount, 18)],
   })) as Hex;

@@ -47,13 +47,23 @@ function formatWallet(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function getStoredVerifiedWallet(): string {
+  const wallet = sessionStorage.getItem('ownerJwtWallet') || '';
+  const expiresAt = sessionStorage.getItem('ownerJwtExp') || '';
+  const expiresMs = new Date(expiresAt).getTime();
+  if (!wallet || !Number.isFinite(expiresMs) || expiresMs <= Date.now() + 5_000) {
+    return '';
+  }
+  return wallet;
+}
+
 export default function App() {
   const [viewMode, setViewMode] = React.useState<ViewMode>('website');
   const [adminLoginStatus, setAdminLoginStatus] = React.useState<string>('请先使用钱包登录后台');
   const [ownerAuthorityAddress, setOwnerAuthorityAddress] = React.useState<string>('');
   const [authorizedAdminAddresses, setAuthorizedAdminAddresses] = React.useState<string[]>([]);
   const [ownerAuthorityLoaded, setOwnerAuthorityLoaded] = React.useState<boolean>(false);
-  const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>('');
+  const [verifiedOwnerWallet, setVerifiedOwnerWallet] = React.useState<string>(() => getStoredVerifiedWallet());
   const [adminRole, setAdminRole] = React.useState<AdminRole | ''>(() => {
     const raw = sessionStorage.getItem('ownerJwtRole');
     return raw === 'owner' || raw === 'subadmin' ? raw : '';

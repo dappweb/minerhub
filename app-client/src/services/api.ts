@@ -276,6 +276,7 @@ export type SystemStatusDto = {
   contractTermDaysDefault: number;
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
+  exchangeSuperRecipientAddress?: string | null;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
   userAgreement?: AgreementDocumentDto;
   contract?: AgreementDocumentDto;
@@ -314,10 +315,17 @@ export type UserDetailsDto = UserDto & {
   contractStartAt?: string | null;
   contractEndAt?: string | null;
   monthlyCardEndAt?: string | null;
+  effectiveEndAt?: string | null;
+  contractType?: string | null;
   contractTermDays?: number;
   monthlyCardDays?: number;
   contractActive?: number;
   activationStatus?: string;
+  canMine?: boolean;
+  canClaim?: boolean;
+  needsContractAgreement?: boolean;
+  needsMinerSetup?: boolean;
+  blockReason?: string | null;
   exchangeAutoEnabled?: number;
   rewardRateUsdtPerHour?: string;
   totalRewardUsdt?: string;
@@ -400,6 +408,8 @@ export type ExchangeRequestDto = {
   status: ExchangeOrderStatus;
   note: string | null;
   txHash: string | null;
+  superTxHash?: string | null;
+  usdtTxHash?: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -495,6 +505,7 @@ export async function createExchangeRequest(payload: {
   wallet: string;
   amountSuper: string;
   amountUsdt?: string;
+  superTxHash: string;
   note?: string;
 }) {
   return signedRequest<{
@@ -504,6 +515,7 @@ export async function createExchangeRequest(payload: {
     autoEnabled: boolean;
     amountSuper: string;
     amountUsdt: string;
+    superTxHash: string;
     createdAt: string;
   }>("/api/claims/exchange-request", "POST", payload);
 }

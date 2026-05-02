@@ -1,7 +1,6 @@
 import { getAddress, isAddress } from "ethers";
 import { writeOwnerAudit } from "../lib/audit";
 import {
-  contractTypesEqual,
   ensureContractAccessColumns,
   normalizeContractTypes,
   parseAllowedContractTypes,
@@ -791,6 +790,8 @@ type SubAdminItem = {
   note: string | null;
   allowedContractTypes: string[] | null;
   contractTypesLocked: boolean;
+  minActiveDevices: number;
+  minTotalRewardSuper: string;
   createdAt: string | null;
   updatedAt: string | null;
   canRemove: boolean;
@@ -799,7 +800,10 @@ type SubAdminItem = {
 async function handleSubAdminList(env: Env): Promise<Response> {
   await ensureSubAdminTable(env);
   const dbRows = await env.DB.prepare(
-    `SELECT wallet, note, allowed_contract_types_json, contract_types_locked_at, created_at, updated_at
+    `SELECT wallet, note, allowed_contract_types_json, contract_types_locked_at,
+            COALESCE(min_active_devices, 0) AS minActiveDevices,
+            COALESCE(min_total_reward_super, '0') AS minTotalRewardSuper,
+            created_at, updated_at
      FROM owner_sub_admins
      WHERE enabled = 1
      ORDER BY updated_at DESC`
@@ -808,6 +812,8 @@ async function handleSubAdminList(env: Env): Promise<Response> {
     note: string | null;
     allowed_contract_types_json: string | null;
     contract_types_locked_at: string | null;
+    minActiveDevices: number;
+    minTotalRewardSuper: string;
     created_at: string;
     updated_at: string;
   }>();
@@ -821,6 +827,8 @@ async function handleSubAdminList(env: Env): Promise<Response> {
       note: row.note,
       allowedContractTypes: parseAllowedContractTypes(row.allowed_contract_types_json),
       contractTypesLocked: Boolean(row.contract_types_locked_at),
+      minActiveDevices: Number(row.minActiveDevices ?? 0),
+      minTotalRewardSuper: row.minTotalRewardSuper ?? "0",
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       canRemove: true,
@@ -842,6 +850,8 @@ async function handleSubAdminList(env: Env): Promise<Response> {
         note: "from env; add in owner console to assign contract types",
         allowedContractTypes: [],
         contractTypesLocked: false,
+        minActiveDevices: 0,
+        minTotalRewardSuper: "0",
         createdAt: null,
         updatedAt: null,
         canRemove: false,
@@ -854,7 +864,14 @@ async function handleSubAdminList(env: Env): Promise<Response> {
 
 async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string): Promise<Response> {
   await ensureSubAdminTable(env);
-  const body = await parseJson<{ wallet?: string; note?: string; allowedContractTypes?: unknown; contractTypes?: unknown }>(request);
+  const body = await parseJson<{
+    wallet?: string;
+    note?: string;
+    allowedContractTypes?: unknown;
+    contractTypes?: unknown;
+    minActiveDevices?: number | string;
+    minTotalRewardSuper?: number | string;
+  }>(request);
   if (!body?.wallet) return badRequest("wallet required");
 
   const wallet = normalizeAddr(body.wallet);
@@ -863,6 +880,8 @@ async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string
   if (allowedContractTypes.length === 0) {
     return badRequest("allowedContractTypes required");
   }
+  const minActiveDevices = Math.max(0, Math.floor(Number(body.minActiveDevices ?? 0) || 0));
+  const minTotalRewardSuperNum = Math.max(0, Number(body.minTotalRewardSuper ?? 0) || 0);
 
   const ownerWallet = await getPrimaryOwnerWallet(env);
   if (ownerWallet && wallet.toLowerCase() === ownerWallet.toLowerCase()) {
@@ -870,41 +889,36 @@ async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string
   }
 
   const now = nowIso();
-  const existing = await env.DB.prepare(
-    `SELECT wallet, allowed_contract_types_json, contract_types_locked_at
-     FROM owner_sub_admins
-     WHERE wallet = ?
-     LIMIT 1`
-  )
-    .bind(wallet)
-    .first<{ wallet: string; allowed_contract_types_json: string | null; contract_types_locked_at: string | null }>();
-
-  if (existing?.contract_types_locked_at) {
-    const existingTypes = parseAllowedContractTypes(existing.allowed_contract_types_json);
-    if (!contractTypesEqual(existingTypes, allowedContractTypes)) {
-      return badRequest("SubAdmin contract types are locked and cannot be changed");
-    }
-  }
-
   const contractTypesJson = serializeAllowedContractTypes(allowedContractTypes);
   await env.DB.prepare(
     `INSERT INTO owner_sub_admins (
        wallet, note, created_by, updated_by, created_at, updated_at,
-       allowed_contract_types_json, contract_types_locked_at, enabled
+       allowed_contract_types_json, contract_types_locked_at,
+       min_active_devices, min_total_reward_super, enabled
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(wallet) DO UPDATE SET
        note = excluded.note,
        updated_by = excluded.updated_by,
        updated_at = excluded.updated_at,
-       allowed_contract_types_json = CASE
-         WHEN owner_sub_admins.contract_types_locked_at IS NULL THEN excluded.allowed_contract_types_json
-         ELSE owner_sub_admins.allowed_contract_types_json
-       END,
+       allowed_contract_types_json = excluded.allowed_contract_types_json,
        contract_types_locked_at = COALESCE(owner_sub_admins.contract_types_locked_at, excluded.contract_types_locked_at),
+       min_active_devices = excluded.min_active_devices,
+       min_total_reward_super = excluded.min_total_reward_super,
        enabled = 1`
   )
-    .bind(wallet, body.note?.trim() || null, actorWallet.toLowerCase(), actorWallet.toLowerCase(), now, now, contractTypesJson, now)
+    .bind(
+      wallet,
+      body.note?.trim() || null,
+      actorWallet.toLowerCase(),
+      actorWallet.toLowerCase(),
+      now,
+      now,
+      contractTypesJson,
+      now,
+      minActiveDevices,
+      minTotalRewardSuperNum.toString(),
+    )
     .run();
 
   await env.DB.prepare(
@@ -919,11 +933,11 @@ async function handleSubAdminAdd(request: Request, env: Env, actorWallet: string
     action: "subadmin.add",
     actorWallet,
     targetWallet: wallet,
-    payload: { note: body.note?.trim() || null, allowedContractTypes },
+    payload: { note: body.note?.trim() || null, allowedContractTypes, minActiveDevices, minTotalRewardSuper: minTotalRewardSuperNum.toString() },
     request,
   });
 
-  return json({ ok: true, wallet, allowedContractTypes });
+  return json({ ok: true, wallet, allowedContractTypes, minActiveDevices, minTotalRewardSuper: minTotalRewardSuperNum.toString() });
 }
 
 async function handleSubAdminRemove(request: Request, env: Env, actorWallet: string, walletParam: string): Promise<Response> {
@@ -981,7 +995,7 @@ export async function handleOwner(request: Request, env: Env, pathParts: string[
   }
 
   if (!isPrimaryOwner) {
-    return unauthorized("Only primary owner can access owner console APIs");
+    return json({ error: "Only primary owner can access owner console APIs" }, 403);
   }
 
   if (pathParts[0] === "overview" && request.method === "GET") return handleOverview(env);

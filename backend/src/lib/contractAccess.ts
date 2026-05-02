@@ -36,6 +36,12 @@ export async function ensureContractAccessColumns(env: Env): Promise<void> {
   if (hasSubAdminTable && !subAdminColumns.has("contract_types_locked_at")) {
     statements.push("ALTER TABLE owner_sub_admins ADD COLUMN contract_types_locked_at TEXT");
   }
+  if (hasSubAdminTable && !subAdminColumns.has("min_active_devices")) {
+    statements.push("ALTER TABLE owner_sub_admins ADD COLUMN min_active_devices INTEGER NOT NULL DEFAULT 0");
+  }
+  if (hasSubAdminTable && !subAdminColumns.has("min_total_reward_super")) {
+    statements.push("ALTER TABLE owner_sub_admins ADD COLUMN min_total_reward_super TEXT NOT NULL DEFAULT '0'");
+  }
 
   for (const statement of statements) {
     await env.DB.prepare(statement).run();
@@ -143,11 +149,11 @@ export function addContractScopeClause(
 ): void {
   if (allowedTypes === null) return;
   if (allowedTypes.length === 0) {
-    clauses.push(`(${profileAlias}.contract_type IS NULL OR TRIM(${profileAlias}.contract_type) = '')`);
+    clauses.push("1 = 0");
     return;
   }
   clauses.push(
-    `(${profileAlias}.contract_type IS NULL OR TRIM(${profileAlias}.contract_type) = '' OR ${profileAlias}.contract_type IN (${allowedTypes.map(() => "?").join(",")}))`
+    `(${profileAlias}.contract_type IN (${allowedTypes.map(() => "?").join(",")}))`
   );
   params.push(...allowedTypes);
 }
@@ -188,7 +194,7 @@ export async function readCustomerContractType(env: Env, userId: string): Promis
 
 export function isContractTypeInScope(allowedTypes: ContractTypeScope, contractType: string | null): boolean {
   if (allowedTypes === null) return true;
-  if (!contractType) return true;
+  if (!contractType) return false;
   return allowedTypes.includes(contractType);
 }
 

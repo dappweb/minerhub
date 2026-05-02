@@ -19,9 +19,26 @@ type ExchangeOrder = {
   completed_at: string | null;
   payout_wallet: string | null;
   tx_hash: string | null;
+  super_tx_hash: string | null;
+  usdt_tx_hash: string | null;
   created_at: string;
   updated_at: string;
 };
+
+let exchangeOrderColumnsReady = false;
+
+async function ensureExchangeOrderColumns(env: Env): Promise<void> {
+  if (exchangeOrderColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(exchange_orders)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  const statements: string[] = [];
+  if (!columns.has("super_tx_hash")) statements.push("ALTER TABLE exchange_orders ADD COLUMN super_tx_hash TEXT");
+  if (!columns.has("usdt_tx_hash")) statements.push("ALTER TABLE exchange_orders ADD COLUMN usdt_tx_hash TEXT");
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
+  exchangeOrderColumnsReady = true;
+}
 
 async function requireOwner(request: Request, env: Env): Promise<{ wallet: string } | Response> {
   const auth = await extractAndVerifyAuth(request, env);
@@ -147,6 +164,7 @@ async function handleBatchRewards(request: Request, env: Env): Promise<Response>
 async function handleExchangeList(request: Request, env: Env): Promise<Response> {
   const owner = await requireOwner(request, env);
   if (owner instanceof Response) return owner;
+  await ensureExchangeOrderColumns(env);
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
@@ -173,6 +191,7 @@ async function handleExchangeList(request: Request, env: Env): Promise<Response>
 async function handleExchangeApprove(request: Request, env: Env, orderId: string): Promise<Response> {
   const owner = await requireOwner(request, env);
   if (owner instanceof Response) return owner;
+  await ensureExchangeOrderColumns(env);
 
   const order = await env.DB.prepare("SELECT * FROM exchange_orders WHERE id = ?")
     .bind(orderId)
@@ -197,10 +216,12 @@ async function handleExchangeApprove(request: Request, env: Env, orderId: string
 async function handleExchangeComplete(request: Request, env: Env, orderId: string): Promise<Response> {
   const owner = await requireOwner(request, env);
   if (owner instanceof Response) return owner;
+  await ensureExchangeOrderColumns(env);
 
   const body = (await request.json().catch(() => null)) as {
     payoutWallet?: string;
     txHash?: string;
+    usdtTxHash?: string;
     amountUsdt?: string | number;
   } | null;
   const payoutWallet = body?.payoutWallet?.trim().toLowerCase();
@@ -209,29 +230,31 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
     .bind(orderId)
     .first<ExchangeOrder>();
   if (!order) return json({ error: "Exchange order not found" }, 404);
-  if (order.status !== "approved" && order.status !== "auto_processing") {
+  if (order.status !== "approved" && order.status !== "auto_processing" && order.status !== "manual_pending") {
     return badRequest("Order cannot be completed in current status");
   }
 
   const amountUsdt = Number(body?.amountUsdt ?? order.amount_usdt ?? "0");
-  if (!Number.isFinite(amountUsdt) || amountUsdt < 0) {
+  if (!Number.isFinite(amountUsdt) || amountUsdt <= 0) {
     return badRequest("Invalid order amountUsdt");
   }
 
   const now = nowIso();
+  const usdtTxHash = body?.usdtTxHash?.trim() || body?.txHash?.trim() || null;
   await env.DB.prepare(
     `UPDATE exchange_orders
      SET status = 'completed',
          amount_usdt = ?,
          payout_wallet = ?,
          tx_hash = ?,
+         usdt_tx_hash = ?,
          approved_by = COALESCE(approved_by, ?),
          approved_at = COALESCE(approved_at, ?),
          completed_at = ?,
          updated_at = ?
      WHERE id = ?`
   )
-    .bind(String(amountUsdt), payoutWallet ?? null, body?.txHash ?? null, owner.wallet, now, now, now, orderId)
+    .bind(String(amountUsdt), payoutWallet ?? null, usdtTxHash, usdtTxHash, owner.wallet, now, now, now, orderId)
     .run();
 
   await env.DB.prepare(
@@ -245,10 +268,10 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
        LIMIT 1
      )`
   )
-    .bind(String(amountUsdt), body?.txHash ?? null, "exchange completed", now, order.user_id)
+    .bind(String(amountUsdt), usdtTxHash, `exchange completed; SUPER tx: ${order.super_tx_hash ?? "-"}; USDT tx: ${usdtTxHash ?? "-"}`, now, order.user_id)
     .run();
 
-  return json({ ok: true, id: orderId, status: "completed", amountUsdt: String(amountUsdt), completedAt: now });
+  return json({ ok: true, id: orderId, status: "completed", amountUsdt: String(amountUsdt), txHash: usdtTxHash, usdtTxHash, completedAt: now });
 }
 
 async function handleSwapLogs(request: Request, env: Env): Promise<Response> {

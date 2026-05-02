@@ -15,6 +15,12 @@ export interface SupportContactItem {
 export interface ProfileTabProps {
   walletAddress: string;
   expireDate: string;
+  expiryRows?: {
+    monthlyCard: string | null;
+    contract: string | null;
+    effective: string | null;
+    contractPending: boolean;
+  };
   contractExpired: boolean;
   transferTo: string;
   setTransferTo: (v: string) => void;
@@ -94,6 +100,15 @@ export interface ProfileTabProps {
     agreementSubmitting?: string;
     agreementFailed?: string;
     agreementCloseButton?: string;
+    contractSectionLabel?: string;
+    contractStatusAccepted?: string;
+    contractStatusPending?: string;
+    contractViewButton?: string;
+    contractTitleFallback?: string;
+    contractIntro?: string;
+    contractAccept?: string;
+    contractSubmitting?: string;
+    contractCloseButton?: string;
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
@@ -122,6 +137,16 @@ export interface ProfileTabProps {
   referralMembersError?: string;
   onReferralPageChange?: (page: number) => void;
   agreement?: {
+    required: boolean;
+    accepted: boolean;
+    version: string | null;
+    title: string;
+    content: string;
+    submitting: boolean;
+    error: string;
+    onAccept: () => void;
+  } | null;
+  contractAgreement?: {
     required: boolean;
     accepted: boolean;
     version: string | null;
@@ -175,6 +200,7 @@ function getContactLink(type: string, value: string): string | null {
 export default function ProfileTab({
   walletAddress,
   expireDate,
+  expiryRows,
   contractExpired,
   transferTo,
   setTransferTo,
@@ -205,6 +231,7 @@ export default function ProfileTab({
   referralMembersError = '',
   onReferralPageChange,
   agreement,
+  contractAgreement,
 }: ProfileTabProps) {
   const isZh = t.sendTransfer !== 'Send Transfer';
   const copyLabel =
@@ -221,6 +248,7 @@ export default function ProfileTab({
   const totalPages = Math.max(1, Math.ceil(referralMembersTotal / Math.max(1, referralMembersPageSize)));
   const [supportCopied, setSupportCopied] = React.useState<'idle' | 'wallet'>('idle');
   const [agreementVisible, setAgreementVisible] = React.useState(false);
+  const [contractVisible, setContractVisible] = React.useState(false);
 
   const agreementSectionLabel = t.agreementSectionLabel ?? (isZh ? '用户协议' : 'User Agreement');
   const agreementStatusAccepted = t.agreementStatusAccepted ?? (isZh ? '已同意' : 'Accepted');
@@ -231,6 +259,22 @@ export default function ProfileTab({
   const agreementAcceptLabel = t.agreementAccept ?? (isZh ? '我已阅读并同意' : 'I have read and agree');
   const agreementSubmittingLabel = t.agreementSubmitting ?? (isZh ? '提交中...' : 'Submitting...');
   const agreementCloseLabel = t.agreementCloseButton ?? (isZh ? '关闭' : 'Close');
+
+  const contractSectionLabel = t.contractSectionLabel ?? (isZh ? '挖矿合同' : 'Mining Contract');
+  const contractStatusAccepted = t.contractStatusAccepted ?? (isZh ? '已确认' : 'Accepted');
+  const contractStatusPending = t.contractStatusPending ?? (isZh ? '待确认' : 'Pending');
+  const contractViewButton = t.contractViewButton ?? (isZh ? '查看全文' : 'View Full Text');
+  const contractTitleFallback = t.contractTitleFallback ?? (isZh ? '挖矿合同' : 'Mining Contract');
+  const contractIntro = t.contractIntro ?? (isZh ? '以下为当前生效的合同全文。' : 'This is the full text of the current contract.');
+  const contractAcceptLabel = t.contractAccept ?? (isZh ? '我已阅读并确认合同' : 'I have read and accept');
+  const contractSubmittingLabel = t.contractSubmitting ?? (isZh ? '提交中...' : 'Submitting...');
+  const contractCloseLabel = t.contractCloseButton ?? (isZh ? '关闭' : 'Close');
+  const monthlyCardLabel = isZh ? '月卡到期' : 'Monthly card';
+  const contractEndLabel = isZh ? '合同到期' : 'Contract end';
+  const effectiveEndLabel = isZh ? '当前有效期至' : 'Effective until';
+  const noMonthlyCardLabel = isZh ? '未开通月卡' : 'No monthly card';
+  const noContractLabel = isZh ? '未确认合同' : 'Contract not accepted';
+  const contractPendingLabel = isZh ? '合同待确认' : 'Contract pending';
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -292,7 +336,24 @@ export default function ProfileTab({
         >
           <Text style={styles.copyBtnText}>{copyLabel}</Text>
         </TouchableOpacity>
-        <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+        {expiryRows ? (
+          <View style={styles.expiryPanel}>
+            <View style={styles.expiryRow}>
+              <Text style={styles.expiryLabel}>{monthlyCardLabel}</Text>
+              <Text style={styles.expiryValue}>{expiryRows.monthlyCard ?? noMonthlyCardLabel}</Text>
+            </View>
+            <View style={styles.expiryRow}>
+              <Text style={styles.expiryLabel}>{contractEndLabel}</Text>
+              <Text style={styles.expiryValue}>{expiryRows.contractPending ? contractPendingLabel : (expiryRows.contract ?? noContractLabel)}</Text>
+            </View>
+            <View style={styles.expiryRow}>
+              <Text style={styles.expiryLabel}>{effectiveEndLabel}</Text>
+              <Text style={styles.expiryValue}>{expiryRows.effective ?? expireDate}</Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={s.profileExpire}>{t.profileExpire}: {expireDate}</Text>
+        )}
 
         {agreement?.required && (
           <View style={styles.agreementRow}>
@@ -307,6 +368,29 @@ export default function ProfileTab({
               onPress={() => setAgreementVisible(true)}
             >
               <Text style={styles.agreementRowBtnText}>{agreementViewButton}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {contractAgreement && (
+          <View style={styles.agreementRow}>
+            <View style={styles.agreementRowText}>
+              <Text style={styles.agreementRowLabel}>{contractSectionLabel}</Text>
+              <Text style={[styles.agreementRowStatus, contractAgreement.accepted ? styles.agreementRowStatusOk : styles.agreementRowStatusPending]}>
+                {contractAgreement.accepted
+                  ? `${contractStatusAccepted}${contractAgreement.version ? ` v${contractAgreement.version}` : ''}`
+                  : contractAgreement.required
+                    ? contractStatusPending
+                    : (contractAgreement.version ? `v${contractAgreement.version}` : contractSectionLabel)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.agreementRowBtn, contractAgreement.accepted && styles.agreementRowBtnGhost]}
+              onPress={() => setContractVisible(true)}
+            >
+              <Text style={styles.agreementRowBtnText}>
+                {contractAgreement.accepted || !contractAgreement.required ? contractViewButton : agreementViewButton}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -616,6 +700,49 @@ export default function ProfileTab({
                     <Text style={styles.modalGhostBtnText}>{agreementCloseLabel}</Text>
                   </TouchableOpacity>
                 </>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {contractAgreement && (
+        <Modal
+          visible={contractVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setContractVisible(false)}
+        >
+          <Pressable style={styles.modalMask} onPress={() => setContractVisible(false)}>
+            <Pressable style={styles.modalCardLarge}>
+              <Text style={styles.modalTitle}>
+                {contractAgreement.title || contractTitleFallback}
+                {contractAgreement.version ? `  v${contractAgreement.version}` : ''}
+              </Text>
+              <Text style={styles.modalWarn}>{contractIntro}</Text>
+              <ScrollView style={styles.agreementScroll} contentContainerStyle={styles.agreementScrollContent}>
+                <Text style={styles.agreementBody}>{contractAgreement.content || '...'}</Text>
+              </ScrollView>
+              {!!contractAgreement.error && <Text style={styles.modalError}>{contractAgreement.error}</Text>}
+              {contractAgreement.required && !contractAgreement.accepted ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.modalPrimaryBtn, contractAgreement.submitting && styles.modalPrimaryBtnDisabled]}
+                    onPress={() => { contractAgreement.onAccept(); }}
+                    disabled={contractAgreement.submitting}
+                  >
+                    <Text style={styles.modalPrimaryBtnText}>
+                      {contractAgreement.submitting ? contractSubmittingLabel : contractAcceptLabel}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setContractVisible(false)}>
+                    <Text style={styles.modalGhostBtnText}>{contractCloseLabel}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity style={styles.modalGhostBtn} onPress={() => setContractVisible(false)}>
+                  <Text style={styles.modalGhostBtnText}>{contractCloseLabel}</Text>
+                </TouchableOpacity>
               )}
             </Pressable>
           </Pressable>
@@ -1106,6 +1233,34 @@ const styles = StyleSheet.create({
     color: '#d6e8ff',
     fontSize: 13,
     lineHeight: 20,
+  },
+  expiryPanel: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  expiryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  expiryLabel: {
+    color: '#93a9d1',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  expiryValue: {
+    flex: 1,
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   agreementRow: {
     marginTop: 10,

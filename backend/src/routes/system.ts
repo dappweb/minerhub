@@ -45,6 +45,7 @@ type SystemStatus = {
   contractTermDaysDefault: number;
   rewardRateUsdtPerHour: number;
   swapPriceSuperPerUsdt: number;
+  exchangeSuperRecipientAddress: string | null;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
   userAgreement: UserAgreement;
   contract: Contract;
@@ -83,6 +84,7 @@ const DEFAULT_STATUS: SystemStatus = {
   contractTermDaysDefault: 1095,
   rewardRateUsdtPerHour: 0.084,
   swapPriceSuperPerUsdt: 0,
+  exchangeSuperRecipientAddress: null,
   payoutWallets: [],
   userAgreement: DEFAULT_AGREEMENT,
   contract: DEFAULT_CONTRACT,
@@ -204,6 +206,7 @@ async function readStatus(env: Env): Promise<SystemStatus> {
     contractTermDaysDefault: Number(settings.get("contract_term_days_default") ?? DEFAULT_STATUS.contractTermDaysDefault),
     rewardRateUsdtPerHour: Number(settings.get("reward_rate_usdt_per_hour") ?? DEFAULT_STATUS.rewardRateUsdtPerHour),
     swapPriceSuperPerUsdt: Number(settings.get("swap_price_super_per_usdt") ?? DEFAULT_STATUS.swapPriceSuperPerUsdt),
+    exchangeSuperRecipientAddress: env.OWNER_ADDRESS?.trim() || null,
     payoutWallets,
     contract,
     userAgreement,

@@ -242,6 +242,8 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   completed_at TEXT,
   payout_wallet TEXT,
   tx_hash TEXT,
+  super_tx_hash TEXT,
+  usdt_tx_hash TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -356,6 +358,26 @@ CREATE INDEX IF NOT EXISTS idx_super_distributions_user_time ON super_distributi
 CREATE INDEX IF NOT EXISTS idx_token_locks_user_status ON token_locks(user_id, status, end_at);
 CREATE INDEX IF NOT EXISTS idx_reward_withdrawals_user_time ON reward_withdrawals(user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS fund_collection_requests (
+  id TEXT PRIMARY KEY,
+  requester_wallet TEXT NOT NULL,
+  requester_role TEXT NOT NULL,
+  source_user_ids_json TEXT NOT NULL,
+  source_device_count INTEGER NOT NULL DEFAULT 0,
+  target_wallet TEXT NOT NULL,
+  amount_usdt TEXT NOT NULL DEFAULT '0',
+  amount_super TEXT NOT NULL DEFAULT '0',
+  status TEXT NOT NULL DEFAULT 'pending',
+  tx_hash TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_fund_collection_requests_time ON fund_collection_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fund_collection_requests_status ON fund_collection_requests(status);
+
 -- === Owner admin system (P0) ===
 CREATE TABLE IF NOT EXISTS owner_sessions (
   id TEXT PRIMARY KEY,
@@ -402,6 +424,8 @@ CREATE TABLE IF NOT EXISTS owner_sub_admins (
   updated_at TEXT NOT NULL,
   allowed_contract_types_json TEXT NOT NULL DEFAULT '[]',
   contract_types_locked_at TEXT,
+  min_active_devices INTEGER NOT NULL DEFAULT 0,
+  min_total_reward_super TEXT NOT NULL DEFAULT '0',
   enabled INTEGER NOT NULL DEFAULT 1
 );
 

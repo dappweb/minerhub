@@ -32,19 +32,25 @@ export interface MiningPoolInterface extends Interface {
       | "addAdmin"
       | "adjustDifficulty"
       | "adminCount"
+      | "availableRewardBalance"
       | "calculatePendingReward"
       | "claimCooldown"
       | "claimReward"
       | "deactivateMiner"
       | "difficultyAdjustmentPeriod"
+      | "eligibleHashrateIncluded"
       | "getAdmins"
       | "getGlobalStats"
       | "getMinerInfo"
       | "globalHashrate"
       | "initialize"
       | "isAdmin"
+      | "isRewardEligible"
       | "lastDifficultyAdjustment"
       | "lockupPeriod"
+      | "minSuperStakeForReward"
+      | "minerAddressKnown"
+      | "minerAddresses"
       | "miners"
       | "owner"
       | "proxiableUUID"
@@ -53,11 +59,18 @@ export interface MiningPoolInterface extends Interface {
       | "removeAdmin"
       | "renounceOwnership"
       | "rewardPerHashPerDay"
+      | "setMinSuperStakeForReward"
+      | "stakeSuper"
+      | "stakedSuper"
       | "superToken"
+      | "syncMinerEligibility"
       | "totalActiveHashrate"
+      | "totalEligibleHashrate"
       | "totalEmitted"
       | "totalMiners"
+      | "totalStakedSuper"
       | "transferOwnership"
+      | "unstakeSuper"
       | "updateHashrate"
       | "updateRewardParameters"
       | "upgradeTo"
@@ -73,11 +86,15 @@ export interface MiningPoolInterface extends Interface {
       | "DifficultyAdjusted"
       | "HashrateUpdated"
       | "Initialized"
+      | "MinSuperStakeForRewardUpdated"
       | "MinerDeactivated"
+      | "MinerEligibilityUpdated"
       | "MinerRegistered"
       | "OwnershipTransferred"
       | "RewardClaimed"
       | "RewardParametersUpdated"
+      | "SuperStaked"
+      | "SuperUnstaked"
       | "SuspiciousActivityDetected"
       | "Upgraded"
   ): EventFragment;
@@ -107,6 +124,10 @@ export interface MiningPoolInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "availableRewardBalance",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "calculatePendingReward",
     values: [AddressLike]
   ): string;
@@ -125,6 +146,10 @@ export interface MiningPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "difficultyAdjustmentPeriod",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "eligibleHashrateIncluded",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(functionFragment: "getAdmins", values?: undefined): string;
   encodeFunctionData(
@@ -148,12 +173,28 @@ export interface MiningPoolInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "isRewardEligible",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "lastDifficultyAdjustment",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "lockupPeriod",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "minSuperStakeForReward",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "minerAddressKnown",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "minerAddresses",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "miners", values: [AddressLike]): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
@@ -182,11 +223,31 @@ export interface MiningPoolInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "setMinSuperStakeForReward",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "stakeSuper",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "stakedSuper",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "superToken",
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "syncMinerEligibility",
+    values: [AddressLike[]]
+  ): string;
+  encodeFunctionData(
     functionFragment: "totalActiveHashrate",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalEligibleHashrate",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -198,8 +259,16 @@ export interface MiningPoolInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "totalStakedSuper",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "unstakeSuper",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "updateHashrate",
@@ -237,6 +306,10 @@ export interface MiningPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "adminCount", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "availableRewardBalance",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "calculatePendingReward",
     data: BytesLike
   ): Result;
@@ -256,6 +329,10 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "difficultyAdjustmentPeriod",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "eligibleHashrateIncluded",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "getAdmins", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getGlobalStats",
@@ -272,11 +349,27 @@ export interface MiningPoolInterface extends Interface {
   decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "isAdmin", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "isRewardEligible",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "lastDifficultyAdjustment",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "lockupPeriod",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "minSuperStakeForReward",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "minerAddressKnown",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "minerAddresses",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "miners", data: BytesLike): Result;
@@ -305,9 +398,26 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "rewardPerHashPerDay",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "setMinSuperStakeForReward",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "stakeSuper", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "stakedSuper",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "superToken", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "syncMinerEligibility",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "totalActiveHashrate",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "totalEligibleHashrate",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -319,7 +429,15 @@ export interface MiningPoolInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "totalStakedSuper",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "transferOwnership",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "unstakeSuper",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -434,12 +552,47 @@ export namespace InitializedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace MinSuperStakeForRewardUpdatedEvent {
+  export type InputTuple = [oldAmount: BigNumberish, newAmount: BigNumberish];
+  export type OutputTuple = [oldAmount: bigint, newAmount: bigint];
+  export interface OutputObject {
+    oldAmount: bigint;
+    newAmount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace MinerDeactivatedEvent {
   export type InputTuple = [miner: AddressLike, reason: string];
   export type OutputTuple = [miner: string, reason: string];
   export interface OutputObject {
     miner: string;
     reason: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MinerEligibilityUpdatedEvent {
+  export type InputTuple = [
+    miner: AddressLike,
+    eligible: boolean,
+    hashrate: BigNumberish
+  ];
+  export type OutputTuple = [
+    miner: string,
+    eligible: boolean,
+    hashrate: bigint
+  ];
+  export interface OutputObject {
+    miner: string;
+    eligible: boolean;
+    hashrate: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -498,6 +651,50 @@ export namespace RewardParametersUpdatedEvent {
   export interface OutputObject {
     newRewardPerHash: bigint;
     newClaimCooldown: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace SuperStakedEvent {
+  export type InputTuple = [
+    miner: AddressLike,
+    amount: BigNumberish,
+    totalStakedByMiner: BigNumberish
+  ];
+  export type OutputTuple = [
+    miner: string,
+    amount: bigint,
+    totalStakedByMiner: bigint
+  ];
+  export interface OutputObject {
+    miner: string;
+    amount: bigint;
+    totalStakedByMiner: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace SuperUnstakedEvent {
+  export type InputTuple = [
+    miner: AddressLike,
+    amount: BigNumberish,
+    totalStakedByMiner: BigNumberish
+  ];
+  export type OutputTuple = [
+    miner: string,
+    amount: bigint,
+    totalStakedByMiner: bigint
+  ];
+  export interface OutputObject {
+    miner: string;
+    amount: bigint;
+    totalStakedByMiner: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -590,6 +787,8 @@ export interface MiningPool extends BaseContract {
 
   adminCount: TypedContractMethod<[], [bigint], "view">;
 
+  availableRewardBalance: TypedContractMethod<[], [bigint], "view">;
+
   calculatePendingReward: TypedContractMethod<
     [_miner: AddressLike],
     [bigint],
@@ -608,15 +807,25 @@ export interface MiningPool extends BaseContract {
 
   difficultyAdjustmentPeriod: TypedContractMethod<[], [bigint], "view">;
 
+  eligibleHashrateIncluded: TypedContractMethod<
+    [arg0: AddressLike],
+    [boolean],
+    "view"
+  >;
+
   getAdmins: TypedContractMethod<[], [string[]], "view">;
 
   getGlobalStats: TypedContractMethod<
     [],
     [
-      [bigint, bigint, bigint] & {
+      [bigint, bigint, bigint, bigint, bigint, bigint, bigint] & {
         totalEm: bigint;
         totalActive: bigint;
         minerCount: bigint;
+        totalEligible: bigint;
+        totalStaked: bigint;
+        minStakeForReward: bigint;
+        rewardBalance: bigint;
       }
     ],
     "view"
@@ -625,12 +834,14 @@ export interface MiningPool extends BaseContract {
   getMinerInfo: TypedContractMethod<
     [_miner: AddressLike],
     [
-      [bigint, bigint, bigint, boolean, bigint] & {
+      [bigint, bigint, bigint, boolean, bigint, bigint, boolean] & {
         hashrate: bigint;
         pending: bigint;
         totalClaimed: bigint;
         active: boolean;
         suspiciousScore: bigint;
+        stakedAmount: bigint;
+        rewardEligible: boolean;
       }
     ],
     "view"
@@ -646,9 +857,25 @@ export interface MiningPool extends BaseContract {
 
   isAdmin: TypedContractMethod<[account: AddressLike], [boolean], "view">;
 
+  isRewardEligible: TypedContractMethod<
+    [_miner: AddressLike],
+    [boolean],
+    "view"
+  >;
+
   lastDifficultyAdjustment: TypedContractMethod<[], [bigint], "view">;
 
   lockupPeriod: TypedContractMethod<[], [bigint], "view">;
+
+  minSuperStakeForReward: TypedContractMethod<[], [bigint], "view">;
+
+  minerAddressKnown: TypedContractMethod<
+    [arg0: AddressLike],
+    [boolean],
+    "view"
+  >;
+
+  minerAddresses: TypedContractMethod<[arg0: BigNumberish], [string], "view">;
 
   miners: TypedContractMethod<
     [arg0: AddressLike],
@@ -688,16 +915,46 @@ export interface MiningPool extends BaseContract {
 
   rewardPerHashPerDay: TypedContractMethod<[], [bigint], "view">;
 
+  setMinSuperStakeForReward: TypedContractMethod<
+    [_amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  stakeSuper: TypedContractMethod<
+    [_amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  stakedSuper: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+
   superToken: TypedContractMethod<[], [string], "view">;
 
+  syncMinerEligibility: TypedContractMethod<
+    [_miners: AddressLike[]],
+    [void],
+    "nonpayable"
+  >;
+
   totalActiveHashrate: TypedContractMethod<[], [bigint], "view">;
+
+  totalEligibleHashrate: TypedContractMethod<[], [bigint], "view">;
 
   totalEmitted: TypedContractMethod<[], [bigint], "view">;
 
   totalMiners: TypedContractMethod<[], [bigint], "view">;
 
+  totalStakedSuper: TypedContractMethod<[], [bigint], "view">;
+
   transferOwnership: TypedContractMethod<
     [newOwner: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  unstakeSuper: TypedContractMethod<
+    [_amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -749,6 +1006,9 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "adminCount"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "availableRewardBalance"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "calculatePendingReward"
   ): TypedContractMethod<[_miner: AddressLike], [bigint], "view">;
   getFunction(
@@ -768,6 +1028,9 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "difficultyAdjustmentPeriod"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "eligibleHashrateIncluded"
+  ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+  getFunction(
     nameOrSignature: "getAdmins"
   ): TypedContractMethod<[], [string[]], "view">;
   getFunction(
@@ -775,10 +1038,14 @@ export interface MiningPool extends BaseContract {
   ): TypedContractMethod<
     [],
     [
-      [bigint, bigint, bigint] & {
+      [bigint, bigint, bigint, bigint, bigint, bigint, bigint] & {
         totalEm: bigint;
         totalActive: bigint;
         minerCount: bigint;
+        totalEligible: bigint;
+        totalStaked: bigint;
+        minStakeForReward: bigint;
+        rewardBalance: bigint;
       }
     ],
     "view"
@@ -788,12 +1055,14 @@ export interface MiningPool extends BaseContract {
   ): TypedContractMethod<
     [_miner: AddressLike],
     [
-      [bigint, bigint, bigint, boolean, bigint] & {
+      [bigint, bigint, bigint, boolean, bigint, bigint, boolean] & {
         hashrate: bigint;
         pending: bigint;
         totalClaimed: bigint;
         active: boolean;
         suspiciousScore: bigint;
+        stakedAmount: bigint;
+        rewardEligible: boolean;
       }
     ],
     "view"
@@ -812,11 +1081,23 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "isAdmin"
   ): TypedContractMethod<[account: AddressLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "isRewardEligible"
+  ): TypedContractMethod<[_miner: AddressLike], [boolean], "view">;
+  getFunction(
     nameOrSignature: "lastDifficultyAdjustment"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "lockupPeriod"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "minSuperStakeForReward"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "minerAddressKnown"
+  ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "minerAddresses"
+  ): TypedContractMethod<[arg0: BigNumberish], [string], "view">;
   getFunction(
     nameOrSignature: "miners"
   ): TypedContractMethod<
@@ -860,10 +1141,25 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "rewardPerHashPerDay"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "setMinSuperStakeForReward"
+  ): TypedContractMethod<[_amount: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "stakeSuper"
+  ): TypedContractMethod<[_amount: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "stakedSuper"
+  ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+  getFunction(
     nameOrSignature: "superToken"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "syncMinerEligibility"
+  ): TypedContractMethod<[_miners: AddressLike[]], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "totalActiveHashrate"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "totalEligibleHashrate"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "totalEmitted"
@@ -872,8 +1168,14 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "totalMiners"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "totalStakedSuper"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "unstakeSuper"
+  ): TypedContractMethod<[_amount: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "updateHashrate"
   ): TypedContractMethod<[_newHashrate: BigNumberish], [void], "nonpayable">;
@@ -949,11 +1251,25 @@ export interface MiningPool extends BaseContract {
     InitializedEvent.OutputObject
   >;
   getEvent(
+    key: "MinSuperStakeForRewardUpdated"
+  ): TypedContractEvent<
+    MinSuperStakeForRewardUpdatedEvent.InputTuple,
+    MinSuperStakeForRewardUpdatedEvent.OutputTuple,
+    MinSuperStakeForRewardUpdatedEvent.OutputObject
+  >;
+  getEvent(
     key: "MinerDeactivated"
   ): TypedContractEvent<
     MinerDeactivatedEvent.InputTuple,
     MinerDeactivatedEvent.OutputTuple,
     MinerDeactivatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "MinerEligibilityUpdated"
+  ): TypedContractEvent<
+    MinerEligibilityUpdatedEvent.InputTuple,
+    MinerEligibilityUpdatedEvent.OutputTuple,
+    MinerEligibilityUpdatedEvent.OutputObject
   >;
   getEvent(
     key: "MinerRegistered"
@@ -982,6 +1298,20 @@ export interface MiningPool extends BaseContract {
     RewardParametersUpdatedEvent.InputTuple,
     RewardParametersUpdatedEvent.OutputTuple,
     RewardParametersUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "SuperStaked"
+  ): TypedContractEvent<
+    SuperStakedEvent.InputTuple,
+    SuperStakedEvent.OutputTuple,
+    SuperStakedEvent.OutputObject
+  >;
+  getEvent(
+    key: "SuperUnstaked"
+  ): TypedContractEvent<
+    SuperUnstakedEvent.InputTuple,
+    SuperUnstakedEvent.OutputTuple,
+    SuperUnstakedEvent.OutputObject
   >;
   getEvent(
     key: "SuspiciousActivityDetected"
@@ -1076,6 +1406,17 @@ export interface MiningPool extends BaseContract {
       InitializedEvent.OutputObject
     >;
 
+    "MinSuperStakeForRewardUpdated(uint256,uint256)": TypedContractEvent<
+      MinSuperStakeForRewardUpdatedEvent.InputTuple,
+      MinSuperStakeForRewardUpdatedEvent.OutputTuple,
+      MinSuperStakeForRewardUpdatedEvent.OutputObject
+    >;
+    MinSuperStakeForRewardUpdated: TypedContractEvent<
+      MinSuperStakeForRewardUpdatedEvent.InputTuple,
+      MinSuperStakeForRewardUpdatedEvent.OutputTuple,
+      MinSuperStakeForRewardUpdatedEvent.OutputObject
+    >;
+
     "MinerDeactivated(address,string)": TypedContractEvent<
       MinerDeactivatedEvent.InputTuple,
       MinerDeactivatedEvent.OutputTuple,
@@ -1085,6 +1426,17 @@ export interface MiningPool extends BaseContract {
       MinerDeactivatedEvent.InputTuple,
       MinerDeactivatedEvent.OutputTuple,
       MinerDeactivatedEvent.OutputObject
+    >;
+
+    "MinerEligibilityUpdated(address,bool,uint256)": TypedContractEvent<
+      MinerEligibilityUpdatedEvent.InputTuple,
+      MinerEligibilityUpdatedEvent.OutputTuple,
+      MinerEligibilityUpdatedEvent.OutputObject
+    >;
+    MinerEligibilityUpdated: TypedContractEvent<
+      MinerEligibilityUpdatedEvent.InputTuple,
+      MinerEligibilityUpdatedEvent.OutputTuple,
+      MinerEligibilityUpdatedEvent.OutputObject
     >;
 
     "MinerRegistered(address,uint256)": TypedContractEvent<
@@ -1129,6 +1481,28 @@ export interface MiningPool extends BaseContract {
       RewardParametersUpdatedEvent.InputTuple,
       RewardParametersUpdatedEvent.OutputTuple,
       RewardParametersUpdatedEvent.OutputObject
+    >;
+
+    "SuperStaked(address,uint256,uint256)": TypedContractEvent<
+      SuperStakedEvent.InputTuple,
+      SuperStakedEvent.OutputTuple,
+      SuperStakedEvent.OutputObject
+    >;
+    SuperStaked: TypedContractEvent<
+      SuperStakedEvent.InputTuple,
+      SuperStakedEvent.OutputTuple,
+      SuperStakedEvent.OutputObject
+    >;
+
+    "SuperUnstaked(address,uint256,uint256)": TypedContractEvent<
+      SuperUnstakedEvent.InputTuple,
+      SuperUnstakedEvent.OutputTuple,
+      SuperUnstakedEvent.OutputObject
+    >;
+    SuperUnstaked: TypedContractEvent<
+      SuperUnstakedEvent.InputTuple,
+      SuperUnstakedEvent.OutputTuple,
+      SuperUnstakedEvent.OutputObject
     >;
 
     "SuspiciousActivityDetected(address,uint256,string)": TypedContractEvent<

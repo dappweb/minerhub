@@ -163,9 +163,12 @@ export function useAutoUpdate(lang: Lang = 'zh'): UpdateState {
       promptUpdateReady(lang);
     };
 
-    void run();
+    const timer = setTimeout(() => {
+      void run();
+    }, 3500);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // intentionally depend only on lang for initial run
     // eslint-disable-next-line react-hooks/exhaustive-deps

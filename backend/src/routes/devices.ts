@@ -1,5 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
+import { ensureContractAccessColumns, isContractTypeInScope, parseAllowedContractTypes } from "../lib/contractAccess";
 import { createId, nowIso } from "../lib/id";
+import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { getRewardRateUsdtPerHour, isMaintenanceEnabled, readSystemStatus } from "../lib/system";
 import type { Env } from "../types/env";
@@ -7,6 +9,13 @@ import type { Env } from "../types/env";
 const HEARTBEAT_CONTINUITY_MS = 90_000;
 const MAX_HEARTBEAT_REWARD_MS = 90_000;
 let heartbeatColumnsReady = false;
+
+type SubAdminThresholdRow = {
+  wallet: string;
+  allowed_contract_types_json: string | null;
+  min_active_devices: number;
+  min_total_reward_super: string;
+};
 
 function isContractExpiredAt(
   profile: { contract_end_at?: string | null; monthly_card_end_at?: string | null },
@@ -55,6 +64,25 @@ async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string)
   return Boolean(row?.id);
 }
 
+async function readMinimumStakeBlockReason(env: Env, wallet: string): Promise<string | null> {
+  const relayer = tryCreateRelayer(env);
+  if (!relayer || !env.MINING_POOL_ADDRESS || !env.SUPER_TOKEN_ADDRESS) return null;
+
+  try {
+    const gate = await relayer.getMiningStakeGate(wallet);
+    const min = Number(gate.minFormatted);
+    const staked = Number(gate.stakedFormatted);
+    if (!Number.isFinite(min) || min <= 0) return null;
+    if (!Number.isFinite(staked) || staked <= min) {
+      return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 async function accrueHourlyReward(env: Env, userId: string, deviceId: string): Promise<void> {
   const device = await env.DB.prepare(
     `SELECT id, hashrate, updated_at FROM devices WHERE user_id = ? AND device_id = ?`
@@ -65,16 +93,20 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   if (!device) return;
 
   const profile = await env.DB.prepare(
-    `SELECT contract_active, contract_end_at, monthly_card_end_at, reward_rate_usdt_per_hour FROM customer_profiles WHERE user_id = ?`
+    `SELECT u.wallet, cp.contract_active, cp.contract_end_at, cp.monthly_card_end_at, cp.reward_rate_usdt_per_hour
+     FROM customer_profiles cp
+     INNER JOIN users u ON u.id = cp.user_id
+     WHERE cp.user_id = ?`
   )
     .bind(userId)
-    .first<{ contract_active: number; contract_end_at: string | null; monthly_card_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
+    .first<{ wallet: string; contract_active: number; contract_end_at: string | null; monthly_card_end_at: string | null; reward_rate_usdt_per_hour: string | null }>();
 
   // 收益累计仅依赖"合约态"：contract_active=1 且未到期。
   // token_locks 只管 SUPER 代币锁仓/释放，不再作为心跳收益的前置条件，
   // 以避免后台手动激活（未下发 SUPER）的客户静默失败。
   if (!profile || Number(profile.contract_active ?? 0) !== 1) return;
   if (isContractExpiredAt(profile, Date.now())) return;
+  if (await readMinimumStakeBlockReason(env, profile.wallet)) return;
 
   const lastAt = new Date(device.updated_at).getTime();
   const now = Date.now();
@@ -150,6 +182,71 @@ function normalizeHeartbeatHashrate(value: unknown): number {
   return Math.max(1, Math.floor(parsed));
 }
 
+async function readBlockingSubAdminThreshold(env: Env, userId: string): Promise<string | null> {
+  await ensureContractAccessColumns(env);
+
+  const profile = await env.DB.prepare("SELECT contract_type FROM customer_profiles WHERE user_id = ?")
+    .bind(userId)
+    .first<{ contract_type: string | null }>();
+
+  const { results } = await env.DB.prepare(
+    `SELECT osa.wallet, osa.allowed_contract_types_json,
+            COALESCE(osa.min_active_devices, 0) AS min_active_devices,
+            COALESCE(osa.min_total_reward_super, '0') AS min_total_reward_super
+     FROM referral_closure rc
+     INNER JOIN users u ON u.id = rc.ancestor_user_id
+     INNER JOIN owner_sub_admins osa ON LOWER(osa.wallet) = LOWER(u.wallet)
+     WHERE rc.descendant_user_id = ?
+       AND rc.depth >= 1
+       AND osa.enabled = 1
+     ORDER BY rc.depth ASC`
+  )
+    .bind(userId)
+    .all<SubAdminThresholdRow>();
+
+  for (const row of results ?? []) {
+    const allowedTypes = parseAllowedContractTypes(row.allowed_contract_types_json);
+    if (!isContractTypeInScope(allowedTypes, profile?.contract_type ?? null)) continue;
+
+    const minActiveDevices = Math.max(0, Math.floor(Number(row.min_active_devices ?? 0) || 0));
+    const minTotalRewardSuper = Math.max(0, Number(row.min_total_reward_super ?? "0") || 0);
+    if (minActiveDevices <= 0 && minTotalRewardSuper <= 0) continue;
+
+    const params: Array<string | number> = [row.wallet.toLowerCase()];
+    const contractClause = allowedTypes.length > 0
+      ? `AND cp.contract_type IN (${allowedTypes.map(() => "?").join(",")})`
+      : "AND 1 = 0";
+    params.push(...allowedTypes);
+
+    const summary = await env.DB.prepare(
+      `SELECT
+         COUNT(DISTINCT CASE WHEN d.status = 'active' THEN d.id END) AS activeDevices,
+         COALESCE(SUM(CAST(cp.total_reward_super AS REAL)), 0) AS totalRewardSuper
+       FROM owner_sub_admins osa
+       INNER JOIN users admin_user ON LOWER(admin_user.wallet) = LOWER(osa.wallet)
+       INNER JOIN referral_closure team ON team.ancestor_user_id = admin_user.id AND team.depth >= 1
+       INNER JOIN customer_profiles cp ON cp.user_id = team.descendant_user_id
+       LEFT JOIN devices d ON d.user_id = team.descendant_user_id
+       WHERE LOWER(osa.wallet) = ?
+         AND osa.enabled = 1
+         ${contractClause}`
+    )
+      .bind(...params)
+      .first<{ activeDevices: number; totalRewardSuper: number }>();
+
+    const activeDevices = Number(summary?.activeDevices ?? 0);
+    const totalRewardSuper = Number(summary?.totalRewardSuper ?? 0);
+    if (minActiveDevices > 0 && activeDevices < minActiveDevices) {
+      return `subadmin_threshold_active_devices:${activeDevices}/${minActiveDevices}`;
+    }
+    if (minTotalRewardSuper > 0 && totalRewardSuper < minTotalRewardSuper) {
+      return `subadmin_threshold_reward_super:${totalRewardSuper}/${minTotalRewardSuper}`;
+    }
+  }
+
+  return null;
+}
+
 async function updateHeartbeatPresence(
   env: Env,
   userId: string,
@@ -221,16 +318,20 @@ async function accrueHeartbeatReward(
 
   const profile = await env.DB.prepare(
     `SELECT
-       contract_active,
-       contract_end_at,
-       monthly_card_end_at,
-       reward_rate_usdt_per_hour,
-       last_heartbeat_at,
-       COALESCE(total_online_seconds, 0) AS total_online_seconds
-     FROM customer_profiles WHERE user_id = ?`
+       u.wallet,
+       cp.contract_active,
+       cp.contract_end_at,
+       cp.monthly_card_end_at,
+       cp.reward_rate_usdt_per_hour,
+       cp.last_heartbeat_at,
+       COALESCE(cp.total_online_seconds, 0) AS total_online_seconds
+     FROM customer_profiles cp
+     INNER JOIN users u ON u.id = cp.user_id
+     WHERE cp.user_id = ?`
   )
     .bind(userId)
     .first<{
+      wallet: string;
       contract_active: number;
       contract_end_at: string | null;
       monthly_card_end_at: string | null;
@@ -275,6 +376,18 @@ async function accrueHeartbeatReward(
   if (isContractExpiredAt(profile, heartbeatMs)) {
     await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, "heartbeat:contract_expired");
     return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "contract_expired" };
+  }
+
+  const thresholdBlockReason = await readBlockingSubAdminThreshold(env, userId);
+  if (thresholdBlockReason) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, `heartbeat:${thresholdBlockReason}`);
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: thresholdBlockReason };
+  }
+
+  const minimumStakeBlockReason = await readMinimumStakeBlockReason(env, profile.wallet);
+  if (minimumStakeBlockReason) {
+    await updateHeartbeatPresence(env, userId, deviceId, device.id, device.hashrate, heartbeatAt, `heartbeat:${minimumStakeBlockReason}`);
+    return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: minimumStakeBlockReason };
   }
 
   const accruedMs = Math.min(heartbeatGapMs, MAX_HEARTBEAT_REWARD_MS);

@@ -1,6 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
 import { activatePendingLocksOnAgreement } from "../lib/locks";
+import { tryCreateRelayer } from "../lib/ownerRelayer";
 import { badRequest, json, unauthorized } from "../lib/response";
 import { isMaintenanceEnabled } from "../lib/system";
 const HEARTBEAT_ONLINE_MS = 90_000;
@@ -12,6 +13,67 @@ function deriveLiveOnlineStatus(lastSeenAt) {
     if (Number.isNaN(ts))
         return "offline";
     return Date.now() - ts <= HEARTBEAT_ONLINE_MS ? "online" : "offline";
+}
+function parseValidTime(value) {
+    if (!value)
+        return null;
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? null : time;
+}
+function laterNullableIsoDate(a, b) {
+    const aTime = parseValidTime(a);
+    const bTime = parseValidTime(b);
+    if (aTime === null && bTime === null)
+        return null;
+    return new Date(Math.max(aTime ?? 0, bTime ?? 0)).toISOString();
+}
+function deriveContractState(input) {
+    const effectiveEndAt = laterNullableIsoDate(input.contractEndAt, input.monthlyCardEndAt);
+    const effectiveEndMs = parseValidTime(effectiveEndAt);
+    const expired = effectiveEndMs !== null && effectiveEndMs < Date.now();
+    const active = Number(input.contractActive ?? 0) === 1;
+    const needsMinerSetup = Number(input.deviceCount ?? 0) <= 0;
+    const needsContractAgreement = Boolean(input.contractRequired &&
+        input.requiredContractVersion &&
+        input.acceptedContractVersion !== input.requiredContractVersion);
+    let blockReason = null;
+    if (!active)
+        blockReason = "contract_inactive";
+    else if (expired)
+        blockReason = "contract_expired";
+    else if (needsContractAgreement)
+        blockReason = "contract_agreement_required";
+    else if (needsMinerSetup)
+        blockReason = "miner_setup_required";
+    return {
+        effectiveEndAt,
+        canMine: active && !expired && !needsContractAgreement && !needsMinerSetup,
+        canClaim: active && !expired && !needsContractAgreement && !needsMinerSetup,
+        needsContractAgreement,
+        needsMinerSetup,
+        blockReason,
+    };
+}
+async function readMinimumStakeBlockReason(env, wallet) {
+    if (!wallet)
+        return null;
+    const relayer = tryCreateRelayer(env);
+    if (!relayer || !env.MINING_POOL_ADDRESS || !env.SUPER_TOKEN_ADDRESS)
+        return null;
+    try {
+        const gate = await relayer.getMiningStakeGate(wallet);
+        const min = Number(gate.minFormatted);
+        const staked = Number(gate.stakedFormatted);
+        if (!Number.isFinite(min) || min <= 0)
+            return null;
+        if (!Number.isFinite(staked) || staked < min) {
+            return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
+        }
+    }
+    catch {
+        return null;
+    }
+    return null;
 }
 async function ensureHeartbeatColumns(env) {
     if (heartbeatColumnsReady)
@@ -186,6 +248,7 @@ export async function handleUsers(request, env, pathParts) {
         u.id, u.wallet, u.email, u.role, NULL AS status, u.created_at, u.updated_at,
         cp.nickname, cp.parent_user_id AS parentUserId, re.inviter_wallet AS inviterWallet, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
         cp.monthly_card_end_at AS monthlyCardEndAt,
+        cp.contract_type AS contractType,
         COALESCE(cp.contract_term_days, 1095) AS contractTermDays,
         COALESCE(cp.monthly_card_days, 30) AS monthlyCardDays,
         COALESCE(cp.contract_active, 0) AS contractActive,
@@ -228,8 +291,30 @@ export async function handleUsers(request, env, pathParts) {
        FROM token_locks WHERE user_id = ?`)
             .bind(userId)
             .first();
+        const systemRows = await env.DB.prepare("SELECT key, value FROM system_settings WHERE key IN ('contract_required', 'contract_version')").all();
+        const systemSettings = new Map((systemRows.results ?? []).map((row) => [row.key, row.value]));
+        const contractRequired = (systemSettings.get("contract_required") ?? "1") === "1";
+        const contractVersion = systemSettings.get("contract_version") ?? "1.0.0";
+        const contractState = deriveContractState({
+            contractActive: user.contractActive ?? 0,
+            contractType: user.contractType ?? null,
+            contractEndAt: user.contractEndAt ?? null,
+            monthlyCardEndAt: user.monthlyCardEndAt ?? null,
+            activationStatus: user.activationStatus ?? null,
+            deviceCount: devices.results?.length ?? 0,
+            acceptedContractVersion: user.contractAgreementAcceptedVersion ?? null,
+            requiredContractVersion: contractVersion,
+            contractRequired,
+        });
+        const stakeBlockReason = contractState.canMine
+            ? await readMinimumStakeBlockReason(env, user.wallet)
+            : null;
+        const effectiveContractState = stakeBlockReason
+            ? { ...contractState, canMine: false, canClaim: false, blockReason: stakeBlockReason }
+            : contractState;
         return json({
             ...user,
+            ...effectiveContractState,
             onlineStatus: deriveLiveOnlineStatus(user.lastSeenAt ?? null),
             devices: devices.results ?? [],
             rewards: rewards.results ?? [],

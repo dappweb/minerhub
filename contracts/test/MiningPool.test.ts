@@ -1,6 +1,6 @@
 ﻿import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import type { MiningPool, SUPER, SwapRouter, USDT_Mock } from "../typechain-types";
 
 describe("Coin Planet Contracts", () => {
@@ -17,16 +17,25 @@ describe("Coin Planet Contracts", () => {
     [deployer, miner1, miner2, admin1] = await ethers.getSigners();
 
     const SUPERFactory = await ethers.getContractFactory("SUPER");
-    SUPER = await SUPERFactory.deploy();
+    SUPER = await upgrades.deployProxy(SUPERFactory, [deployer.address], {
+      initializer: "initialize",
+      kind: "uups",
+    }) as unknown as SUPER;
 
     const USDTFactory = await ethers.getContractFactory("USDT_Mock");
     usdt = await USDTFactory.deploy();
 
     const MiningPoolFactory = await ethers.getContractFactory("MiningPool");
-    miningPool = await MiningPoolFactory.deploy(await SUPER.getAddress());
+    miningPool = await upgrades.deployProxy(MiningPoolFactory, [await SUPER.getAddress(), deployer.address], {
+      initializer: "initialize",
+      kind: "uups",
+    }) as unknown as MiningPool;
 
     const SwapRouterFactory = await ethers.getContractFactory("SwapRouter");
-    swapRouter = await SwapRouterFactory.deploy(await SUPER.getAddress(), await usdt.getAddress());
+    swapRouter = await upgrades.deployProxy(SwapRouterFactory, [await SUPER.getAddress(), await usdt.getAddress(), deployer.address], {
+      initializer: "initialize",
+      kind: "uups",
+    }) as unknown as SwapRouter;
 
     await SUPER.addMinter(await miningPool.getAddress());
     await SUPER.addMinter(await swapRouter.getAddress());
@@ -117,6 +126,40 @@ describe("Coin Planet Contracts", () => {
       await expect(miningPool.removeAdmin(admin1.address)).to.emit(miningPool, "AdminRemoved");
       await expect(miningPool.removeAdmin(admin1.address))
         .to.be.revertedWith("Admin does not exist");
+    });
+
+    it("Should gate rewards by SUPER stake above the minimum", async () => {
+      const minStake = ethers.parseEther("100");
+      const equalStake = minStake;
+      const eligibleStake = ethers.parseEther("101");
+
+      await miningPool.setMinSuperStakeForReward(minStake);
+      await miningPool.connect(miner1).registerMiner(1000, "device-1");
+      await miningPool.connect(miner2).registerMiner(1000, "device-2");
+
+      await SUPER.mint(miner1.address, ethers.parseEther("1000"));
+      await SUPER.mint(miner2.address, ethers.parseEther("1000"));
+      await SUPER.mint(await miningPool.getAddress(), ethers.parseEther("10000000"));
+
+      await SUPER.connect(miner1).approve(await miningPool.getAddress(), equalStake);
+      await miningPool.connect(miner1).stakeSuper(equalStake);
+      expect(await miningPool.isRewardEligible(miner1.address)).to.equal(false);
+      expect(await miningPool.totalEligibleHashrate()).to.equal(0);
+
+      await SUPER.connect(miner2).approve(await miningPool.getAddress(), eligibleStake);
+      await miningPool.connect(miner2).stakeSuper(eligibleStake);
+      expect(await miningPool.isRewardEligible(miner2.address)).to.equal(true);
+      expect(await miningPool.totalEligibleHashrate()).to.equal(1000);
+
+      await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+      await ethers.provider.send("evm_mine", []);
+
+      expect(await miningPool.calculatePendingReward(miner1.address)).to.equal(0n);
+      expect(await miningPool.calculatePendingReward(miner2.address)).to.be.greaterThan(0n);
+
+      await miningPool.connect(miner2).unstakeSuper(ethers.parseEther("2"));
+      expect(await miningPool.isRewardEligible(miner2.address)).to.equal(false);
+      expect(await miningPool.totalEligibleHashrate()).to.equal(0);
     });
   });
 

@@ -53,6 +53,15 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
     uint256 public totalMiners;
     uint256 public totalActiveHashrate;
     uint256 public totalEmitted;
+
+    // SUPER stake gate state. Appended for UUPS storage compatibility.
+    uint256 public minSuperStakeForReward;
+    mapping(address => uint256) public stakedSuper;
+    mapping(address => bool) public eligibleHashrateIncluded;
+    mapping(address => bool) public minerAddressKnown;
+    address[] public minerAddresses;
+    uint256 public totalEligibleHashrate;
+    uint256 public totalStakedSuper;
     
     // 浜嬩欢
     event MinerRegistered(address indexed miner, uint256 hashrate);
@@ -62,6 +71,10 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
     event MinerDeactivated(address indexed miner, string reason);
     event RewardParametersUpdated(uint256 newRewardPerHash, uint256 newClaimCooldown);
     event SuspiciousActivityDetected(address indexed miner, uint256 score, string reason);
+    event MinSuperStakeForRewardUpdated(uint256 oldAmount, uint256 newAmount);
+    event SuperStaked(address indexed miner, uint256 amount, uint256 totalStakedByMiner);
+    event SuperUnstaked(address indexed miner, uint256 amount, uint256 totalStakedByMiner);
+    event MinerEligibilityUpdated(address indexed miner, bool eligible, uint256 hashrate);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -103,8 +116,11 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         });
         
         registeredMiners[msg.sender] = true;
+        minerAddressKnown[msg.sender] = true;
+        minerAddresses.push(msg.sender);
         totalMiners++;
         totalActiveHashrate += _hashrate;
+        _refreshEligibility(msg.sender);
         
         emit MinerRegistered(msg.sender, _hashrate);
     }
@@ -129,6 +145,9 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         uint256 oldHashrate = miner.hashrate;
         totalActiveHashrate = totalActiveHashrate - oldHashrate + _newHashrate;
         miner.hashrate = _newHashrate;
+        if (eligibleHashrateIncluded[msg.sender]) {
+            totalEligibleHashrate = totalEligibleHashrate - oldHashrate + _newHashrate;
+        }
         
         emit HashrateUpdated(msg.sender, oldHashrate, _newHashrate);
     }
@@ -143,6 +162,7 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         
         Miner storage miner = miners[_miner];
         if (!miner.active || miner.hashrate == 0) return miner.pendingReward;
+        if (!isRewardEligible(_miner)) return miner.pendingReward;
         
         // 妫€鏌ラ攣浠撴湡
         if (block.timestamp < miner.registeredTime + lockupPeriod) {
@@ -154,7 +174,8 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         
         // 濂栧姳 = 鍏ㄥ眬鏃ヤ骇 * (璇ョ熆宸ョ畻鍔?/ 鍏ㄧ悆鎬荤畻鍔? * 鏃堕棿姣斾緥
         uint256 dailyGlobalReward = DAILY_EMISSION;
-        uint256 minerShare = (dailyGlobalReward * miner.hashrate) / (totalActiveHashrate == 0 ? 1 : totalActiveHashrate);
+        if (totalEligibleHashrate == 0) return miner.pendingReward;
+        uint256 minerShare = (dailyGlobalReward * miner.hashrate) / totalEligibleHashrate;
         uint256 reward = (minerShare * timePassed) / (1 days);
         
         return miner.pendingReward + reward;
@@ -176,6 +197,7 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         // 璁＄畻濂栧姳
         uint256 reward = calculatePendingReward(msg.sender);
         require(reward > 0, "No reward to claim");
+        require(availableRewardBalance() >= reward, "Insufficient reward pool");
         
         // 妫€娴嬩綔寮婅涓?
         if (timeSinceLast > 7 days && miner.hashrate > MIN_HASHRATE * 10) {
@@ -231,8 +253,73 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         
         miner.active = false;
         totalActiveHashrate -= miner.hashrate;
+        _refreshEligibility(_miner);
         
         emit MinerDeactivated(_miner, _reason);
+    }
+
+    function stakeSuper(uint256 _amount) external nonReentrant {
+        require(_amount > 0, "Stake amount required");
+        if (registeredMiners[msg.sender]) {
+            _accrueReward(msg.sender);
+        }
+
+        stakedSuper[msg.sender] += _amount;
+        totalStakedSuper += _amount;
+        require(superToken.transferFrom(msg.sender, address(this), _amount), "Token transfer failed");
+
+        if (registeredMiners[msg.sender]) {
+            _refreshEligibility(msg.sender);
+        }
+
+        emit SuperStaked(msg.sender, _amount, stakedSuper[msg.sender]);
+    }
+
+    function unstakeSuper(uint256 _amount) external nonReentrant {
+        require(_amount > 0, "Unstake amount required");
+        require(stakedSuper[msg.sender] >= _amount, "Insufficient staked SUPER");
+        if (registeredMiners[msg.sender]) {
+            _accrueReward(msg.sender);
+        }
+
+        stakedSuper[msg.sender] -= _amount;
+        totalStakedSuper -= _amount;
+        require(superToken.transfer(msg.sender, _amount), "Token transfer failed");
+
+        if (registeredMiners[msg.sender]) {
+            _refreshEligibility(msg.sender);
+        }
+
+        emit SuperUnstaked(msg.sender, _amount, stakedSuper[msg.sender]);
+    }
+
+    function setMinSuperStakeForReward(uint256 _amount) external onlyAdmin {
+        uint256 oldAmount = minSuperStakeForReward;
+        minSuperStakeForReward = _amount;
+        _recalculateEligibleHashrate();
+        emit MinSuperStakeForRewardUpdated(oldAmount, _amount);
+    }
+
+    function isRewardEligible(address _miner) public view returns (bool) {
+        Miner storage miner = miners[_miner];
+        return registeredMiners[_miner] && miner.active && miner.hashrate > 0 && stakedSuper[_miner] > minSuperStakeForReward;
+    }
+
+    function availableRewardBalance() public view returns (uint256) {
+        uint256 balance = superToken.balanceOf(address(this));
+        return balance > totalStakedSuper ? balance - totalStakedSuper : 0;
+    }
+
+    function syncMinerEligibility(address[] calldata _miners) external onlyAdmin {
+        for (uint256 i = 0; i < _miners.length; i++) {
+            address minerAddress = _miners[i];
+            require(registeredMiners[minerAddress], "Miner not registered");
+            if (!minerAddressKnown[minerAddress]) {
+                minerAddressKnown[minerAddress] = true;
+                minerAddresses.push(minerAddress);
+            }
+            _refreshEligibility(minerAddress);
+        }
     }
     
     /**
@@ -243,7 +330,9 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         uint256 pending,
         uint256 totalClaimed,
         bool active,
-        uint256 suspiciousScore
+        uint256 suspiciousScore,
+        uint256 stakedAmount,
+        bool rewardEligible
     ) {
         require(registeredMiners[_miner], "Miner not registered");
         Miner storage miner = miners[_miner];
@@ -252,7 +341,9 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
             calculatePendingReward(_miner),
             miner.totalClaimed,
             miner.active,
-            miner.suspiciousScore
+            miner.suspiciousScore,
+            stakedSuper[_miner],
+            isRewardEligible(_miner)
         );
     }
     
@@ -262,9 +353,56 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
     function getGlobalStats() external view returns (
         uint256 totalEm,
         uint256 totalActive,
-        uint256 minerCount
+        uint256 minerCount,
+        uint256 totalEligible,
+        uint256 totalStaked,
+        uint256 minStakeForReward,
+        uint256 rewardBalance
     ) {
-        return (totalEmitted, totalActiveHashrate, totalMiners);
+        return (
+            totalEmitted,
+            totalActiveHashrate,
+            totalMiners,
+            totalEligibleHashrate,
+            totalStakedSuper,
+            minSuperStakeForReward,
+            availableRewardBalance()
+        );
+    }
+
+    function _accrueReward(address _miner) internal {
+        Miner storage miner = miners[_miner];
+        miner.pendingReward = calculatePendingReward(_miner);
+        miner.lastClaimed = block.timestamp;
+    }
+
+    function _refreshEligibility(address _miner) internal {
+        bool included = eligibleHashrateIncluded[_miner];
+        bool eligible = isRewardEligible(_miner);
+        uint256 hashrate = miners[_miner].hashrate;
+
+        if (eligible && !included) {
+            totalEligibleHashrate += hashrate;
+            eligibleHashrateIncluded[_miner] = true;
+            emit MinerEligibilityUpdated(_miner, true, hashrate);
+        } else if (!eligible && included) {
+            totalEligibleHashrate -= hashrate;
+            eligibleHashrateIncluded[_miner] = false;
+            emit MinerEligibilityUpdated(_miner, false, hashrate);
+        }
+    }
+
+    function _recalculateEligibleHashrate() internal {
+        totalEligibleHashrate = 0;
+        for (uint256 i = 0; i < minerAddresses.length; i++) {
+            address minerAddress = minerAddresses[i];
+            bool eligible = isRewardEligible(minerAddress);
+            eligibleHashrateIncluded[minerAddress] = eligible;
+            if (eligible) {
+                totalEligibleHashrate += miners[minerAddress].hashrate;
+            }
+            emit MinerEligibilityUpdated(minerAddress, eligible, miners[minerAddress].hashrate);
+        }
     }
 
     function _authorizeUpgrade(address) internal override onlyAdmin {}

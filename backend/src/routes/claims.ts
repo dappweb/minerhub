@@ -6,7 +6,26 @@ import { badRequest, json, unauthorized } from "../lib/response";
 import { isExchangeAutoEnabled, isMaintenanceEnabled } from "../lib/system";
 import type { Env } from "../types/env";
 
+let claimsProfileColumnsReady = false;
+let exchangeOrderColumnsReady = false;
+
+async function ensureClaimsProfileColumns(env: Env): Promise<void> {
+  if (claimsProfileColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(customer_profiles)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  const statements: string[] = [];
+  if (!columns.has("monthly_card_end_at")) statements.push("ALTER TABLE customer_profiles ADD COLUMN monthly_card_end_at TEXT");
+  if (!columns.has("contract_agreement_accepted_version")) {
+    statements.push("ALTER TABLE customer_profiles ADD COLUMN contract_agreement_accepted_version TEXT");
+  }
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
+  claimsProfileColumnsReady = true;
+}
+
 async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
+  await ensureClaimsProfileColumns(env);
   const now = nowIso();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO customer_profiles (
@@ -25,6 +44,23 @@ async function assertUserOwnedByWallet(env: Env, userId: string, wallet: string)
     .bind(userId, wallet.toLowerCase())
     .first<{ id: string }>();
   return Boolean(row?.id);
+}
+
+async function readMinimumStakeBlockReason(env: Env, wallet: string): Promise<string | null> {
+  const relayer = tryCreateRelayer(env);
+  if (!relayer || !env.MINING_POOL_ADDRESS || !env.SUPER_TOKEN_ADDRESS) return null;
+  try {
+    const gate = await relayer.getMiningStakeGate(wallet);
+    const min = Number(gate.minFormatted);
+    const staked = Number(gate.stakedFormatted);
+    if (!Number.isFinite(min) || min <= 0) return null;
+    if (!Number.isFinite(staked) || staked <= min) {
+      return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 async function reserveRewardSuper(env: Env, userId: string, amount: number, at: string): Promise<boolean> {
@@ -50,6 +86,104 @@ async function restoreRewardSuper(env: Env, userId: string, amount: number, at: 
   )
     .bind(amount, at, userId)
     .run();
+}
+
+async function ensureExchangeOrderColumns(env: Env): Promise<void> {
+  if (exchangeOrderColumnsReady) return;
+  const info = await env.DB.prepare("PRAGMA table_info(exchange_orders)").all<{ name: string }>();
+  const columns = new Set((info.results ?? []).map((row) => row.name));
+  const statements: string[] = [];
+  if (!columns.has("super_tx_hash")) statements.push("ALTER TABLE exchange_orders ADD COLUMN super_tx_hash TEXT");
+  if (!columns.has("usdt_tx_hash")) statements.push("ALTER TABLE exchange_orders ADD COLUMN usdt_tx_hash TEXT");
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
+  exchangeOrderColumnsReady = true;
+}
+
+function parseValidTime(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function deriveClaimBlockReason(input: {
+  contractActive: number | null;
+  contractEndAt: string | null;
+  monthlyCardEndAt: string | null;
+  acceptedContractVersion: string | null;
+  requiredContractVersion: string;
+  contractRequired: boolean;
+  deviceCount: number;
+}): string | null {
+  const contractEndMs = parseValidTime(input.contractEndAt);
+  const monthlyEndMs = parseValidTime(input.monthlyCardEndAt);
+  const effectiveEndMs = contractEndMs === null && monthlyEndMs === null
+    ? null
+    : Math.max(contractEndMs ?? 0, monthlyEndMs ?? 0);
+
+  if (Number(input.contractActive ?? 0) !== 1) return "contract_inactive";
+  if (effectiveEndMs !== null && effectiveEndMs < Date.now()) return "contract_expired";
+  if (
+    input.contractRequired &&
+    input.requiredContractVersion &&
+    input.acceptedContractVersion !== input.requiredContractVersion
+  ) {
+    return "contract_agreement_required";
+  }
+  if (Number(input.deviceCount ?? 0) <= 0) return "miner_setup_required";
+  return null;
+}
+
+async function assertCanClaim(env: Env, userId: string, wallet: string): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const profile = await env.DB.prepare(
+    `SELECT
+       COALESCE(contract_active, 0) AS contractActive,
+       contract_end_at AS contractEndAt,
+       monthly_card_end_at AS monthlyCardEndAt,
+       contract_agreement_accepted_version AS contractAgreementAcceptedVersion
+     FROM customer_profiles
+     WHERE user_id = ?`
+  )
+    .bind(userId)
+    .first<{
+      contractActive: number;
+      contractEndAt: string | null;
+      monthlyCardEndAt: string | null;
+      contractAgreementAcceptedVersion: string | null;
+    }>();
+
+  const deviceRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM devices WHERE user_id = ?")
+    .bind(userId)
+    .first<{ count: number }>();
+
+  const systemRows = await env.DB.prepare(
+    "SELECT key, value FROM system_settings WHERE key IN ('contract_required', 'contract_version')"
+  ).all<{ key: string; value: string }>();
+  const systemSettings = new Map((systemRows.results ?? []).map((row) => [row.key, row.value]));
+
+  const blockReason = deriveClaimBlockReason({
+    contractActive: profile?.contractActive ?? 0,
+    contractEndAt: profile?.contractEndAt ?? null,
+    monthlyCardEndAt: profile?.monthlyCardEndAt ?? null,
+    acceptedContractVersion: profile?.contractAgreementAcceptedVersion ?? null,
+    requiredContractVersion: systemSettings.get("contract_version") ?? "1.0.0",
+    contractRequired: (systemSettings.get("contract_required") ?? "1") === "1",
+    deviceCount: Number(deviceRow?.count ?? 0),
+  });
+
+  const stakeBlockReason = await readMinimumStakeBlockReason(env, wallet);
+  if (stakeBlockReason) {
+    return {
+      ok: false,
+      response: json({ error: "Claim is blocked", canClaim: false, blockReason: stakeBlockReason }, 403),
+    };
+  }
+  if (!blockReason) return { ok: true };
+  return {
+    ok: false,
+    response: json({ error: "Claim is blocked", canClaim: false, blockReason }, 403),
+  };
 }
 
 export async function handleClaims(request: Request, env: Env, pathParts: string[]): Promise<Response> {
@@ -86,6 +220,9 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
     }
 
     await ensureCustomerProfile(env, body.userId);
+    const claimAccess = await assertCanClaim(env, body.userId, body.wallet);
+    if (!claimAccess.ok) return claimAccess.response;
+
     const now = nowIso();
     const reserved = await reserveRewardSuper(env, body.userId, amount, now);
     if (!reserved) {
@@ -161,10 +298,11 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
 
     const limit = Math.min(50, Math.max(1, Number(body.limit ?? 10) || 10));
 
+    await ensureExchangeOrderColumns(env);
     const { results } = await env.DB.prepare(
       `SELECT
         id, user_id, wallet, amount_super, amount_usdt, mode, status,
-        request_note, tx_hash, created_at, updated_at, completed_at
+        request_note, tx_hash, super_tx_hash, usdt_tx_hash, created_at, updated_at, completed_at
        FROM exchange_orders
        WHERE user_id = ? AND wallet = ?
        ORDER BY created_at DESC
@@ -181,6 +319,8 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
         status: string;
         request_note: string | null;
         tx_hash: string | null;
+        super_tx_hash: string | null;
+        usdt_tx_hash: string | null;
         created_at: string;
         updated_at: string;
         completed_at: string | null;
@@ -196,7 +336,9 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
         mode: row.mode,
         status: row.status,
         note: row.request_note,
-        txHash: row.tx_hash,
+        txHash: row.usdt_tx_hash ?? row.tx_hash,
+        superTxHash: row.super_tx_hash,
+        usdtTxHash: row.usdt_tx_hash,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         completedAt: row.completed_at,
@@ -219,6 +361,7 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
       wallet?: string;
       amountSuper?: string;
       amountUsdt?: string;
+      superTxHash?: string;
       note?: string;
     } | null;
 
@@ -234,11 +377,19 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
 
     const amountSuper = Number(body.amountSuper ?? "0");
     const amountUsdt = Number(body.amountUsdt ?? "0");
+    const superTxHash = body.superTxHash?.trim();
     if (!Number.isFinite(amountSuper) || amountSuper <= 0) {
       return badRequest("amountSuper must be a positive number");
     }
+    if (!superTxHash) {
+      return badRequest("superTxHash is required");
+    }
 
     await ensureCustomerProfile(env, body.userId);
+    await ensureExchangeOrderColumns(env);
+    const claimAccess = await assertCanClaim(env, body.userId, body.wallet);
+    if (!claimAccess.ok) return claimAccess.response;
+
     const now = nowIso();
     const reserved = await reserveRewardSuper(env, body.userId, amountSuper, now);
     if (!reserved) {
@@ -261,8 +412,8 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
       await env.DB.prepare(
         `INSERT INTO exchange_orders (
           id, user_id, wallet, amount_super, amount_usdt, mode, status,
-          request_note, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          request_note, tx_hash, super_tx_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           exchangeId,
@@ -273,6 +424,8 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
           mode,
           status,
           body.note?.trim() || null,
+          superTxHash,
+          superTxHash,
           now,
           now,
         )
@@ -291,7 +444,7 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
           amountSuper.toString(),
           Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
           status,
-          autoEnabled ? "auto exchange request" : "manual exchange request",
+          `${autoEnabled ? "auto exchange request" : "manual exchange request"}; SUPER tx: ${superTxHash}`,
           now,
           now,
         )
@@ -304,6 +457,7 @@ export async function handleClaims(request: Request, env: Env, pathParts: string
         autoEnabled,
         amountSuper: amountSuper.toString(),
         amountUsdt: Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0",
+        superTxHash,
         totalRewardSuper: totals.totalRewardSuper,
         createdAt: now,
       }, 201);

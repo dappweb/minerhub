@@ -15,6 +15,46 @@ async function ensureAdminProfileColumns(env) {
     }
     adminProfileColumnsReady = true;
 }
+let collectionRequestsReady = false;
+async function ensureCollectionRequestsTable(env) {
+    if (collectionRequestsReady)
+        return;
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS fund_collection_requests (
+      id TEXT PRIMARY KEY,
+      requester_wallet TEXT NOT NULL,
+      requester_role TEXT NOT NULL,
+      source_user_ids_json TEXT NOT NULL,
+      source_device_count INTEGER NOT NULL DEFAULT 0,
+      target_wallet TEXT NOT NULL,
+      amount_usdt TEXT NOT NULL DEFAULT '0',
+      amount_super TEXT NOT NULL DEFAULT '0',
+      status TEXT NOT NULL DEFAULT 'pending',
+      tx_hash TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT
+    )`).run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_fund_collection_requests_time ON fund_collection_requests(created_at DESC)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_fund_collection_requests_status ON fund_collection_requests(status)").run();
+    collectionRequestsReady = true;
+}
+let exchangeOrderTxColumnsReady = false;
+async function ensureExchangeOrderTxColumns(env) {
+    if (exchangeOrderTxColumnsReady)
+        return;
+    const info = await env.DB.prepare("PRAGMA table_info(exchange_orders)").all();
+    const columns = new Set((info.results ?? []).map((row) => row.name));
+    const statements = [];
+    if (!columns.has("super_tx_hash"))
+        statements.push("ALTER TABLE exchange_orders ADD COLUMN super_tx_hash TEXT");
+    if (!columns.has("usdt_tx_hash"))
+        statements.push("ALTER TABLE exchange_orders ADD COLUMN usdt_tx_hash TEXT");
+    for (const statement of statements) {
+        await env.DB.prepare(statement).run();
+    }
+    exchangeOrderTxColumnsReady = true;
+}
 // Heartbeat-driven live status. The `online_status` column is only refreshed by
 // scheduled tasks / heartbeat handlers; to react immediately we derive it from
 // the freshness of `last_seen_at` on every admin read.
@@ -43,6 +83,45 @@ const EFFECTIVE_CONTRACT_END_SQL = `CASE
   WHEN cp.monthly_card_end_at > cp.contract_end_at THEN cp.monthly_card_end_at
   ELSE cp.contract_end_at
 END`;
+function deriveContractState(input) {
+    const effectiveEndAt = laterNullableIsoDate(input.contractEndAt, input.monthlyCardEndAt);
+    const effectiveEndMs = parseValidTime(effectiveEndAt);
+    const expired = effectiveEndMs !== null && effectiveEndMs < Date.now();
+    const active = Number(input.contractActive ?? 0) === 1;
+    const needsMinerSetup = Number(input.deviceCount ?? 0) <= 0;
+    const needsContractAgreement = Boolean(input.contractRequired &&
+        input.requiredContractVersion &&
+        input.acceptedContractVersion !== input.requiredContractVersion);
+    let blockReason = null;
+    if (!active)
+        blockReason = "contract_inactive";
+    else if (expired)
+        blockReason = "contract_expired";
+    else if (needsContractAgreement)
+        blockReason = "contract_agreement_required";
+    else if (needsMinerSetup)
+        blockReason = "miner_setup_required";
+    return {
+        contractActive: active,
+        contractType: input.contractType ?? null,
+        contractEndAt: input.contractEndAt ?? null,
+        monthlyCardEndAt: input.monthlyCardEndAt ?? null,
+        effectiveEndAt,
+        activationStatus: input.activationStatus ?? (active ? "active" : "pending"),
+        canMine: active && !expired && !needsContractAgreement && !needsMinerSetup,
+        canClaim: active && !expired && !needsContractAgreement && !needsMinerSetup,
+        needsContractAgreement,
+        needsMinerSetup,
+        blockReason,
+    };
+}
+function laterNullableIsoDate(a, b) {
+    const aTime = parseValidTime(a);
+    const bTime = parseValidTime(b);
+    if (aTime === null && bTime === null)
+        return null;
+    return new Date(Math.max(aTime ?? 0, bTime ?? 0)).toISOString();
+}
 export function deriveLiveOnlineStatus(lastSeenAt) {
     if (!lastSeenAt)
         return "offline";
@@ -189,6 +268,7 @@ async function hydrateRowsWithBalances(env, rows) {
 async function readCustomerSummaries(env) {
     const { results } = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
+      re.inviter_wallet AS referrerWallet,
       cp.nickname AS nickname,
       COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
       cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
@@ -208,21 +288,16 @@ async function readCustomerSummaries(env) {
     FROM users u
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
+    LEFT JOIN referral_edges re ON re.invitee_user_id = u.id AND re.status = 'active'
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.monthly_card_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
-             cp.reward_rate_usdt_per_hour
+             cp.reward_rate_usdt_per_hour, re.inviter_wallet
     ORDER BY u.created_at DESC`).all();
-    const baseRows = (results ?? []).map((row) => ({
-        ...row,
-        deviceCount: Number(row.deviceCount ?? 0),
-        activeDeviceCount: Number(row.activeDeviceCount ?? 0),
-        subAccountCount: Number(row.subAccountCount ?? 0),
-        onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
-    }));
+    const baseRows = await attachDevicesToCustomerRows(env, results ?? []);
     return hydrateRowsWithBalances(env, baseRows);
 }
-async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedTypes) {
+async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedTypes, scopeUserId = null) {
     const inviter = await env.DB.prepare("SELECT id FROM users WHERE wallet = ? LIMIT 1")
         .bind(inviterWallet.toLowerCase())
         .first();
@@ -232,8 +307,13 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
     const clauses = ["rc.ancestor_user_id = ?", "rc.depth >= 1"];
     const params = [inviter.id];
     addContractScopeClause(clauses, params, allowedTypes);
+    if (scopeUserId) {
+        clauses.push("EXISTS (SELECT 1 FROM referral_closure scope_rc WHERE scope_rc.ancestor_user_id = ? AND scope_rc.descendant_user_id = u.id AND scope_rc.depth >= 1)");
+        params.push(scopeUserId);
+    }
     const { results } = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
+      re.inviter_wallet AS referrerWallet,
       cp.nickname AS nickname,
       COALESCE(NULLIF(TRIM(cp.machine_code), ''), MIN(d.device_id)) AS machineCode,
       cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
@@ -254,20 +334,102 @@ async function readCustomerSummariesByInviterWallet(env, inviterWallet, allowedT
     INNER JOIN users u ON u.id = rc.descendant_user_id
     LEFT JOIN customer_profiles cp ON cp.user_id = u.id
     LEFT JOIN devices d ON d.user_id = u.id
+    LEFT JOIN referral_edges re ON re.invitee_user_id = u.id AND re.status = 'active'
     WHERE ${clauses.join(" AND ")}
     GROUP BY u.id, u.wallet, u.email, u.role, cp.nickname, cp.machine_code, cp.contract_start_at,
              cp.contract_end_at, cp.monthly_card_end_at, cp.contract_type, cp.contract_active, cp.activation_status, cp.exchange_auto_enabled,
              cp.monthly_card_days, cp.total_reward_usdt, cp.total_reward_super, cp.last_seen_at, cp.online_status,
-             cp.reward_rate_usdt_per_hour
+             cp.reward_rate_usdt_per_hour, re.inviter_wallet
     ORDER BY u.created_at DESC`).bind(...params).all();
-    const baseRows = (results ?? []).map((row) => ({
-        ...row,
-        deviceCount: Number(row.deviceCount ?? 0),
-        activeDeviceCount: Number(row.activeDeviceCount ?? 0),
-        subAccountCount: Number(row.subAccountCount ?? 0),
-        onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
-    }));
+    const baseRows = await attachDevicesToCustomerRows(env, results ?? []);
     return hydrateRowsWithBalances(env, baseRows);
+}
+async function attachDevicesToCustomerRows(env, rows) {
+    if (rows.length === 0)
+        return [];
+    const devicesByUserId = await readDeviceSummariesByUserIds(env, rows.map((row) => row.id));
+    return rows.map((row) => {
+        const devices = devicesByUserId.get(row.id) ?? [];
+        const state = deriveContractState({
+            contractActive: row.contractActive,
+            contractType: row.contractType,
+            contractEndAt: row.contractEndAt,
+            monthlyCardEndAt: row.monthlyCardEndAt,
+            activationStatus: row.activationStatus,
+            deviceCount: Number(row.deviceCount ?? devices.length),
+        });
+        return {
+            ...row,
+            effectiveEndAt: state.effectiveEndAt,
+            canMine: state.canMine,
+            canClaim: state.canClaim,
+            needsContractAgreement: state.needsContractAgreement,
+            needsMinerSetup: state.needsMinerSetup,
+            blockReason: state.blockReason,
+            deviceCount: Number(row.deviceCount ?? devices.length),
+            activeDeviceCount: Number(row.activeDeviceCount ?? 0),
+            subAccountCount: Number(row.subAccountCount ?? 0),
+            onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
+            devices,
+        };
+    });
+}
+async function readDeviceSummariesByUserIds(env, userIds) {
+    const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+    const map = new Map();
+    if (uniqueUserIds.length === 0)
+        return map;
+    for (let i = 0; i < uniqueUserIds.length; i += 80) {
+        const batch = uniqueUserIds.slice(i, i + 80);
+        const placeholders = batch.map(() => "?").join(",");
+        const { results } = await env.DB.prepare(`SELECT
+        d.user_id AS userId,
+        d.id AS id,
+        d.device_id AS deviceId,
+        d.hashrate AS hashrate,
+        d.status AS status,
+        d.created_at AS createdAt,
+        d.updated_at AS updatedAt,
+        u.wallet AS ownerWallet,
+        cp.nickname AS ownerNickname,
+        cp.machine_code AS machineCode,
+        cp.last_seen_at AS lastSeenAt,
+        COALESCE(cp.contract_active, 0) AS contractActive,
+        cp.contract_end_at AS contractEndAt,
+        cp.monthly_card_end_at AS monthlyCardEndAt
+       FROM devices d
+       INNER JOIN users u ON u.id = d.user_id
+       LEFT JOIN customer_profiles cp ON cp.user_id = d.user_id
+       WHERE d.user_id IN (${placeholders})
+       ORDER BY d.updated_at DESC`)
+            .bind(...batch)
+            .all();
+        for (const row of results ?? []) {
+            const state = deriveContractState({
+                contractActive: row.contractActive,
+                contractEndAt: row.contractEndAt,
+                monthlyCardEndAt: row.monthlyCardEndAt,
+                deviceCount: 1,
+            });
+            const list = map.get(row.userId) ?? [];
+            list.push({
+                id: row.id,
+                deviceId: row.deviceId,
+                machineCode: row.machineCode,
+                hashrate: Number(row.hashrate ?? 0),
+                status: row.status,
+                onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt),
+                lastSeenAt: row.lastSeenAt,
+                contractStatus: state.canMine ? "active" : state.blockReason ?? "inactive",
+                ownerWallet: row.ownerWallet,
+                ownerNickname: row.ownerNickname,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+            });
+            map.set(row.userId, list);
+        }
+    }
+    return map;
 }
 async function readAdminSummary(env, wallet) {
     if (!wallet)
@@ -288,7 +450,7 @@ async function getCustomerDetail(env, userId) {
     await ensureProfile(env, userId);
     const customer = await env.DB.prepare(`SELECT
       u.id AS id, u.wallet AS wallet, u.email AS email, u.role AS role, NULL AS status,
-      cp.nickname AS nickname, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
+      cp.nickname AS nickname, cp.machine_code AS machineCode, cp.contract_start_at AS contractStartAt, cp.contract_end_at AS contractEndAt,
       cp.monthly_card_end_at AS monthlyCardEndAt,
       COALESCE(cp.contract_active, 0) AS contractActive,
       COALESCE(cp.activation_status, 'pending') AS activationStatus,
@@ -327,8 +489,22 @@ async function getCustomerDetail(env, userId) {
         .first();
     const lastSeenRaw = customer.lastSeenAt ?? null;
     const liveStatus = deriveLiveOnlineStatus(lastSeenRaw);
+    const state = deriveContractState({
+        contractActive: customer.contractActive,
+        contractType: customer.contractType,
+        contractEndAt: customer.contractEndAt,
+        monthlyCardEndAt: customer.monthlyCardEndAt,
+        activationStatus: customer.activationStatus,
+        deviceCount: Number(summary?.device_count ?? devices.results?.length ?? 0),
+    });
     return {
         ...customer,
+        effectiveEndAt: state.effectiveEndAt,
+        canMine: state.canMine,
+        canClaim: state.canClaim,
+        needsContractAgreement: state.needsContractAgreement,
+        needsMinerSetup: state.needsMinerSetup,
+        blockReason: state.blockReason,
         deviceCount: Number(summary?.device_count ?? devices.results?.length ?? 0),
         activeDeviceCount: Number(summary?.active_device_count ?? 0),
         subAccountCount: Number(subAccounts.results?.length ?? 0),
@@ -336,8 +512,14 @@ async function getCustomerDetail(env, userId) {
         devices: (devices.results ?? []).map((row) => ({
             id: row.id,
             deviceId: row.device_id,
+            machineCode: customer.machineCode,
             hashrate: Number(row.hashrate ?? 0),
             status: row.status,
+            onlineStatus: liveStatus,
+            lastSeenAt: lastSeenRaw,
+            contractStatus: state.canMine ? "active" : state.blockReason ?? "inactive",
+            ownerWallet: customer.wallet,
+            ownerNickname: customer.nickname,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         })),
@@ -385,10 +567,20 @@ async function applyServiceContractType(env, allowedTypes, userId, requestedType
     await setCustomerContractTypeIfEmpty(env, userId, resolved.contractType);
     return resolved;
 }
-async function handleCustomerList(env, requesterWallet, role, allowedTypes) {
+async function handleCustomerList(request, env, requesterWallet, role, scopeUserId, allowedTypes) {
+    const url = new URL(request.url);
+    const referrerWallet = (url.searchParams.get("referrerWallet") ?? "").trim().toLowerCase();
+    if (referrerWallet && !/^0x[0-9a-f]{40}$/.test(referrerWallet)) {
+        return badRequest("Invalid referrerWallet");
+    }
     const mineOnly = role !== "owner";
+    const customerReader = referrerWallet
+        ? readCustomerSummariesByInviterWallet(env, referrerWallet, allowedTypes, mineOnly ? scopeUserId : null)
+        : mineOnly
+            ? readCustomerSummariesByInviterWallet(env, requesterWallet, allowedTypes)
+            : readCustomerSummaries(env);
     const [items, admin] = await Promise.all([
-        mineOnly ? readCustomerSummariesByInviterWallet(env, requesterWallet, allowedTypes) : readCustomerSummaries(env),
+        customerReader,
         readAdminSummary(env, requesterWallet),
     ]);
     return json({ items, admin });
@@ -446,6 +638,7 @@ async function readAdminDevices(env, url, scopeUserId, allowedTypes) {
       COALESCE(cp.online_status, 'offline') AS onlineStatus,
       COALESCE(cp.contract_active, 0) AS contractActive,
       cp.contract_end_at AS contractEndAt,
+      cp.monthly_card_end_at AS monthlyCardEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
@@ -460,8 +653,15 @@ async function readAdminDevices(env, url, scopeUserId, allowedTypes) {
         .all();
     const baseRows = (results ?? []).map((row) => ({
         ...row,
-        hashrate: Number(row.hashrate ?? 0),
+        ...deriveContractState({
+            contractActive: row.contractActive,
+            contractType: row.contractType,
+            contractEndAt: row.contractEndAt,
+            monthlyCardEndAt: row.monthlyCardEndAt,
+            deviceCount: 1,
+        }),
         contractActive: Number(row.contractActive ?? 0),
+        hashrate: Number(row.hashrate ?? 0),
         monthlyCardDays: Number(row.monthlyCardDays ?? 30),
         onlineStatus: deriveLiveOnlineStatus(row.lastSeenAt ?? null),
     }));
@@ -486,6 +686,7 @@ async function getAdminDeviceDetail(env, deviceRecordId) {
       COALESCE(cp.online_status, 'offline') AS onlineStatus,
       COALESCE(cp.contract_active, 0) AS contractActive,
       cp.contract_end_at AS contractEndAt,
+      cp.monthly_card_end_at AS monthlyCardEndAt,
       cp.contract_type AS contractType,
       COALESCE(cp.reward_rate_usdt_per_hour, '0.084') AS rewardRateUsdtPerHour,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
@@ -518,8 +719,15 @@ async function getAdminDeviceDetail(env, deviceRecordId) {
         : { bnb: null, usdt: null, super: null };
     return {
         ...item,
-        hashrate: Number(item.hashrate ?? 0),
+        ...deriveContractState({
+            contractActive: item.contractActive,
+            contractType: item.contractType,
+            contractEndAt: item.contractEndAt,
+            monthlyCardEndAt: item.monthlyCardEndAt,
+            deviceCount: 1,
+        }),
         contractActive: Number(item.contractActive ?? 0),
+        hashrate: Number(item.hashrate ?? 0),
         monthlyCardDays: Number(item.monthlyCardDays ?? 30),
         onlineStatus: deriveLiveOnlineStatus(item.lastSeenAt ?? null),
         bnbBalance: balances.bnb,
@@ -616,6 +824,28 @@ async function handleAdminDeviceUpdate(request, env, deviceRecordId, allowedType
     }
     return handleAdminDeviceDetail(env, deviceRecordId);
 }
+async function handleAdminDeviceDelete(env, deviceRecordId) {
+    const current = await env.DB.prepare("SELECT id, user_id, device_id FROM devices WHERE id = ? LIMIT 1")
+        .bind(deviceRecordId)
+        .first();
+    if (!current)
+        return json({ error: "Device not found" }, 404);
+    await env.DB.prepare("DELETE FROM devices WHERE id = ?")
+        .bind(deviceRecordId)
+        .run();
+    const summary = await env.DB.prepare("SELECT COUNT(*) AS device_count, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_device_count FROM devices WHERE user_id = ?")
+        .bind(current.user_id)
+        .first();
+    return json({
+        ok: true,
+        deleted: true,
+        id: current.id,
+        deviceId: current.device_id,
+        userId: current.user_id,
+        deviceCount: Number(summary?.device_count ?? 0),
+        activeDeviceCount: Number(summary?.active_device_count ?? 0),
+    });
+}
 async function handleAdminDeviceBulkUpdate(request, env, scopeUserId, allowedTypes) {
     const body = (await request.json().catch(() => null));
     if (!body?.deviceIds?.length) {
@@ -703,6 +933,16 @@ async function handleCustomerUpdate(request, env, userId, allowedTypes) {
     if (!body)
         return badRequest("Invalid JSON body");
     await ensureProfile(env, userId);
+    if (allowedTypes !== null) {
+        const allowedKeys = new Set(["nickname", "notes"]);
+        const rejectedKeys = Object.keys(body).filter((key) => !allowedKeys.has(key));
+        if (rejectedKeys.length > 0) {
+            return json({ error: "SubAdmin can only update nickname and notes" }, 403);
+        }
+        if (!(await canAccessCustomerContractType(env, allowedTypes, userId))) {
+            return json({ error: "Forbidden" }, 403);
+        }
+    }
     const touchesService = allowedTypes !== null &&
         (body.contractType !== undefined ||
             body.rewardRateUsdtPerHour !== undefined ||
@@ -809,6 +1049,53 @@ async function handleCustomerUpdate(request, env, userId, allowedTypes) {
     }
     return handleCustomerDetail(env, userId);
 }
+async function handleCustomerDelete(env, userId) {
+    const current = await env.DB.prepare("SELECT id, wallet, role FROM users WHERE id = ? LIMIT 1")
+        .bind(userId)
+        .first();
+    if (!current)
+        return json({ error: "Customer not found" }, 404);
+    if (current.role === "owner" || current.role === "subadmin") {
+        return json({ error: "Admin accounts cannot be deleted from customer management" }, 403);
+    }
+    const deviceSummary = await env.DB.prepare("SELECT COUNT(*) AS count FROM devices WHERE user_id = ?")
+        .bind(userId)
+        .first();
+    const deleteByUserId = [
+        "DELETE FROM device_status_history WHERE user_id = ?",
+        "DELETE FROM reward_ledger WHERE user_id = ?",
+        "DELETE FROM payout_wallets WHERE user_id = ?",
+        "DELETE FROM user_agreement_acceptances WHERE user_id = ?",
+        "DELETE FROM announcement_reads WHERE user_id = ?",
+        "DELETE FROM exchange_orders WHERE user_id = ?",
+        "DELETE FROM reward_withdrawals WHERE user_id = ?",
+        "DELETE FROM payout_batch_items WHERE user_id = ?",
+        "DELETE FROM swap_trade_logs WHERE user_id = ?",
+        "DELETE FROM super_distributions WHERE user_id = ?",
+        "DELETE FROM token_locks WHERE user_id = ?",
+        "DELETE FROM devices WHERE user_id = ?",
+        "DELETE FROM customer_profiles WHERE user_id = ?",
+    ];
+    for (const statement of deleteByUserId) {
+        await env.DB.prepare(statement).bind(userId).run();
+    }
+    await env.DB.prepare("DELETE FROM referral_edges WHERE inviter_user_id = ? OR invitee_user_id = ?")
+        .bind(userId, userId)
+        .run();
+    await env.DB.prepare("DELETE FROM referral_closure WHERE ancestor_user_id = ? OR descendant_user_id = ?")
+        .bind(userId, userId)
+        .run();
+    await env.DB.prepare("DELETE FROM users WHERE id = ?")
+        .bind(userId)
+        .run();
+    return json({
+        ok: true,
+        deleted: true,
+        id: current.id,
+        wallet: current.wallet,
+        deviceCount: Number(deviceSummary?.count ?? 0),
+    });
+}
 async function handleCustomerActivate(request, env, userId, allowedTypes) {
     const body = (await request.json().catch(() => null));
     if (!body)
@@ -879,6 +1166,9 @@ function clampLimit(raw, fallback = 100, max = 500) {
         return fallback;
     return Math.min(Math.floor(value), max);
 }
+function isEvmAddress(value) {
+    return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
 async function handleRechargeRecords(env, url) {
     const limit = clampLimit(url.searchParams.get("limit"));
     const wallet = url.searchParams.get("wallet")?.trim().toLowerCase();
@@ -917,6 +1207,7 @@ async function handleRechargeRecords(env, url) {
     return json({ items, limit });
 }
 async function handleWithdrawalRecords(env, url) {
+    await ensureExchangeOrderTxColumns(env);
     const limit = clampLimit(url.searchParams.get("limit"));
     const userIdFilter = url.searchParams.get("userId")?.trim();
     const walletFilter = url.searchParams.get("wallet")?.trim().toLowerCase();
@@ -941,7 +1232,8 @@ async function handleWithdrawalRecords(env, url) {
         const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
         const { results } = await env.DB.prepare(`SELECT eo.id AS id, eo.user_id AS user_id, eo.wallet AS wallet,
               eo.amount_super AS amount_super, eo.amount_usdt AS amount_usdt,
-              eo.status AS status, eo.tx_hash AS tx_hash, eo.payout_wallet AS payout_wallet,
+              eo.status AS status, eo.tx_hash AS tx_hash, eo.super_tx_hash AS super_tx_hash,
+              eo.usdt_tx_hash AS usdt_tx_hash, eo.payout_wallet AS payout_wallet,
               eo.request_note AS request_note, eo.created_at AS created_at, eo.updated_at AS updated_at
        FROM exchange_orders eo ${where}
        ORDER BY eo.created_at DESC LIMIT ?`)
@@ -956,7 +1248,9 @@ async function handleWithdrawalRecords(env, url) {
                 amountUsdt: row.amount_usdt,
                 amountSuper: row.amount_super,
                 status: row.status,
-                txHash: row.tx_hash,
+                txHash: row.usdt_tx_hash ?? row.tx_hash,
+                superTxHash: row.super_tx_hash,
+                usdtTxHash: row.usdt_tx_hash,
                 payoutWallet: row.payout_wallet,
                 note: row.request_note,
                 createdAt: row.created_at,
@@ -1013,6 +1307,165 @@ async function handleExchangeRecords(env, url) {
         updatedAt: row.updated_at,
     }));
     return json({ items, limit });
+}
+async function handleFundCollectionRecords(env, url, requesterWallet, requesterRole) {
+    await ensureCollectionRequestsTable(env);
+    const limit = clampLimit(url.searchParams.get("limit"));
+    const status = url.searchParams.get("status")?.trim();
+    const clauses = [];
+    const params = [];
+    if (requesterRole !== "owner") {
+        clauses.push("LOWER(requester_wallet) = ?");
+        params.push(requesterWallet.toLowerCase());
+    }
+    if (status) {
+        clauses.push("status = ?");
+        params.push(status);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const { results } = await env.DB.prepare(`SELECT id, requester_wallet, requester_role, source_user_ids_json, source_device_count,
+            target_wallet, amount_usdt, amount_super, status, tx_hash, note,
+            created_at, updated_at, completed_at
+     FROM fund_collection_requests ${where}
+     ORDER BY created_at DESC LIMIT ?`)
+        .bind(...params, limit)
+        .all();
+    const items = (results ?? []).map((row) => {
+        let sourceUserIds = [];
+        try {
+            const parsed = JSON.parse(row.source_user_ids_json);
+            sourceUserIds = Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+        }
+        catch {
+            sourceUserIds = [];
+        }
+        return {
+            id: row.id,
+            requesterWallet: row.requester_wallet,
+            requesterRole: row.requester_role,
+            sourceUserIds,
+            sourceDeviceCount: Number(row.source_device_count ?? 0),
+            targetWallet: row.target_wallet,
+            amountUsdt: row.amount_usdt,
+            amountSuper: row.amount_super,
+            status: row.status,
+            txHash: row.tx_hash,
+            note: row.note,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            completedAt: row.completed_at,
+        };
+    });
+    return json({ items, limit });
+}
+async function handleFundCollectionCreate(request, env, requesterWallet, requesterRole, scopeUserId, allowedTypes) {
+    await ensureCollectionRequestsTable(env);
+    const body = (await request.json().catch(() => null));
+    const userIds = Array.from(new Set((body?.userIds ?? []).filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())));
+    const targetWallet = body?.targetWallet?.trim().toLowerCase() ?? "";
+    if (userIds.length === 0)
+        return badRequest("userIds required");
+    if (!isEvmAddress(targetWallet))
+        return badRequest("targetWallet must be a valid wallet address");
+    let amountUsdt = 0;
+    let amountSuper = 0;
+    let sourceDeviceCount = 0;
+    const acceptedUserIds = [];
+    for (const userId of userIds) {
+        if (!(await canAccessUserByScope(env, scopeUserId, allowedTypes, userId)))
+            continue;
+        const row = await env.DB.prepare(`SELECT
+         COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+         COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
+         COUNT(d.id) AS deviceCount
+       FROM users u
+       LEFT JOIN customer_profiles cp ON cp.user_id = u.id
+       LEFT JOIN devices d ON d.user_id = u.id
+       WHERE u.id = ?
+       GROUP BY u.id, cp.total_reward_usdt, cp.total_reward_super`)
+            .bind(userId)
+            .first();
+        if (!row)
+            continue;
+        acceptedUserIds.push(userId);
+        amountUsdt += Number(row.totalRewardUsdt ?? "0") || 0;
+        amountSuper += Number(row.totalRewardSuper ?? "0") || 0;
+        sourceDeviceCount += Number(row.deviceCount ?? 0);
+    }
+    if (acceptedUserIds.length === 0)
+        return json({ error: "No accessible users selected" }, 403);
+    const now = nowIso();
+    const id = createId("fcr");
+    await env.DB.prepare(`INSERT INTO fund_collection_requests (
+      id, requester_wallet, requester_role, source_user_ids_json, source_device_count,
+      target_wallet, amount_usdt, amount_super, status, note, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        .bind(id, requesterWallet.toLowerCase(), requesterRole, JSON.stringify(acceptedUserIds), sourceDeviceCount, targetWallet, amountUsdt.toFixed(6), amountSuper.toFixed(6), body?.note?.trim() || null, now, now)
+        .run();
+    return json({
+        ok: true,
+        id,
+        requesterWallet: requesterWallet.toLowerCase(),
+        requesterRole,
+        sourceUserIds: acceptedUserIds,
+        sourceDeviceCount,
+        targetWallet,
+        amountUsdt: amountUsdt.toFixed(6),
+        amountSuper: amountSuper.toFixed(6),
+        status: "pending",
+        createdAt: now,
+    }, 201);
+}
+async function handleFundCollectionAction(request, env, requestId, action) {
+    await ensureCollectionRequestsTable(env);
+    const current = await env.DB.prepare(`SELECT id, status
+     FROM fund_collection_requests
+     WHERE id = ?`)
+        .bind(requestId)
+        .first();
+    if (!current)
+        return json({ error: "Fund collection request not found" }, 404);
+    const body = (await request.json().catch(() => null));
+    const now = nowIso();
+    const txHash = body?.txHash?.trim() || null;
+    const note = body?.note?.trim() || null;
+    if (action === "approve") {
+        if (current.status !== "pending")
+            return badRequest("Only pending collection requests can be approved");
+        await env.DB.prepare(`UPDATE fund_collection_requests
+       SET status = 'approved',
+           note = COALESCE(?, note),
+           updated_at = ?
+       WHERE id = ?`)
+            .bind(note, now, requestId)
+            .run();
+        return json({ ok: true, id: requestId, status: "approved", updatedAt: now });
+    }
+    if (action === "reject") {
+        if (current.status !== "pending")
+            return badRequest("Only pending collection requests can be rejected");
+        await env.DB.prepare(`UPDATE fund_collection_requests
+       SET status = 'rejected',
+           note = COALESCE(?, note),
+           updated_at = ?,
+           completed_at = ?
+       WHERE id = ?`)
+            .bind(note, now, now, requestId)
+            .run();
+        return json({ ok: true, id: requestId, status: "rejected", updatedAt: now, completedAt: now });
+    }
+    if (current.status !== "approved")
+        return badRequest("Only approved collection requests can be completed");
+    await env.DB.prepare(`UPDATE fund_collection_requests
+     SET status = 'completed',
+         tx_hash = COALESCE(?, tx_hash),
+         note = COALESCE(?, note),
+         updated_at = ?,
+         completed_at = ?
+     WHERE id = ?`)
+        .bind(txHash, note, now, now, requestId)
+        .run();
+    return json({ ok: true, id: requestId, status: "completed", txHash, updatedAt: now, completedAt: now });
 }
 async function handleBulkRate(request, env, scopeUserId, allowedTypes) {
     const body = (await request.json().catch(() => null));
@@ -1075,6 +1528,22 @@ async function handleContractExtend(request, env, userId, allowedTypes) {
     await updateProfileField(env, userId, "contract_active", 1);
     await updateProfileField(env, userId, "activation_status", "active");
     return json({ ok: true, contractEndAt, monthlyCardEndAt: newMonthlyEnd, extendedDays: days, mode: body?.mode ?? "custom" });
+}
+async function handleMonthlyCardDelete(env, userId, allowedTypes) {
+    await ensureProfile(env, userId);
+    const service = await applyServiceContractType(env, allowedTypes, userId, "monthly");
+    if (!service.ok)
+        return service.response;
+    const existing = await env.DB.prepare("SELECT contract_end_at, monthly_card_end_at FROM customer_profiles WHERE user_id = ?")
+        .bind(userId)
+        .first();
+    await updateProfileField(env, userId, "monthly_card_end_at", null);
+    return json({
+        ok: true,
+        monthlyCardEndAt: null,
+        contractEndAt: existing?.contract_end_at ?? null,
+        previousMonthlyCardEndAt: existing?.monthly_card_end_at ?? null,
+    });
 }
 async function handleAdminAlerts(env, scopeUserId, allowedTypes) {
     // Return customers whose heartbeat stopped while their contract is still active.
@@ -1293,11 +1762,32 @@ export async function handleAdmin(request, env, pathParts) {
     const isPrimaryOwner = requesterRole === "owner";
     const scopeUserId = isPrimaryOwner ? null : await ensureUserIdByWallet(env, requesterWallet);
     const allowedTypes = isPrimaryOwner ? null : await getSubAdminContractScope(env, requesterWallet);
-    if (!isPrimaryOwner && request.method !== "GET") {
+    const isSubAdminCustomerLabelUpdate = !isPrimaryOwner &&
+        request.method === "PUT" &&
+        pathParts.length === 2 &&
+        pathParts[0] === "customers";
+    const isSubAdminCustomerDelete = !isPrimaryOwner &&
+        request.method === "DELETE" &&
+        pathParts.length === 2 &&
+        pathParts[0] === "customers";
+    const isSubAdminDeviceDelete = !isPrimaryOwner &&
+        request.method === "DELETE" &&
+        pathParts.length === 2 &&
+        pathParts[0] === "devices";
+    const isSubAdminCollectionCreate = !isPrimaryOwner &&
+        request.method === "POST" &&
+        pathParts.length === 1 &&
+        pathParts[0] === "collection-requests";
+    if (!isPrimaryOwner &&
+        request.method !== "GET" &&
+        !isSubAdminCustomerLabelUpdate &&
+        !isSubAdminCustomerDelete &&
+        !isSubAdminDeviceDelete &&
+        !isSubAdminCollectionCreate) {
         return json({ error: "SubAdmin is read-only. Owner permission is required for renewals and updates." }, 403);
     }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "customers") {
-        return handleCustomerList(env, requesterWallet, requesterRole, allowedTypes);
+        return handleCustomerList(request, env, requesterWallet, requesterRole, scopeUserId, allowedTypes);
     }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "alerts") {
         return handleAdminAlerts(env, scopeUserId, allowedTypes);
@@ -1310,6 +1800,18 @@ export async function handleAdmin(request, env, pathParts) {
     }
     if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "devices") {
         return handleAdminDeviceList(request, env, scopeUserId, allowedTypes);
+    }
+    if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "collection-requests") {
+        return handleFundCollectionRecords(env, new URL(request.url), requesterWallet, requesterRole);
+    }
+    if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "collection-requests") {
+        return handleFundCollectionCreate(request, env, requesterWallet, requesterRole, scopeUserId, allowedTypes);
+    }
+    if (request.method === "POST" &&
+        pathParts.length === 3 &&
+        pathParts[0] === "collection-requests" &&
+        (pathParts[2] === "approve" || pathParts[2] === "reject" || pathParts[2] === "complete")) {
+        return handleFundCollectionAction(request, env, pathParts[1], pathParts[2]);
     }
     if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "devices" && pathParts[1] === "bulk-update") {
         return handleAdminDeviceBulkUpdate(request, env, scopeUserId, allowedTypes);
@@ -1324,6 +1826,9 @@ export async function handleAdmin(request, env, pathParts) {
         }
         if (request.method === "PATCH") {
             return handleAdminDeviceUpdate(request, env, deviceRecordId, allowedTypes);
+        }
+        if (request.method === "DELETE") {
+            return handleAdminDeviceDelete(env, deviceRecordId);
         }
     }
     if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "customers" && pathParts[1] === "bulk-rate") {
@@ -1359,11 +1864,17 @@ export async function handleAdmin(request, env, pathParts) {
         if (request.method === "PUT" && pathParts.length === 2) {
             return handleCustomerUpdate(request, env, userId, allowedTypes);
         }
+        if (request.method === "DELETE" && pathParts.length === 2) {
+            return handleCustomerDelete(env, userId);
+        }
         if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "activate") {
             return handleCustomerActivate(request, env, userId, allowedTypes);
         }
         if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "extend") {
             return handleContractExtend(request, env, userId, allowedTypes);
+        }
+        if (request.method === "DELETE" && pathParts.length === 3 && pathParts[2] === "monthly-card") {
+            return handleMonthlyCardDelete(env, userId, allowedTypes);
         }
         if (request.method === "POST" && pathParts.length === 3 && pathParts[2] === "rewards") {
             return handleRewardAdjustment(request, env, userId, allowedTypes);

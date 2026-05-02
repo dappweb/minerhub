@@ -19,6 +19,12 @@ const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)"
 ];
 
+const MINING_POOL_ABI = [
+  "function minSuperStakeForReward() view returns (uint256)",
+  "function stakedSuper(address) view returns (uint256)",
+  "function getMinerInfo(address _miner) view returns (uint256 hashrate,uint256 pending,uint256 totalClaimed,bool active,uint256 suspiciousScore,uint256 stakedAmount,bool rewardEligible)"
+];
+
 export class OwnerRelayer {
   private provider: JsonRpcProvider;
   private wallet: Wallet | null;
@@ -184,6 +190,54 @@ export class OwnerRelayer {
     const [s, dec] = await Promise.all([c.totalSupply(), c.decimals()]);
     const d = Number(dec);
     return { raw: s.toString(), formatted: formatUnits(s, d), decimals: d };
+  }
+
+  async getMiningStakeRequirement(addr: string): Promise<{
+    minRaw: string;
+    minFormatted: string;
+    stakedRaw: string;
+    stakedFormatted: string;
+    eligible: boolean;
+    decimals: number;
+  }> {
+    const address = getAddress(addr);
+    const decimals = await this.getSuperDecimals();
+    const [minRaw, minerInfo] = await Promise.all([
+      this.withReadProvider((provider) => new Contract(this.env.MINING_POOL_ADDRESS, MINING_POOL_ABI, provider).minSuperStakeForReward()),
+      this.withReadProvider((provider) => new Contract(this.env.MINING_POOL_ADDRESS, MINING_POOL_ABI, provider).getMinerInfo(address)),
+    ]);
+    const stakedRaw = minerInfo?.stakedAmount ?? minerInfo?.[5] ?? 0n;
+    const eligible = Boolean(minerInfo?.rewardEligible ?? minerInfo?.[6] ?? false);
+    return {
+      minRaw: minRaw.toString(),
+      minFormatted: formatUnits(minRaw, decimals),
+      stakedRaw: stakedRaw.toString(),
+      stakedFormatted: formatUnits(stakedRaw, decimals),
+      eligible,
+      decimals,
+    };
+  }
+
+  async getMiningStakeGate(addr: string): Promise<{
+    minRaw: string;
+    minFormatted: string;
+    stakedRaw: string;
+    stakedFormatted: string;
+    decimals: number;
+  }> {
+    const address = getAddress(addr);
+    const decimals = await this.getSuperDecimals();
+    const [minRaw, stakedRaw] = await Promise.all([
+      this.withReadProvider((provider) => new Contract(this.env.MINING_POOL_ADDRESS, MINING_POOL_ABI, provider).minSuperStakeForReward()),
+      this.withReadProvider((provider) => new Contract(this.env.MINING_POOL_ADDRESS, MINING_POOL_ABI, provider).stakedSuper(address)),
+    ]);
+    return {
+      minRaw: minRaw.toString(),
+      minFormatted: formatUnits(minRaw, decimals),
+      stakedRaw: stakedRaw.toString(),
+      stakedFormatted: formatUnits(stakedRaw, decimals),
+      decimals,
+    };
   }
 }
 
