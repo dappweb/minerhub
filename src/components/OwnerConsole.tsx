@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { isAddress } from 'viem';
-import { addAdminOnChain, getMiningPoolAdminsOnChain, getMiningPoolOwnerOnChain, removeAdminOnChain } from '../lib/blockchain';
+import { formatUnits, isAddress } from 'viem';
+import { addAdminOnChain, getGlobalStatsOnChain, getMiningPoolAdminsOnChain, getMiningPoolOwnerOnChain, removeAdminOnChain, setMinSuperStakeForRewardOnChain } from '../lib/blockchain';
 
 type OwnerConsoleProps = {
   adminWallet: string;
@@ -77,6 +77,12 @@ function formatContractTypes(types: string[] | null | undefined): string {
   return types
     .map((type) => CONTRACT_TYPE_OPTIONS.find((option) => option.id === type)?.label ?? type)
     .join(' / ');
+}
+
+function formatSuperAmount(amount: bigint): string {
+  const parsed = Number(formatUnits(amount, 18));
+  if (!Number.isFinite(parsed)) return '0';
+  return parsed.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
 }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'https://api.coinplanets.net';
@@ -329,6 +335,44 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
   const [balanceResult, setBalanceResult] = useState<string>('');
   const [tokenMsg, setTokenMsg] = useState<string>('');
   const [tokenLoading, setTokenLoading] = useState(false);
+  const [minSuperStakeForReward, setMinSuperStakeForReward] = useState('0');
+  const [minSuperStakeCurrent, setMinSuperStakeCurrent] = useState('0');
+  const [minSuperStakeSupported, setMinSuperStakeSupported] = useState(true);
+  const [minSuperStakeMsg, setMinSuperStakeMsg] = useState('');
+  const [minSuperStakeLoading, setMinSuperStakeLoading] = useState(false);
+
+  const loadMinSuperStakeForReward = useCallback(async () => {
+    setMinSuperStakeMsg('');
+    try {
+      const stats = await getGlobalStatsOnChain();
+      const formatted = formatSuperAmount(stats.minSuperStakeForReward).replace(/,/g, '');
+      setMinSuperStakeCurrent(formatted);
+      setMinSuperStakeForReward(formatted);
+      setMinSuperStakeSupported(stats.stakeGateSupported);
+    } catch (e) {
+      setMinSuperStakeSupported(false);
+      setMinSuperStakeMsg(e instanceof Error ? e.message : '读取 SUPER 抵押门槛失败');
+    }
+  }, []);
+
+  const runSaveMinSuperStakeForReward = useCallback(async () => {
+    const parsed = Number(minSuperStakeForReward);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setMinSuperStakeMsg('请输入有效的最低抵押 SUPER 数量');
+      return;
+    }
+    setMinSuperStakeLoading(true);
+    setMinSuperStakeMsg('');
+    try {
+      const txHash = await setMinSuperStakeForRewardOnChain(minSuperStakeForReward || '0');
+      setMinSuperStakeMsg(`最低抵押 SUPER 门槛已保存: ${txHash}`);
+      await loadMinSuperStakeForReward();
+    } catch (e) {
+      setMinSuperStakeMsg(e instanceof Error ? e.message : '保存 SUPER 抵押门槛失败');
+    } finally {
+      setMinSuperStakeLoading(false);
+    }
+  }, [loadMinSuperStakeForReward, minSuperStakeForReward]);
 
   const runMint = useCallback(async () => {
     setTokenLoading(true); setTokenMsg('');
@@ -501,6 +545,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       void loadAdminAccess();
     }
     if (tab === 'roles') void loadSubAdmins();
+    if (tab === 'tokens') void loadMinSuperStakeForReward();
     if (tab === 'earnings') void loadEarnings();
     if (tab === 'audit') void loadAudit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -651,6 +696,35 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
       {tab === 'tokens' && (
         <div className="space-y-6 text-sm">
           {tokenMsg && <p className="text-cyan-300 break-all">{tokenMsg}</p>}
+          {minSuperStakeMsg && <p className="text-amber-300 break-all">{minSuperStakeMsg}</p>}
+
+          <Card title="最低抵押 SUPER 门槛">
+            <p className="text-xs text-slate-400">
+              设置用户开始产生收益前需要抵押的最低 SUPER 数量。当前门槛：{minSuperStakeSupported ? `${minSuperStakeCurrent} SUPER` : '当前矿池合约不支持'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                className={inputCls}
+                placeholder="最低抵押数量 (SUPER)"
+                value={minSuperStakeForReward}
+                onChange={(e) => setMinSuperStakeForReward(e.target.value)}
+              />
+              <button
+                onClick={runSaveMinSuperStakeForReward}
+                disabled={minSuperStakeLoading || !minSuperStakeSupported}
+                className={btnCls}
+              >
+                {minSuperStakeLoading ? '保存中...' : '保存门槛'}
+              </button>
+              <button
+                onClick={() => void loadMinSuperStakeForReward()}
+                disabled={minSuperStakeLoading}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 text-sm"
+              >
+                刷新
+              </button>
+            </div>
+          </Card>
 
           <Card title="查询 SUPER 余额">
             <div className="flex gap-2">

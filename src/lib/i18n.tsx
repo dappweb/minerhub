@@ -144,10 +144,7 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 const STORAGE_KEY = 'coin-planet-admin-locale';
 
 function detectInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'zh';
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === 'zh' || stored === 'en') return stored;
-  return window.navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  return 'zh';
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -159,7 +156,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => setLocaleState(next), []);
+  const setLocale = useCallback((_next: Locale) => setLocaleState('zh'), []);
 
   const t = useCallback(
     (key: TranslationKey, vars?: Record<string, string | number>) => {

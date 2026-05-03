@@ -232,6 +232,20 @@ const minerAbi = [
     inputs: [{ name: '_miner', type: 'address' }],
     outputs: [{ name: '', type: 'bool' }],
   },
+  {
+    type: 'function',
+    name: 'stakeSuper',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'unstakeSuper',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_amount', type: 'uint256' }],
+    outputs: [],
+  },
 ] as const;
 
 const swapAbi = [
@@ -383,6 +397,91 @@ export async function getMiningStakeRequirement(): Promise<{
   };
 }
 
+export async function stakeSuperOnChain(amount: string): Promise<Hex[]> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const superToken = requireAddress(superTokenAddress, 'EXPO_PUBLIC_SUPER_ADDRESS');
+  const normalizedAmount = Number(amount);
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+    throw new Error('请输入有效的 SUPER 抵押数量。');
+  }
+
+  try {
+    const { account, walletClient, publicClient } = await getWalletClients();
+    const parsedAmount = parseUnits(amount, 18);
+    const approveArgs = [pool, parsedAmount] as const;
+    const approveGas = await assertSufficientBalanceForContractTx({
+      account: account.address,
+      contractAddress: superToken,
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: approveArgs,
+    });
+    const approveHash = await walletClient.writeContract({
+      account,
+      address: superToken,
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: approveArgs,
+      gas: approveGas,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: approveHash as Hex, timeout: 120_000 });
+
+    const stakeArgs = [parsedAmount] as const;
+    const stakeGas = await assertSufficientBalanceForContractTx({
+      account: account.address,
+      contractAddress: pool,
+      abi: minerAbi,
+      functionName: 'stakeSuper',
+      args: stakeArgs,
+    });
+    const stakeHash = await walletClient.writeContract({
+      account,
+      address: pool,
+      abi: minerAbi,
+      functionName: 'stakeSuper',
+      args: stakeArgs,
+      gas: stakeGas,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: stakeHash as Hex, timeout: 120_000 });
+
+    return [approveHash as Hex, stakeHash as Hex];
+  } catch (error) {
+    throw normalizeTxError(error);
+  }
+}
+
+export async function unstakeSuperOnChain(amount: string): Promise<Hex> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const normalizedAmount = Number(amount);
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+    throw new Error('请输入有效的 SUPER 解除抵押数量。');
+  }
+
+  try {
+    const { account, walletClient, publicClient } = await getWalletClients();
+    const args = [parseUnits(amount, 18)] as const;
+    const gas = await assertSufficientBalanceForContractTx({
+      account: account.address,
+      contractAddress: pool,
+      abi: minerAbi,
+      functionName: 'unstakeSuper',
+      args,
+    });
+    const hash = await walletClient.writeContract({
+      account,
+      address: pool,
+      abi: minerAbi,
+      functionName: 'unstakeSuper',
+      args,
+      gas,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
+    return hash as Hex;
+  } catch (error) {
+    throw normalizeTxError(error);
+  }
+}
+
 export async function swapUsdtToSuperOnChain(amount: string) {
   if (!swapRouterAddress) {
     throw new Error('缺少 EXPO_PUBLIC_SWAP_ROUTER_ADDRESS。');
@@ -519,6 +618,16 @@ const erc20Abi = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bool' }],

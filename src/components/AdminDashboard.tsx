@@ -299,6 +299,12 @@ type CustomerDetail = CustomerItem & {
   agreementAcceptedAt: string | null;
   offlineAlertedAt: string | null;
   notes: string | null;
+  devices?: Array<{
+    id: string;
+    deviceId: string;
+    hashrate: number;
+    status: string;
+  }>;
 };
 
 type CustomerDetailFormState = {
@@ -2196,6 +2202,37 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     }
   };
 
+  const handleDeleteCustomerDetail = async () => {
+    if (!selectedCustomerDetailId) return;
+    if (!canOperateCustomers) {
+      setBackendError('SubAdmin 当前为只读权限，不能删除客户。');
+      return;
+    }
+
+    const label = selectedCustomerDetail?.nickname || selectedCustomerDetail?.wallet || selectedCustomerDetailId;
+    if (!window.confirm(`确认删除客户「${label}」？该操作会删除该客户及其设备、收益、记录数据，无法撤销。`)) return;
+
+    try {
+      setAdminActionLoading(`delete-customer-${selectedCustomerDetailId}`);
+      await signedRequest(`/api/admin/customers/${selectedCustomerDetailId}`, 'DELETE', {});
+      setSelectedCustomerDetailId('');
+      setSelectedCustomerDetail(null);
+      setCustomerDetailForm(null);
+      setSelectedCustomerIds((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedCustomerDetailId);
+        return next;
+      });
+      await loadBackendData();
+      await loadDevices();
+      setBackendError('');
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '删除客户失败');
+    } finally {
+      setAdminActionLoading('');
+    }
+  };
+
   const handleApproveExchange = async (orderId: string) => {
     if (ownerSessionRole !== 'owner') {
       setRecordsError('当前角色无权审批兑换订单，请使用 Owner 钱包登录。');
@@ -2658,7 +2695,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 >中</button>
                 <button
                   onClick={() => setLocale('en')}
-                  className={`px-2 py-1 rounded ${locale === 'en' ? 'bg-purple-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                  className={`hidden px-2 py-1 rounded ${locale === 'en' ? 'bg-purple-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >EN</button>
                 {ownerSessionAutoLoginPaused && (
                   <button
@@ -4153,6 +4190,14 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                               {adminActionLoading === `renew-fund-${selectedCustomerDetailId}` ? '处理中…' : `续期30天并充值 ${customerRenewSuperAmount || 0} SUPER`}
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteCustomerDetail()}
+                            disabled={adminActionLoading === `delete-customer-${selectedCustomerDetailId}`}
+                            className="px-3 py-1.5 rounded bg-red-500/20 border border-red-500/40 text-red-200 text-xs hover:bg-red-500/30 disabled:opacity-50"
+                          >
+                            {adminActionLoading === `delete-customer-${selectedCustomerDetailId}` ? '删除中...' : '删除客户'}
+                          </button>
                         </>
                       ) : (
                         <div className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">

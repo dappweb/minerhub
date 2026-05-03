@@ -35,6 +35,13 @@ export interface ProfileTabProps {
   bnbBalance: string;
   superBalance: string;
   usdtBalance: string;
+  minSuperStakeForReward: string;
+  stakedSuper: string;
+  stakeRequirementReady: boolean;
+  stakeAmount: string;
+  setStakeAmount: (v: string) => void;
+  onStakeSuper: () => void;
+  onUnstakeSuper: () => void;
   onExportWallet: () => void;
   onImportWalletClick: () => void;
   t: {
@@ -215,6 +222,13 @@ export default function ProfileTab({
   bnbBalance,
   superBalance,
   usdtBalance,
+  minSuperStakeForReward,
+  stakedSuper,
+  stakeRequirementReady,
+  stakeAmount,
+  setStakeAmount,
+  onStakeSuper,
+  onUnstakeSuper,
   onExportWallet,
   onImportWalletClick,
   t,
@@ -275,6 +289,15 @@ export default function ProfileTab({
   const noMonthlyCardLabel = isZh ? '未开通月卡' : 'No monthly card';
   const noContractLabel = isZh ? '未确认合同' : 'Contract not accepted';
   const contractPendingLabel = isZh ? '合同待确认' : 'Contract pending';
+  const minStakeNumber = Number(minSuperStakeForReward);
+  const stakedNumber = Number(stakedSuper);
+  const stakeGateEnabled = Number.isFinite(minStakeNumber) && minStakeNumber > 0;
+  const stakeEligible = !stakeGateEnabled || (Number.isFinite(stakedNumber) && stakedNumber > minStakeNumber);
+  const stakeSyncText = !stakeRequirementReady
+    ? (isZh ? '链上抵押状态暂未同步，请刷新后重试。' : 'On-chain stake status is not synced yet. Refresh and try again.')
+    : stakeEligible
+      ? (isZh ? '链上抵押已满足挖矿门槛。' : 'On-chain stake meets the mining threshold.')
+      : (isZh ? '链上已抵押数量不足，余额不会自动计入抵押。' : 'On-chain staked amount is below the threshold. Wallet balance does not count as stake.');
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -410,6 +433,54 @@ export default function ProfileTab({
               <Text style={styles.balanceLabel}>USDT</Text>
               <Text style={styles.balanceValue}>{usdtBalance}</Text>
             </View>
+          </View>
+        )}
+
+        {walletAddress && (
+          <View style={styles.stakePanel}>
+            <View style={styles.stakeHeaderRow}>
+              <Text style={styles.stakeTitle}>{isZh ? 'SUPER 抵押挖矿' : 'SUPER Mining Stake'}</Text>
+              <Text style={[styles.stakeBadge, stakeEligible ? styles.stakeBadgeOk : styles.stakeBadgeWarn]}>
+                {stakeEligible ? (isZh ? '已满足' : 'Ready') : (isZh ? '未满足' : 'Blocked')}
+              </Text>
+            </View>
+            <Text style={styles.stakeHint}>{stakeSyncText}</Text>
+            <View style={styles.stakeMetricGrid}>
+              <View style={styles.stakeMetric}>
+                <Text style={styles.stakeMetricLabel}>{isZh ? '钱包余额' : 'Balance'}</Text>
+                <Text style={styles.stakeMetricValue}>{superBalance} SUPER</Text>
+              </View>
+              <View style={styles.stakeMetric}>
+                <Text style={styles.stakeMetricLabel}>{isZh ? '已抵押' : 'Staked'}</Text>
+                <Text style={styles.stakeMetricValue}>{stakedSuper} SUPER</Text>
+              </View>
+              <View style={styles.stakeMetric}>
+                <Text style={styles.stakeMetricLabel}>{isZh ? '最低门槛' : 'Threshold'}</Text>
+                <Text style={styles.stakeMetricValue}>{minSuperStakeForReward} SUPER</Text>
+              </View>
+            </View>
+            <TextInput
+              style={s.input}
+              value={stakeAmount}
+              onChangeText={setStakeAmount}
+              keyboardType="decimal-pad"
+              placeholder={isZh ? '输入抵押或解除抵押数量' : 'Amount to stake or unstake'}
+              placeholderTextColor="#93a9d1"
+              editable={!isBusy && identityReady}
+            />
+            <View style={styles.stakeActionRow}>
+              <TouchableOpacity style={styles.stakePrimaryBtn} onPress={onStakeSuper} disabled={isBusy || !identityReady}>
+                <Text style={styles.stakePrimaryBtnText}>{isZh ? '抵押 SUPER' : 'Stake SUPER'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.stakeGhostBtn} onPress={onUnstakeSuper} disabled={isBusy || !identityReady}>
+                <Text style={styles.stakeGhostBtnText}>{isZh ? '解除抵押' : 'Unstake'}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.stakeFootnote}>
+              {isZh
+                ? '挖矿判断使用“已抵押”数量，必须大于 Owner 设置门槛；钱包余额只表示持有。'
+                : 'Mining uses the staked amount. It must be greater than the Owner threshold; wallet balance only means holdings.'}
+            </Text>
           </View>
         )}
         
@@ -1166,6 +1237,105 @@ const styles = StyleSheet.create({
     color: '#7dd3fc',
     fontSize: 13,
     fontWeight: '700',
+  },
+  stakePanel: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a5ea8',
+    backgroundColor: '#082754',
+    padding: 12,
+    gap: 10,
+  },
+  stakeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stakeTitle: {
+    color: '#e8fbff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  stakeBadge: {
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  stakeBadgeOk: {
+    color: '#bbf7d0',
+    backgroundColor: '#14532d',
+  },
+  stakeBadgeWarn: {
+    color: '#fde68a',
+    backgroundColor: '#713f12',
+  },
+  stakeHint: {
+    color: '#b8dcff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  stakeMetricGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  stakeMetric: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    padding: 8,
+    gap: 4,
+  },
+  stakeMetricLabel: {
+    color: '#93a9d1',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stakeMetricValue: {
+    color: '#e8fbff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  stakeActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stakePrimaryBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#22d3ee',
+  },
+  stakePrimaryBtnText: {
+    color: '#083344',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  stakeGhostBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#0f213f',
+    borderWidth: 1,
+    borderColor: '#3f77bc',
+  },
+  stakeGhostBtnText: {
+    color: '#dbf4ff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  stakeFootnote: {
+    color: '#93a9d1',
+    fontSize: 11,
+    lineHeight: 16,
   },
   walletActionsRow: {
     flexDirection: 'row',

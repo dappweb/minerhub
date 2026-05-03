@@ -59,6 +59,8 @@ import {
     registerMinerOnChain,
     sendNativeTokenOnChain,
     sendSuperToAddressOnChain,
+    stakeSuperOnChain,
+    unstakeSuperOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
 import {
@@ -71,7 +73,7 @@ const APP_VERSION = '1.0.6';
 
 type Lang = 'en' | 'zh';
 
-type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | '';
+type ActionType = 'init' | 'mine' | 'claim' | 'swap' | 'transfer' | 'stake' | '';
 type SwapTxStage = 'idle' | 'submitting' | 'confirming' | 'success' | 'failed';
 
 const LANG_KEY = 'coinplanet.lang';
@@ -97,7 +99,7 @@ const translations = {
     appTitle: 'Coin Planet',
     subtitle: 'Device Center · BNB Smart Chain',
     flow1: 'Finish identity sync and inviter binding first',
-    flow2: 'Contact support to activate monthly card, then setup miner',
+    flow2: 'Transfer funds, contact support to activate monthly card, then accept contract',
     flow3: 'Keep device online to accrue rewards; claim and swap anytime',
     profileId: 'ID',
     profileVip: 'VIP',
@@ -153,10 +155,12 @@ const translations = {
     guideTitle: 'Getting Started',
     guideReadyTitle: 'Daily Console Ready',
     guideDescInit: 'Complete identity sync and bind inviter wallet first, then unlock miner operations.',
-    guideDescMine: 'Contact support to activate monthly card, then setup miner (admin gas top-up if needed).',
+    guideDescMine: 'Transfer funds first, then contact support to activate the monthly card. The contract is confirmed after activation.',
     guideDescOnboarding: 'Finish inviter wallet setup first. You can minimize the floating setup card and resume anytime.',
     guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/swap.',
     guideStepIdentity: 'Identity Sync',
+    guideStepTransfer: 'Transfer Funds',
+    guideStepContract: 'Contract',
     guideStepMiner: 'Miner Activation',
     guideStepReward: 'Rewards & Swap',
     guideStepDone: 'Done',
@@ -170,7 +174,7 @@ const translations = {
     guideFocusLabel: 'Do this next',
     guideDescActivate: 'Miner registered. Contact support to activate the monthly card, then rewards will start accruing.',
     guideCtaOnboarding: 'Continue Setup',
-    guideCtaActivate: 'Already Activated – Setup Miner',
+    guideCtaActivate: 'Monthly card active -> setup miner',
     agreementModalTitle: 'User Agreement',
     agreementModalSubtitle: 'Please read and accept the agreement to continue using Coin Planet.',
     agreementAcceptBtn: 'Accept & Continue',
@@ -333,7 +337,7 @@ const translations = {
     appTitle: 'Coin Planet',
     subtitle: '设备中心 · BNB 智能链',
     flow1: '请先完成身份同步并绑定推荐人钱包',
-    flow2: '联系客服开通月卡后再进行矿机设置',
+    flow2: '先转币并联系客服开通月卡，再确认合同',
     flow3: '保持手机在线累计收益，随时可领取与兑换',
     profileId: 'ID',
     profileVip: 'VIP',
@@ -389,10 +393,12 @@ const translations = {
     guideTitle: '启动引导',
     guideReadyTitle: '日常控制台已就绪',
     guideDescInit: '先完成身份同步并绑定推荐人钱包，再解锁后续矿机操作。',
-    guideDescMine: '联系客服开通月卡后，再执行矿机设置（如缺 Gas 请联系管理员充值）。',
+    guideDescMine: '请先完成转币，再联系客服开通月卡；月卡开通后到“我的”确认挖矿合同。',
     guideDescOnboarding: '请先完成推荐人钱包配置。悬浮框可收起，稍后继续。',
     guideDescReady: '矿机激活后保持手机在线，收益会按在线时长累计，可在底部菜单领取与兑换。',
     guideStepIdentity: '身份同步',
+    guideStepTransfer: '转币',
+    guideStepContract: '合同确认',
     guideStepMiner: '矿机激活',
     guideStepReward: '收益与兑换',
     guideStepDone: '完成',
@@ -406,7 +412,7 @@ const translations = {
     guideFocusLabel: '现在最值得先完成',
     guideDescActivate: '矿机已注册。请联系客服申请开通月卡，激活后收益将自动开始累计。',
     guideCtaOnboarding: '继续配置',
-    guideCtaActivate: '已开通月卡 → 继续矿机设置',
+    guideCtaActivate: '月卡已开通 → 继续矿机设置',
     agreementModalTitle: '用户协议',
     agreementModalSubtitle: '请阅读并同意协议，方可继续使用 Coin Planet。',
     agreementAcceptBtn: '同意并继续',
@@ -717,6 +723,7 @@ export default function App() {
   const [walletAddress, setWalletAddress] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
   const [swapAmount, setSwapAmount] = useState<string>('10');
+  const [stakeAmount, setStakeAmount] = useState<string>('');
   const [transferTo, setTransferTo] = useState<string>('');
   const [transferAmount, setTransferAmount] = useState<string>('0.001');
   const [deviceId, setDeviceId] = useState<string>('');
@@ -788,11 +795,18 @@ export default function App() {
   const serverUserId = (typeof userDetails?.id === 'string' && userDetails.id.trim())
     ? userDetails.id.trim()
     : userId;
+  const rewardDeviceId = userDetails?.rewards?.find((item) => typeof item?.device_id === 'string' && item.device_id.trim())?.device_id?.trim() ?? '';
   const serverDeviceId = (typeof userDetails?.devices?.[0]?.device_id === 'string' && userDetails.devices[0].device_id.trim())
     ? userDetails.devices[0].device_id.trim()
-    : deviceId;
+    : rewardDeviceId || deviceId;
+  const serverHasRewardActivity = Boolean(
+    userDetails?.rewards?.length
+    || Number(userDetails?.totalRewardUsdt ?? 0) > 0
+    || Number(userDetails?.totalRewardSuper ?? 0) > 0
+  );
   const serverHasRegisteredMiner = Boolean(
     userDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
+    || serverHasRewardActivity
   );
   const effectiveDeviceId = (serverDeviceId || deviceId).trim();
   const identityReady = Boolean(walletAddress && userId && effectiveDeviceId);
@@ -822,7 +836,7 @@ export default function App() {
     : localContractAcceptedVersion ?? null;
   const contractNeedsAcceptance = Boolean(contractRequired
     && contract
-    && (userDetails?.needsContractAgreement ?? hasActiveContract)
+    && hasActiveContract
     && acceptedContractVersion !== contract.version);
   const announcementReadSet = useMemo(() => new Set(announcementReadIds), [announcementReadIds]);
   const visibleAnnouncements = useMemo(
@@ -1009,7 +1023,7 @@ export default function App() {
     if (reason === 'contract_agreement_required') return lang === 'zh' ? '请先确认合同' : 'Please accept the contract first';
     if (reason === 'contract_expired') return lang === 'zh' ? '当前有效期已到期，请续期' : 'Expired, renewal required';
     if (reason === 'contract_inactive') return lang === 'zh' ? '服务暂未开通，请联系管理员' : 'Service is not active';
-    if (reason.startsWith('minimum_super_stake:')) return lang === 'zh' ? 'SUPER 抵押数量未达到最低收益门槛。' : 'SUPER stake is below the reward threshold.';
+    if (reason.startsWith('minimum_super_stake:')) return lang === 'zh' ? 'SUPER 已抵押数量必须大于最低收益门槛。' : 'Staked SUPER must be greater than the reward threshold.';
     return reason;
   }, [lang, userDetails?.blockReason]);
 
@@ -1283,12 +1297,88 @@ export default function App() {
     }
   };
 
+  const refreshRuntimeSnapshot = async () => {
+    const [latestStatus, latestDetails, latestStake, latestBalances] = await Promise.all([
+      getSystemStatus().catch(() => null),
+      userId ? getUserDetails(userId).catch(() => null) : Promise.resolve(null),
+      refreshStakeRequirement().catch(() => null),
+      getWalletBalances().catch(() => null),
+    ]);
+
+    if (latestStatus) setSystemStatus(latestStatus);
+    if (latestDetails) setUserDetails(latestDetails);
+    if (latestBalances) {
+      setBnbBalance(latestBalances.bnb);
+      setSuperBalance(latestBalances.super);
+      setUsdtBalance(latestBalances.usdt);
+    }
+
+    return {
+      system: latestStatus ?? systemStatus,
+      details: latestDetails ?? userDetails,
+      stake: latestStake,
+      balances: latestBalances,
+    };
+  };
+
+  const getFreshActionBlock = (
+    snapshot: Awaited<ReturnType<typeof refreshRuntimeSnapshot>>,
+    opts?: { requireContractAccepted?: boolean; requireMiner?: boolean },
+  ) => {
+    const nextSystem = snapshot.system;
+    const nextDetails = snapshot.details;
+    const nextContract = nextSystem?.contract;
+    const nextContractRequired = Boolean(nextContract?.required && nextContract?.version);
+    const nextEffectiveEndAt = nextDetails?.effectiveEndAt ?? getLatestValidDateIso([nextDetails?.contractEndAt, nextDetails?.monthlyCardEndAt]);
+    const nextContractExpired = Boolean(nextEffectiveEndAt && new Date(nextEffectiveEndAt).getTime() < Date.now());
+    const nextHasActiveContract = Boolean(nextDetails?.contractActive) && !nextContractExpired;
+    const nextAcceptedContractVersion = nextDetails?.contractAgreementAcceptedVersion ?? localContractAcceptedVersion ?? null;
+    const nextNeedsContractAcceptance = Boolean(
+      opts?.requireContractAccepted
+      && nextContractRequired
+      && nextContract
+      && nextHasActiveContract
+      && nextAcceptedContractVersion !== nextContract.version
+    );
+    const nextHasRegisteredMiner = Boolean(
+      nextDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
+      || nextDetails?.rewards?.length
+      || Number(nextDetails?.totalRewardUsdt ?? 0) > 0
+      || Number(nextDetails?.totalRewardSuper ?? 0) > 0
+    );
+    const nextStake = snapshot.stake;
+    const minStake = Number(nextStake?.minSuperStakeForReward ?? minSuperStakeForReward);
+    const currentStake = Number(nextStake?.stakedSuper ?? stakedSuper);
+
+    if (nextSystem?.maintenanceEnabled) {
+      return nextSystem.maintenanceMessageZh || t.maintenanceBody;
+    }
+    if (!nextHasActiveContract) {
+      return nextContractExpired ? t.contractExpiredBody : (lang === 'zh' ? '请先联系客服开通月卡。' : 'Contact support to activate the monthly card first.');
+    }
+    if (nextNeedsContractAcceptance) {
+      return lang === 'zh' ? '月卡已开通，请先到“我的”确认挖矿合同。' : 'Monthly card is active. Please accept the mining contract in Profile first.';
+    }
+    if (opts?.requireMiner && !nextHasRegisteredMiner) {
+      return lang === 'zh' ? '请先完成矿机设置。' : 'Please complete miner setup first.';
+    }
+    if (Number.isFinite(minStake) && minStake > 0 && (!Number.isFinite(currentStake) || currentStake <= minStake)) {
+      const minLabel = minStake.toFixed(4).replace(/\.?0+$/, '');
+      const stakedLabel = (Number.isFinite(currentStake) ? currentStake : 0).toFixed(4).replace(/\.?0+$/, '');
+      return lang === 'zh'
+        ? `SUPER 已抵押数量必须大于 ${minLabel} 才能开始挖矿，当前已抵押 ${stakedLabel} SUPER。`
+        : `Staked SUPER must be greater than ${minLabel} before mining. Current stake: ${stakedLabel} SUPER.`;
+    }
+
+    return '';
+  };
+
   const hasEnoughStakedSuper = useMemo(() => {
     const minStake = Number(minSuperStakeForReward);
     const currentStake = Number(stakedSuper);
     if (!Number.isFinite(minStake) || minStake <= 0) return true;
     if (!Number.isFinite(currentStake)) return false;
-    return currentStake >= minStake;
+    return currentStake > minStake;
   }, [minSuperStakeForReward, stakedSuper]);
 
   const stakeBlockText = useMemo(() => {
@@ -1296,8 +1386,8 @@ export default function App() {
     const minLabel = Number(minSuperStakeForReward).toFixed(4).replace(/\.?0+$/, '');
     const stakedLabel = Number(stakedSuper || 0).toFixed(4).replace(/\.?0+$/, '');
     return lang === 'zh'
-      ? `SUPER 抵押数量需达到 ${minLabel} 才能开始收益，当前已抵押 ${stakedLabel} SUPER。`
-      : `Stake at least ${minLabel} SUPER to start rewards. Current stake: ${stakedLabel} SUPER.`;
+      ? `SUPER 已抵押数量必须大于 ${minLabel} 才能开始收益，当前已抵押 ${stakedLabel} SUPER。`
+      : `Staked SUPER must be greater than ${minLabel} to start rewards. Current stake: ${stakedLabel} SUPER.`;
   }, [hasEnoughStakedSuper, lang, minSuperStakeForReward, stakedSuper]);
 
   const toggleLang = async () => {
@@ -2150,25 +2240,33 @@ export default function App() {
       return;
     }
 
-    if (actionsBlocked) {
-      setStatus(maintenanceEnabled ? `${t.maintenanceTitle}: ${systemStatus?.maintenanceMessageZh ?? t.maintenanceBody}` : `${t.profileExpire}: ${expireDate}`);
-      return;
-    }
-
-    const stake = await refreshStakeRequirement();
-    const minStake = Number(stake?.minSuperStakeForReward ?? minSuperStakeForReward);
-    const currentStake = Number(stake?.stakedSuper ?? stakedSuper);
-    if (Number.isFinite(minStake) && minStake > 0 && (!Number.isFinite(currentStake) || currentStake < minStake)) {
-      setStatus(stakeBlockText || (lang === 'zh' ? 'SUPER 抵押数量未达到最低收益门槛。' : 'SUPER stake is below the reward threshold.'));
+    setStatus(lang === 'zh' ? '正在同步最新月卡、合同和链上抵押状态...' : 'Syncing latest monthly card, contract, and stake status...');
+    const snapshot = await refreshRuntimeSnapshot();
+    const freshBlock = getFreshActionBlock(snapshot, { requireContractAccepted: true });
+    if (freshBlock) {
+      setStatus(freshBlock);
+      if (freshBlock.includes('合同') || freshBlock.includes('contract')) {
+        setActiveTab('profile');
+      }
       return;
     }
 
     setActiveAction('mine');
     setLastTxHash('');
     const finalHashrate = deviceHashrate;
+    const snapshotDetails = snapshot.details;
+    const snapshotHasRegisteredMiner = Boolean(
+      snapshotDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
+      || snapshotDetails?.rewards?.length
+      || Number(snapshotDetails?.totalRewardUsdt ?? 0) > 0
+      || Number(snapshotDetails?.totalRewardSuper ?? 0) > 0
+    );
 
     try {
-      if (minerReady) {
+      if (snapshotHasRegisteredMiner) {
+        if (!minerReady) {
+          await markMinerReady();
+        }
         setStatus(`${t.updateHashrate} ${t.gasAdminTopupNeeded}`);
         return;
       }
@@ -2267,28 +2365,36 @@ export default function App() {
       return;
     }
 
-    if (actionsBlocked) {
-      setStatus(maintenanceEnabled ? `${t.maintenanceTitle}: ${systemStatus?.maintenanceMessageZh ?? t.maintenanceBody}` : `${t.profileExpire}: ${expireDate}`);
+    setStatus(lang === 'zh' ? '正在同步最新月卡、合同和链上抵押状态...' : 'Syncing latest monthly card, contract, and stake status...');
+    const snapshot = await refreshRuntimeSnapshot();
+    const freshBlock = getFreshActionBlock(snapshot, { requireContractAccepted: true, requireMiner: true });
+    if (freshBlock) {
+      setStatus(freshBlock);
+      if (freshBlock.includes('合同') || freshBlock.includes('contract')) {
+        setActiveTab('profile');
+      }
       return;
     }
 
-    const stake = await refreshStakeRequirement();
-    const minStake = Number(stake?.minSuperStakeForReward ?? minSuperStakeForReward);
-    const currentStake = Number(stake?.stakedSuper ?? stakedSuper);
-    if (Number.isFinite(minStake) && minStake > 0 && (!Number.isFinite(currentStake) || currentStake < minStake)) {
-      setStatus(stakeBlockText || (lang === 'zh' ? 'SUPER 抵押数量未达到最低收益门槛。' : 'SUPER stake is below the reward threshold.'));
-      return;
-    }
-
-    if (userDetails?.canClaim === false) {
-      setStatus(backendBlockText || t.minerNotReady);
-      return;
-    }
-
-    const hasRegisteredMiner = minerReady || serverHasRegisteredMiner;
+    const freshDetails = snapshot.details;
+    const hasRegisteredMiner = minerReady || serverHasRegisteredMiner || Boolean(
+      freshDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
+      || freshDetails?.rewards?.length
+      || Number(freshDetails?.totalRewardUsdt ?? 0) > 0
+      || Number(freshDetails?.totalRewardSuper ?? 0) > 0
+    );
     if (!hasRegisteredMiner) {
-      setStatus(userDetails?.needsMinerSetup ? (lang === 'zh' ? '请完成矿机设置' : 'Please complete miner setup') : t.minerNotReady);
+      setStatus(freshDetails?.needsMinerSetup ? (lang === 'zh' ? '请完成矿机设置' : 'Please complete miner setup') : t.minerNotReady);
       return;
+    }
+
+    if (freshDetails?.canClaim === false) {
+      const blockReason = freshDetails?.blockReason;
+      const shouldIgnoreStaleMinerSetupBlock = blockReason === 'miner_setup_required' && hasRegisteredMiner;
+      if (!shouldIgnoreStaleMinerSetupBlock) {
+        setStatus(backendBlockText || t.minerNotReady);
+        return;
+      }
     }
 
     setActiveAction('claim');
@@ -2316,6 +2422,53 @@ export default function App() {
         return;
       }
       setStatus(`${t.claimFail}${message}`);
+    } finally {
+      setActiveAction('');
+    }
+  };
+
+  const submitStakeSuper = async (mode: 'stake' | 'unstake') => {
+    if (!identityReady) {
+      setStatus(t.identityNotReady);
+      return;
+    }
+
+    const amount = Number(stakeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setStatus(lang === 'zh' ? '请输入有效的 SUPER 数量。' : 'Enter a valid SUPER amount.');
+      return;
+    }
+
+    setActiveAction('stake');
+    setLastTxHash('');
+    setStatus(mode === 'stake'
+      ? (lang === 'zh' ? '正在提交 SUPER 抵押交易...' : 'Submitting SUPER stake transaction...')
+      : (lang === 'zh' ? '正在提交 SUPER 解除抵押交易...' : 'Submitting SUPER unstake transaction...')
+    );
+
+    try {
+      if (mode === 'stake') {
+        const hashes = await stakeSuperOnChain(stakeAmount);
+        const stakeHash = hashes[hashes.length - 1] ?? hashes[0];
+        setLastTxHash(stakeHash);
+        setStatus(lang === 'zh' ? `SUPER 抵押成功：${shortHash(stakeHash)}` : `SUPER staked: ${shortHash(stakeHash)}`);
+      } else {
+        const hash = await unstakeSuperOnChain(stakeAmount);
+        setLastTxHash(hash);
+        setStatus(lang === 'zh' ? `SUPER 解除抵押成功：${shortHash(hash)}` : `SUPER unstaked: ${shortHash(hash)}`);
+      }
+      setStakeAmount('');
+      await refreshRuntimeSnapshot();
+    } catch (error) {
+      const message = toFriendlyErrorMessage(error);
+      if (isInsufficientBnbError(message)) {
+        setStatus(`${mode === 'stake' ? 'SUPER 抵押失败' : 'SUPER 解除抵押失败'}：${message} ${t.gasAdminTopupNeeded}`);
+        return;
+      }
+      setStatus(mode === 'stake'
+        ? (lang === 'zh' ? `SUPER 抵押失败：${message}` : `SUPER stake failed: ${message}`)
+        : (lang === 'zh' ? `SUPER 解除抵押失败：${message}` : `SUPER unstake failed: ${message}`)
+      );
     } finally {
       setActiveAction('');
     }
@@ -2495,7 +2648,8 @@ export default function App() {
   };
 
   // Whether miner is chain-registered but not yet admin-activated (contract not active yet)
-  const pendingActivation = identityReady && minerReady && !hasActiveContract && !contractExpired;
+  const minerSetupComplete = minerReady || serverHasRegisteredMiner;
+  const pendingActivation = identityReady && minerSetupComplete && !hasActiveContract && !contractExpired;
 
   // First available contact from systemStatus that has a link
   const firstSupportContact = useMemo(() => {
@@ -2525,36 +2679,42 @@ export default function App() {
     }
   };
 
-  const guideTitle = identityReady && minerReady ? t.guideReadyTitle : t.guideTitle;
+  const guideTitle = identityReady && hasActiveContract && minerSetupComplete ? t.guideReadyTitle : t.guideTitle;
   const guideDescription = onboardingVisible
     ? t.guideDescOnboarding
     : !identityReady
       ? t.guideDescInit
-      : !minerReady
+      : !hasActiveContract
         ? t.guideDescMine
-        : pendingActivation
-          ? t.guideDescActivate
-          : contractExpired
-            ? t.contractExpiredBody
-            : t.guideDescReady;
+        : contractNeedsAcceptance
+          ? (lang === 'zh' ? '月卡已开通，请先到“我的”确认挖矿合同。' : 'Monthly card is active. Accept the mining contract in Profile first.')
+          : !minerSetupComplete
+            ? t.guideDescActivate
+            : contractExpired
+              ? t.contractExpiredBody
+              : t.guideDescReady;
   const guideCtaLabel = onboardingVisible
     ? t.guideCtaOnboarding
     : !identityReady
       ? t.syncIdentity
-      : !minerReady
-        ? t.setupMiner
-        : pendingActivation
-          ? t.guideCtaActivate
-          : t.claimReward;
+      : !hasActiveContract
+        ? t.guideContactSupport
+        : contractNeedsAcceptance
+          ? (lang === 'zh' ? '去确认合同' : 'Accept Contract')
+          : !minerSetupComplete
+            ? t.setupMiner
+            : t.claimReward;
   const guideAction = onboardingVisible
     ? handleExpandOnboarding
     : !identityReady
       ? initializeAccount
-      : !minerReady
-        ? startMining
-        : pendingActivation
-          ? startMining  // retry miner setup after admin activates
-          : claimReward;
+      : !hasActiveContract
+        ? handleContactSupport
+        : contractNeedsAcceptance
+          ? () => setActiveTab('profile')
+          : !minerSetupComplete
+            ? startMining
+            : claimReward;
   const guideSteps = [
     {
       key: 'identity',
@@ -2564,11 +2724,18 @@ export default function App() {
       complete: identityReady,
     },
     {
+      key: 'transfer',
+      label: t.guideStepTransfer,
+      status: identityReady ? t.guideStepTodo : t.guideStepLocked,
+      active: identityReady && !hasActiveContract,
+      complete: hasActiveContract,
+    },
+    {
       key: 'activation',
       label: t.guideStepActivation,
       status: hasActiveContract
         ? t.guideStepActivationDone
-        : minerReady
+        : minerSetupComplete
           ? t.guideStepActivationStatus
           : identityReady
             ? t.guideStepTodo
@@ -2577,22 +2744,34 @@ export default function App() {
       complete: hasActiveContract,
     },
     {
+      key: 'contract',
+      label: t.guideStepContract,
+      status: !hasActiveContract
+        ? t.guideStepLocked
+        : contractNeedsAcceptance
+          ? t.guideStepTodo
+          : t.guideStepDone,
+      active: hasActiveContract && contractNeedsAcceptance,
+      complete: hasActiveContract && !contractNeedsAcceptance,
+    },
+    {
       key: 'miner',
       label: t.guideStepMiner,
-      status: minerReady ? t.guideStepDone : hasActiveContract ? t.guideStepTodo : t.guideStepLocked,
-      active: hasActiveContract && !minerReady,
-      complete: minerReady,
+      status: minerSetupComplete ? t.guideStepDone : hasActiveContract ? t.guideStepTodo : t.guideStepLocked,
+      active: hasActiveContract && !contractNeedsAcceptance && !minerSetupComplete,
+      complete: minerSetupComplete,
     },
     {
       key: 'reward',
       label: t.guideStepReward,
-      status: identityReady && minerReady && hasActiveContract ? t.guideStepTodo : t.guideStepLocked,
-      active: identityReady && minerReady && hasActiveContract,
+      status: identityReady && minerSetupComplete && hasActiveContract && !contractNeedsAcceptance ? t.guideStepTodo : t.guideStepLocked,
+      active: identityReady && minerSetupComplete && hasActiveContract && !contractNeedsAcceptance,
       complete: false,
     },
   ];
   const bottomTabs: Array<{ key: BottomTab; label: string }> = [
     { key: 'home', label: t.tabHome },
+    { key: 'exchange', label: t.tabExchange },
     { key: 'earnings', label: t.tabEarnings },
     { key: 'device', label: t.tabDevice },
     { key: 'profile', label: t.tabProfile },
@@ -2695,7 +2874,7 @@ export default function App() {
         onExpand={handleExpandOnboarding}
       />
       <ContractModal
-        visible={contractNeedsAcceptance && contract !== null}
+        visible={activeTab === 'profile' && contractNeedsAcceptance && contract !== null}
         lang={lang}
         title={(lang === 'zh' ? contract?.titleZh : contract?.titleEn) || 'Contract'}
         content={(lang === 'zh' ? contract?.contentZh : contract?.contentEn) || (lang === 'zh' ? '当前合同正文未配置，请联系管理员补充合同内容。' : 'The contract content is not configured. Please contact support.')}
@@ -2730,7 +2909,7 @@ export default function App() {
             </View>
           </View>
 
-          {!(identityReady && minerReady && hasActiveContract) && !(onboardingVisible && !onboardingMinimized) && (
+          {!(identityReady && minerSetupComplete && hasActiveContract) && !(onboardingVisible && !onboardingMinimized) && (
             <GuideCard
               title={guideTitle}
               description={guideDescription}
@@ -2910,6 +3089,13 @@ export default function App() {
               bnbBalance={bnbBalance}
               superBalance={superBalance}
               usdtBalance={usdtBalance}
+              minSuperStakeForReward={minSuperStakeForReward}
+              stakedSuper={stakedSuper}
+              stakeRequirementReady={stakeRequirementReady}
+              stakeAmount={stakeAmount}
+              setStakeAmount={setStakeAmount}
+              onStakeSuper={() => { void submitStakeSuper('stake'); }}
+              onUnstakeSuper={() => { void submitStakeSuper('unstake'); }}
               onExportWallet={handleExportWallet}
               onImportWalletClick={() => setImportWalletVisible(true)}
               t={t}
