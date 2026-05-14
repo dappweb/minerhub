@@ -29,7 +29,8 @@
       "rpcUrl": "https://bsc-dataseed.binance.org/",
       "chainId": 56,
       "minerContractAddress": "0xAfb0AD4dEa6622DB007f3c0223Ce58F08B9D99F5",
-      "swapContractAddress": "0xeF3338B348E21fD8BF9c5BE28279C494eF4024Fa",
+      "superTokenAddress": "0x22E76deCF9c558c8716FF7c20C0813429cBe805B",
+      "usdtTokenAddress": "0x55d398326f99059fF775485246999027B3197955",
       "eas": {
         "projectId": "7d714fe7-9efe-4073-913b-6a3b5e7e1c36"
       }

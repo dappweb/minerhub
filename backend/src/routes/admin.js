@@ -1070,7 +1070,6 @@ async function handleCustomerDelete(env, userId) {
         "DELETE FROM exchange_orders WHERE user_id = ?",
         "DELETE FROM reward_withdrawals WHERE user_id = ?",
         "DELETE FROM payout_batch_items WHERE user_id = ?",
-        "DELETE FROM swap_trade_logs WHERE user_id = ?",
         "DELETE FROM super_distributions WHERE user_id = ?",
         "DELETE FROM token_locks WHERE user_id = ?",
         "DELETE FROM devices WHERE user_id = ?",
@@ -1078,6 +1077,17 @@ async function handleCustomerDelete(env, userId) {
     ];
     for (const statement of deleteByUserId) {
         await env.DB.prepare(statement).bind(userId).run();
+    }
+    for (const statement of [
+        "DELETE FROM exchange_trade_logs WHERE user_id = ?",
+        "DELETE FROM swap_trade_logs WHERE user_id = ?",
+    ]) {
+        try {
+            await env.DB.prepare(statement).bind(userId).run();
+        }
+        catch {
+            // Older or freshly migrated databases may only have one of the two table names.
+        }
     }
     await env.DB.prepare("DELETE FROM referral_edges WHERE inviter_user_id = ? OR invitee_user_id = ?")
         .bind(userId, userId)
@@ -1286,12 +1296,19 @@ async function handleExchangeRecords(env, url) {
         params.push(direction);
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const { results } = await env.DB.prepare(`SELECT id, user_id, wallet, direction, amount_in, amount_out, price_snapshot,
+    const readExchangeRows = (tableName) => env.DB.prepare(`SELECT id, user_id, wallet, direction, amount_in, amount_out, price_snapshot,
             status, tx_hash, note, created_at, updated_at
-     FROM swap_trade_logs ${where}
+     FROM ${tableName} ${where}
      ORDER BY created_at DESC LIMIT ?`)
         .bind(...params, limit)
         .all();
+    let results;
+    try {
+        results = (await readExchangeRows("exchange_trade_logs")).results;
+    }
+    catch {
+        results = (await readExchangeRows("swap_trade_logs")).results;
+    }
     const items = (results ?? []).map((row) => ({
         id: row.id,
         userId: row.user_id,

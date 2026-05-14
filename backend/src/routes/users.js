@@ -66,7 +66,7 @@ async function readMinimumStakeBlockReason(env, wallet) {
         const staked = Number(gate.stakedFormatted);
         if (!Number.isFinite(min) || min <= 0)
             return null;
-        if (!Number.isFinite(staked) || staked < min) {
+        if (!Number.isFinite(staked) || staked <= min) {
             return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
         }
     }

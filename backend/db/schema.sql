@@ -94,7 +94,7 @@ INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES
   ('contract_term_years_default', '3', datetime('now')),
   ('contract_term_days_default', '1095', datetime('now')),
   ('reward_rate_usdt_per_hour', '0.084', datetime('now')),
-  ('swap_price_super_per_usdt', '0', datetime('now')),
+  ('exchange_price_super_per_usdt', '0', datetime('now')),
   ('payout_wallets_json', '[]', datetime('now')),
   ('user_agreement_required', '0', datetime('now')),
   ('user_agreement_version', '1.0.0', datetime('now')),
@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS payout_batch_items (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS swap_price_history (
+CREATE TABLE IF NOT EXISTS exchange_price_history (
   id TEXT PRIMARY KEY,
   price_super_per_usdt TEXT NOT NULL,
   source TEXT NOT NULL,
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS swap_price_history (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS swap_trade_logs (
+CREATE TABLE IF NOT EXISTS exchange_trade_logs (
   id TEXT PRIMARY KEY,
   user_id TEXT,
   wallet TEXT,
@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS super_distributions (
   mode TEXT NOT NULL CHECK (mode IN ('mint','transfer')),
   usdt_amount REAL NOT NULL,
   super_amount REAL NOT NULL,
-  swap_price_super_per_usdt REAL NOT NULL,
+  exchange_price_super_per_usdt REAL NOT NULL,
   tx_hash TEXT,
   status TEXT NOT NULL DEFAULT 'success' CHECK (status IN ('pending','success','failed')),
   lock_term_days INTEGER NOT NULL,
@@ -353,7 +353,7 @@ CREATE INDEX IF NOT EXISTS idx_exchange_orders_user_id ON exchange_orders(user_i
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status);
 CREATE INDEX IF NOT EXISTS idx_payout_batches_status ON payout_batches(status);
 CREATE INDEX IF NOT EXISTS idx_payout_batch_items_batch_id ON payout_batch_items(batch_id);
-CREATE INDEX IF NOT EXISTS idx_swap_trade_logs_user_id ON swap_trade_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_exchange_trade_logs_user_id ON exchange_trade_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_super_distributions_user_time ON super_distributions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_token_locks_user_status ON token_locks(user_id, status, end_at);
 CREATE INDEX IF NOT EXISTS idx_reward_withdrawals_user_time ON reward_withdrawals(user_id, created_at DESC);

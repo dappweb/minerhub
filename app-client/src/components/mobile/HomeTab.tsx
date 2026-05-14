@@ -95,7 +95,7 @@ export default function HomeTab({
   const stageHint = !identityReady
     ? guideDescription
     : contractExpired
-      ? (lang === 'zh' ? '续期后即可恢复收益累计与兑换操作。' : 'Renew to restore rewards and swaps.')
+      ? (lang === 'zh' ? '续期后即可恢复收益累计与兑换操作。' : 'Renew to restore rewards and exchanges.')
       : onlineState === (lang === 'zh' ? '在线' : 'Online')
         ? (lang === 'zh' ? '保持手机在线，收益会按在线时长累计。' : 'Keep the device online to continue accruing rewards.')
         : (lang === 'zh' ? '完成激活并保持设备在线，今日收益会开始增长。' : 'Activate and keep the device online to grow today\'s rewards.');

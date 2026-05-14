@@ -212,7 +212,7 @@ export default function ExchangeTab({
 
       {!!swapBlockedReason && (
         <View style={styles.noticeCard}>
-          <Text style={styles.noticeTitle}>{isZh ? '当前还不能提交兑换' : 'Swap is not ready yet'}</Text>
+          <Text style={styles.noticeTitle}>{isZh ? '当前还不能提交兑换' : 'Exchange is not ready yet'}</Text>
           <Text style={styles.swapBlockedReason}>{swapBlockedReason}</Text>
         </View>
       )}

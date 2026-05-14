@@ -1,13 +1,11 @@
 ﻿import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import type { MiningPool, SUPER, SwapRouter, USDT_Mock } from "../typechain-types";
+import type { MiningPool, SUPER } from "../typechain-types";
 
 describe("Coin Planet Contracts", () => {
   let SUPER: SUPER;
-  let usdt: USDT_Mock;
   let miningPool: MiningPool;
-  let swapRouter: SwapRouter;
   let deployer: SignerWithAddress;
   let miner1: SignerWithAddress;
   let miner2: SignerWithAddress;
@@ -22,25 +20,15 @@ describe("Coin Planet Contracts", () => {
       kind: "uups",
     }) as unknown as SUPER;
 
-    const USDTFactory = await ethers.getContractFactory("USDT_Mock");
-    usdt = await USDTFactory.deploy();
-
     const MiningPoolFactory = await ethers.getContractFactory("MiningPool");
     miningPool = await upgrades.deployProxy(MiningPoolFactory, [await SUPER.getAddress(), deployer.address], {
       initializer: "initialize",
       kind: "uups",
     }) as unknown as MiningPool;
 
-    const SwapRouterFactory = await ethers.getContractFactory("SwapRouter");
-    swapRouter = await upgrades.deployProxy(SwapRouterFactory, [await SUPER.getAddress(), await usdt.getAddress(), deployer.address], {
-      initializer: "initialize",
-      kind: "uups",
-    }) as unknown as SwapRouter;
-
     await SUPER.addMinter(await miningPool.getAddress());
-    await SUPER.addMinter(await swapRouter.getAddress());
 
-    return { SUPER, usdt, miningPool, swapRouter, deployer, miner1, miner2 };
+    return { SUPER, miningPool, deployer, miner1, miner2 };
   }
 
   beforeEach(async () => {
@@ -160,49 +148,6 @@ describe("Coin Planet Contracts", () => {
       await miningPool.connect(miner2).unstakeSuper(ethers.parseEther("2"));
       expect(await miningPool.isRewardEligible(miner2.address)).to.equal(false);
       expect(await miningPool.totalEligibleHashrate()).to.equal(0);
-    });
-  });
-
-  describe("SwapRouter", () => {
-    beforeEach(async () => {
-      const initialSuper = ethers.parseEther("50000000");
-      await SUPER.mint(deployer.address, initialSuper);
-
-      const superAmount = ethers.parseEther("50000000");  // 5000 涓?SUPER
-      const usdtAmount = ethers.parseUnits("50000", 18); // 5 涓?USDT
-
-      await SUPER.approve(await swapRouter.getAddress(), superAmount);
-      await usdt.approve(await swapRouter.getAddress(), usdtAmount);
-      
-      await swapRouter.initializeLiquidity(superAmount, usdtAmount);
-    });
-
-    it("Should initialize liquidity correctly", async () => {
-      const reserveSuper = await swapRouter.reserveSuper();
-      const reserveUSDT = await swapRouter.reserveUSDT();
-
-      expect(reserveSuper).to.equal(ethers.parseEther("50000000"));
-      expect(reserveUSDT).to.equal(ethers.parseUnits("50000", 18));
-    });
-
-    it("Should allow SUPER to USDT swap", async () => {
-      // 缁?miner1 涓€浜?SUPER
-      await SUPER.mint(miner1.address, ethers.parseEther("1000"));
-
-      const swapAmount = ethers.parseEther("100");
-      await SUPER.connect(miner1).approve(await swapRouter.getAddress(), swapAmount);
-
-      const usdtBefore = await usdt.balanceOf(miner1.address);
-      
-      await swapRouter.connect(miner1).swapSuperToUsdt(swapAmount);
-      
-      const usdtAfter = await usdt.balanceOf(miner1.address);
-      expect(usdtAfter).to.be.greaterThan(usdtBefore);
-    });
-
-    it("Should track price correctly", async () => {
-      const price = await swapRouter.getPrice();
-      expect(price).to.be.greaterThan(0);
     });
   });
 

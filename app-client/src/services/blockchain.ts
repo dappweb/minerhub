@@ -36,9 +36,6 @@ const chain = defineChain({
 const miningPoolAddress =
   (process.env.EXPO_PUBLIC_MINING_POOL_ADDRESS as Address | undefined) ??
   (process.env.EXPO_PUBLIC_MINER_CONTRACT_ADDRESS as Address | undefined);
-const swapRouterAddress =
-  (process.env.EXPO_PUBLIC_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  (process.env.EXPO_PUBLIC_SWAP_CONTRACT_ADDRESS as Address | undefined);
 const superTokenAddress =
   (process.env.EXPO_PUBLIC_SUPER_ADDRESS as Address | undefined) ??
   (process.env.EXPO_PUBLIC_SUPER_TOKEN_ADDRESS as Address | undefined);
@@ -244,23 +241,6 @@ const minerAbi = [
     name: 'unstakeSuper',
     stateMutability: 'nonpayable',
     inputs: [{ name: '_amount', type: 'uint256' }],
-    outputs: [],
-  },
-] as const;
-
-const swapAbi = [
-  {
-    type: 'function',
-    name: 'getPrice',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'swapUsdtToSuper',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'amountIn', type: 'uint256' }],
     outputs: [],
   },
 ] as const;
@@ -480,56 +460,6 @@ export async function unstakeSuperOnChain(amount: string): Promise<Hex> {
   } catch (error) {
     throw normalizeTxError(error);
   }
-}
-
-export async function swapUsdtToSuperOnChain(amount: string) {
-  if (!swapRouterAddress) {
-    throw new Error('缺少 EXPO_PUBLIC_SWAP_ROUTER_ADDRESS。');
-  }
-
-  const normalizedAmount = Number(amount);
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-    throw new Error('请输入有效的 USDT 数量。');
-  }
-
-  try {
-    const { account, walletClient, publicClient } = await getWalletClients();
-    const args = [parseUnits(amount, 18)] as const;
-    const gas = await assertSufficientBalanceForContractTx({
-      account: account.address,
-      contractAddress: swapRouterAddress,
-      abi: swapAbi,
-      functionName: 'swapUsdtToSuper',
-      args,
-    });
-
-    const hash = await walletClient.writeContract({
-      account,
-      address: swapRouterAddress,
-      abi: swapAbi,
-      functionName: 'swapUsdtToSuper',
-      args,
-      gas,
-    });
-
-    await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
-    return hash;
-  } catch (error) {
-    throw normalizeTxError(error);
-  }
-}
-
-export async function getSwapPriceOnChain() {
-  if (!swapRouterAddress) {
-    throw new Error('缺少 EXPO_PUBLIC_SWAP_ROUTER_ADDRESS。');
-  }
-
-  const { publicClient } = await getWalletClients();
-  return publicClient.readContract({
-    address: swapRouterAddress,
-    abi: swapAbi,
-    functionName: 'getPrice',
-  });
 }
 
 export async function sendNativeTokenOnChain(to: Address, amountEth: string) {

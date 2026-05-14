@@ -60,7 +60,7 @@ async function readMinimumStakeBlockReason(env, wallet) {
         const staked = Number(gate.stakedFormatted);
         if (!Number.isFinite(min) || min <= 0)
             return null;
-        if (!Number.isFinite(staked) || staked < min) {
+        if (!Number.isFinite(staked) || staked <= min) {
             return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
         }
     }
@@ -101,7 +101,7 @@ async function accrueHourlyReward(env, userId, deviceId) {
     if (!Number.isFinite(rewardUsdt) || rewardUsdt <= 0)
         return;
     const systemStatus = await readSystemStatus(env);
-    const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+    const superPerUsdt = Math.max(0, Number(systemStatus.exchangePriceSuperPerUsdt ?? systemStatus.swapPriceSuperPerUsdt ?? "0"));
     const rewardSuper = rewardUsdt * superPerUsdt;
     const nowIsoValue = new Date(now).toISOString();
     await env.DB.prepare(`INSERT INTO reward_ledger (
@@ -292,7 +292,7 @@ async function accrueHeartbeatReward(env, userId, deviceId, heartbeatAt, reporte
         return { rewardUsdt: 0, rewardSuper: 0, accruedSeconds: 0, continuous: true, reason: "no_reward" };
     }
     const systemStatus = await readSystemStatus(env);
-    const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+    const superPerUsdt = Math.max(0, Number(systemStatus.exchangePriceSuperPerUsdt ?? systemStatus.swapPriceSuperPerUsdt ?? "0"));
     const rewardSuper = rewardUsdt * superPerUsdt;
     const accruedSeconds = Math.max(0, Math.floor(accruedMs / 1000));
     await env.DB.prepare(`INSERT INTO reward_ledger (

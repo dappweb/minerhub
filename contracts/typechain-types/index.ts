@@ -66,7 +66,5 @@ export type { MiningPool } from "./contracts/MiningPool";
 export { MiningPool__factory } from "./factories/contracts/MiningPool__factory";
 export type { SUPER } from "./contracts/SUPER";
 export { SUPER__factory } from "./factories/contracts/SUPER__factory";
-export type { SwapRouter } from "./contracts/SwapRouter";
-export { SwapRouter__factory } from "./factories/contracts/SwapRouter__factory";
 export type { USDT_Mock } from "./contracts/USDT_Mock";
 export { USDT_Mock__factory } from "./factories/contracts/USDT_Mock__factory";

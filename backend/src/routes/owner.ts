@@ -350,8 +350,8 @@ async function handleSuperGrantPriced(request: Request, env: Env, actorWallet: s
   if (!targetWallet) return badRequest("Invalid target wallet");
 
   const status = await readSystemStatus(env);
-  const price = Number(status.swapPriceSuperPerUsdt ?? "0");
-  if (!Number.isFinite(price) || price <= 0) return badRequest("swap_price_super_per_usdt must be configured and > 0");
+  const price = Number(status.exchangePriceSuperPerUsdt ?? status.swapPriceSuperPerUsdt ?? "0");
+  if (!Number.isFinite(price) || price <= 0) return badRequest("exchange_price_super_per_usdt must be configured and > 0");
 
   const superAmountNum = Number((usdtAmount * price).toFixed(6));
   if (!Number.isFinite(superAmountNum) || superAmountNum <= 0) return badRequest("Calculated SUPER amount invalid");
@@ -395,14 +395,22 @@ async function handleSuperGrantPriced(request: Request, env: Env, actorWallet: s
       ).bind(userId, now, now).run();
     }
 
-    await env.DB.prepare(
-      `INSERT INTO super_distributions (
-        id, user_id, wallet, mode, usdt_amount, super_amount, swap_price_super_per_usdt,
-        tx_hash, status, lock_term_days, note, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', ?, ?, ?)`
-    )
-      .bind(distId, userId, targetWallet, mode, usdtAmount, superAmountNum, price, tx.txHash, lockTermDays, body.note ?? null, now)
-      .run();
+    const insertDistribution = async (priceColumn: "exchange_price_super_per_usdt" | "swap_price_super_per_usdt") => {
+      await env.DB.prepare(
+        `INSERT INTO super_distributions (
+          id, user_id, wallet, mode, usdt_amount, super_amount, ${priceColumn},
+          tx_hash, status, lock_term_days, note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', ?, ?, ?)`
+      )
+        .bind(distId, userId, targetWallet, mode, usdtAmount, superAmountNum, price, tx.txHash, lockTermDays, body.note ?? null, now)
+        .run();
+    };
+
+    try {
+      await insertDistribution("exchange_price_super_per_usdt");
+    } catch {
+      await insertDistribution("swap_price_super_per_usdt");
+    }
 
     if (userId) {
       await env.DB.prepare(
@@ -432,6 +440,7 @@ async function handleSuperGrantPriced(request: Request, env: Env, actorWallet: s
       wallet: targetWallet,
       usdtAmount,
       superAmount: superAmountNum,
+      exchangePriceSuperPerUsdt: price,
       swapPriceSuperPerUsdt: price,
       mode,
       lockTermDays,

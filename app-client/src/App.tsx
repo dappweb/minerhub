@@ -53,7 +53,6 @@ import {
 import {
     claimRewardOnChain,
     getMiningStakeRequirement,
-    getSwapPriceOnChain,
     getWalletAddress,
     getWalletBalances,
     registerMinerOnChain,
@@ -100,7 +99,7 @@ const translations = {
     subtitle: 'Device Center · BNB Smart Chain',
     flow1: 'Finish identity sync and inviter binding first',
     flow2: 'Transfer funds, contact support to activate monthly card, then accept contract',
-    flow3: 'Keep device online to accrue rewards; claim and swap anytime',
+    flow3: 'Keep device online to accrue rewards; claim and request exchanges anytime',
     profileId: 'ID',
     profileVip: 'VIP',
     profileUnbind: 'Unbind',
@@ -121,14 +120,14 @@ const translations = {
     globalRefreshDone: 'Refresh complete',
     globalRefreshFail: 'Refresh failed: ',
     swapPanelTitle: 'SUPER -> USDT',
-    swapAmount: 'Swap Amount (SUPER)',
+    swapAmount: 'Exchange Amount (SUPER)',
     swapAmountPlaceholder: 'Enter SUPER amount',
     refreshPrice: 'Refresh Price',
     quote: 'Estimated USDT',
     fee: 'Fee (0.5%)',
     minReceive: 'Minimum Received',
     swapButton: 'Submit Exchange',
-    swapConfirmTitle: 'Confirm Swap',
+    swapConfirmTitle: 'Confirm Exchange',
     swapConfirmHint: 'Submit to backend exchange workflow (auto/manual by control settings).',
     exchangeOrderMode: 'Mode',
     exchangeOrderHistoryTitle: 'My Exchange Requests',
@@ -149,7 +148,7 @@ const translations = {
     advancedSettings: 'Advanced Settings',
     tabHome: 'Home',
     tabEarnings: 'Rewards',
-    tabExchange: 'Swap',
+    tabExchange: 'Exchange',
     tabDevice: 'Device',
     tabProfile: 'Me',
     guideTitle: 'Getting Started',
@@ -157,12 +156,12 @@ const translations = {
     guideDescInit: 'Complete identity sync and bind inviter wallet first, then unlock miner operations.',
     guideDescMine: 'Transfer funds first, then contact support to activate the monthly card. The contract is confirmed after activation.',
     guideDescOnboarding: 'Finish inviter wallet setup first. You can minimize the floating setup card and resume anytime.',
-    guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/swap.',
+    guideDescReady: 'After miner activation, keep your phone online to accrue rewards and use bottom tabs for claim/exchange.',
     guideStepIdentity: 'Identity Sync',
     guideStepTransfer: 'Transfer Funds',
     guideStepContract: 'Contract',
     guideStepMiner: 'Miner Activation',
-    guideStepReward: 'Rewards & Swap',
+    guideStepReward: 'Rewards & Exchange',
     guideStepDone: 'Done',
     guideStepTodo: 'Next',
     guideStepLocked: 'Locked',
@@ -263,16 +262,16 @@ const translations = {
     gasQuoteLabel: 'Estimated BNB',
     gasBalanceLabel: 'Funded BNB (history)',
     gasBuyAndRetry: 'Request Admin Recharge',
-    gasAdminHint: 'Gas can only be recharged by admin. Token swap for gas is disabled.',
+    gasAdminHint: 'Gas can only be recharged by admin. Token exchange for gas is disabled.',
     gasRequestTopup: 'Contact Admin Recharge',
     gasAdminTopupNeeded: 'Gas can only be provided by admin recharge. Please contact support/admin.',
     gasBuying: 'Purchasing gas package...',
     gasReady: 'Gas package completed. Retrying transaction...',
     gasFailed: 'Gas purchase failed: ',
     gasIntentPhase2: 'Phase-2 relay intent registered.',
-    priceUnavailable: 'Pool price unavailable',
-    swapBlockedNoPrice: 'Swap is unavailable: pool price is not ready (liquidity may be uninitialized or backend price not configured).',
-    priceFetchFailed: 'Failed to fetch pool price',
+    priceUnavailable: 'Exchange price unavailable',
+    swapBlockedNoPrice: 'Exchange is unavailable: backend exchange price is not configured.',
+    priceFetchFailed: 'Failed to fetch exchange price',
     priceFormat: (val: string) => `1 USDT ~= ${val} SUPER`,
     langToggle: '中文',
     notInit: 'Not initialized',
@@ -508,9 +507,9 @@ const translations = {
     gasReady: 'Gas 包购买完成，正在重试交易...',
     gasFailed: 'Gas 兑换失败：',
     gasIntentPhase2: '二期 Relay 意图已登记。',
-    priceUnavailable: '池子价格不可用',
-    swapBlockedNoPrice: '兑换不可用：池子价格未就绪（可能未初始化流动性或后台未配置价格）。',
-    priceFetchFailed: '获取池子价格失败',
+    priceUnavailable: '兑换价格不可用',
+    swapBlockedNoPrice: '兑换不可用：后台兑换价格未配置。',
+    priceFetchFailed: '获取兑换价格失败',
     priceFormat: (val: string) => `1 USDT ≈ ${val} SUPER`,
     langToggle: 'English',
     notInit: '未初始化',
@@ -1770,18 +1769,13 @@ export default function App() {
   ]);
 
   const refreshSwapPrice = async (preferredStatus?: Awaited<ReturnType<typeof getSystemStatus>> | null) => {
-    try {
-      const price = await getSwapPriceOnChain();
-      const parsed = Number(price) / 1e18;
-      if (Number.isFinite(parsed) && parsed > 0) {
-        setSwapPriceValue(parsed);
-        return;
-      }
-    } catch {
-      // Fallback to configured backend price below.
-    }
-
-    const configuredPrice = Number(preferredStatus?.swapPriceSuperPerUsdt ?? systemStatus?.swapPriceSuperPerUsdt ?? 0);
+    const configuredPrice = Number(
+      preferredStatus?.exchangePriceSuperPerUsdt
+        ?? preferredStatus?.swapPriceSuperPerUsdt
+        ?? systemStatus?.exchangePriceSuperPerUsdt
+        ?? systemStatus?.swapPriceSuperPerUsdt
+        ?? 0
+    );
     if (Number.isFinite(configuredPrice) && configuredPrice > 0) {
       setSwapPriceValue(configuredPrice);
       return;
@@ -1790,7 +1784,7 @@ export default function App() {
     const latestStatus = await getSystemStatus().catch(() => null);
     if (latestStatus) {
       setSystemStatus(latestStatus);
-      const latestConfiguredPrice = Number(latestStatus.swapPriceSuperPerUsdt ?? 0);
+      const latestConfiguredPrice = Number(latestStatus.exchangePriceSuperPerUsdt ?? latestStatus.swapPriceSuperPerUsdt ?? 0);
       if (Number.isFinite(latestConfiguredPrice) && latestConfiguredPrice > 0) {
         setSwapPriceValue(latestConfiguredPrice);
         return;
@@ -2994,7 +2988,7 @@ export default function App() {
                   style={styles.inlineActionBtn}
                   onPress={() => setActiveTab('exchange')}
                 >
-                  <Text style={styles.inlineActionBtnText}>{lang === 'zh' ? '前往兑换中心' : 'Go to Swap Center'}</Text>
+                  <Text style={styles.inlineActionBtnText}>{lang === 'zh' ? '前往兑换中心' : 'Go to Exchange Center'}</Text>
                 </TouchableOpacity>
               </View>
               <EarningsTab

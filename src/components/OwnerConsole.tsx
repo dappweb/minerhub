@@ -662,7 +662,7 @@ export default function OwnerConsole({ adminWallet, signMessageAsync }: OwnerCon
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-xs text-slate-500">链上管理员会同步写入 MiningPool、SUPER、SwapRouter。Owner 账户保留为永久管理员，不能移除。</p>
+            <p className="mt-3 text-xs text-slate-500">链上管理员会同步写入 MiningPool、SUPER。Owner 账户保留为永久管理员，不能移除。</p>
           </Card>
 
           <Card title="Owner 转让">

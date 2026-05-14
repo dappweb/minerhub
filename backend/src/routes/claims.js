@@ -50,7 +50,7 @@ async function readMinimumStakeBlockReason(env, wallet) {
         const staked = Number(gate.stakedFormatted);
         if (!Number.isFinite(min) || min <= 0)
             return null;
-        if (!Number.isFinite(staked) || staked < min) {
+        if (!Number.isFinite(staked) || staked <= min) {
             return `minimum_super_stake:${Number.isFinite(staked) ? staked : 0}/${min}`;
         }
     }
@@ -232,7 +232,8 @@ export async function handleClaims(request, env, pathParts) {
         if (!body?.userId || !body.wallet) {
             return badRequest("userId and wallet are required");
         }
-        if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+        const walletLower = body.wallet.toLowerCase();
+        if (walletLower !== authResult.wallet?.toLowerCase()) {
             return badRequest("Wallet mismatch");
         }
         if (!(await assertUserOwnedByWallet(env, body.userId, body.wallet))) {
@@ -280,7 +281,8 @@ export async function handleClaims(request, env, pathParts) {
         if (!body?.userId || !body.wallet) {
             return badRequest("userId and wallet are required");
         }
-        if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+        const walletLower = body.wallet.toLowerCase();
+        if (walletLower !== authResult.wallet?.toLowerCase()) {
             return badRequest("Wallet mismatch");
         }
         if (!(await assertUserOwnedByWallet(env, body.userId, body.wallet))) {
@@ -319,14 +321,22 @@ export async function handleClaims(request, env, pathParts) {
           id, user_id, wallet, amount_super, amount_usdt, mode, status,
           request_note, tx_hash, super_tx_hash, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                .bind(exchangeId, body.userId, body.wallet.toLowerCase(), amountSuper.toString(), Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0", mode, status, body.note?.trim() || null, superTxHash, superTxHash, now, now)
+                .bind(exchangeId, body.userId, walletLower, amountSuper.toString(), Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0", mode, status, body.note?.trim() || null, superTxHash, superTxHash, now, now)
                 .run();
-            await env.DB.prepare(`INSERT INTO swap_trade_logs (
+            const insertExchangeLog = async (tableName) => {
+                await env.DB.prepare(`INSERT INTO ${tableName} (
           id, user_id, wallet, direction, amount_in, amount_out,
           price_snapshot, status, note, created_at, updated_at
         ) VALUES (?, ?, ?, 'SUPER_TO_USDT', ?, ?, '0', ?, ?, ?, ?)`)
-                .bind(createId("swl"), body.userId, body.wallet.toLowerCase(), amountSuper.toString(), Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0", status, `${autoEnabled ? "auto exchange request" : "manual exchange request"}; SUPER tx: ${superTxHash}`, now, now)
-                .run();
+                    .bind(createId("exl"), body.userId, walletLower, amountSuper.toString(), Number.isFinite(amountUsdt) ? Math.max(0, amountUsdt).toString() : "0", status, `${autoEnabled ? "auto exchange request" : "manual exchange request"}; SUPER tx: ${superTxHash}`, now, now)
+                    .run();
+            };
+            try {
+                await insertExchangeLog("exchange_trade_logs");
+            }
+            catch {
+                await insertExchangeLog("swap_trade_logs");
+            }
             const totals = await reconcileUserRewardTotals(env, body.userId, now);
             return json({
                 id: exchangeId,

@@ -16,7 +16,7 @@ export default function Features() {
     {
       icon: RefreshCw,
       title: '一键兑换',
-      desc: '官方保底池 + DEX市场双通道。即时变现，汇率透明，随时随地提取收益。'
+      desc: '后台兑换通道 + 运营资金池。汇率透明，随时提交收益兑换申请。'
     },
     {
       icon: Users,

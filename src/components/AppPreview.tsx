@@ -35,7 +35,7 @@ export default function AppPreview() {
               {[
                 { step: '01', title: '安装并创建钱包', desc: '客户端内完成本地钱包创建，私钥由设备保管。' },
                 { step: '02', title: '一键开始挖矿', desc: '启动后自动调度，平衡功耗、温度与收益。' },
-                { step: '03', title: '兑换与提现', desc: 'SUPER 可在链上兑换 USDT，支持按需提取。' },
+                { step: '03', title: '兑换与提现', desc: 'SUPER 可提交后台兑换为 USDT，支持按需提取。' },
               ].map((item, i) => (
                 <motion.div
                   key={i}

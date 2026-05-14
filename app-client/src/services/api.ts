@@ -275,7 +275,9 @@ export type SystemStatusDto = {
   contractTermYearsDefault: number;
   contractTermDaysDefault: number;
   rewardRateUsdtPerHour: number;
-  swapPriceSuperPerUsdt: number;
+  exchangePriceSuperPerUsdt: number;
+  /** @deprecated Use exchangePriceSuperPerUsdt. */
+  swapPriceSuperPerUsdt?: number;
   exchangeSuperRecipientAddress?: string | null;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
   userAgreement?: AgreementDocumentDto;

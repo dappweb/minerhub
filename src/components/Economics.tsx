@@ -37,7 +37,7 @@ export default function Economics() {
                 <div>
                   <h4 className="font-bold text-lg mb-1">USDT</h4>
                   <p className="text-slate-400 text-sm mb-2">用途：稳定结算与提现</p>
-                  <p className="text-slate-500 text-sm">来源：Swap 池兑换和外部流动性</p>
+                  <p className="text-slate-500 text-sm">来源：后台兑换与运营资金池</p>
                 </div>
               </div>
             </div>
@@ -45,7 +45,7 @@ export default function Economics() {
             <div className="mt-8 p-6 rounded-2xl bg-blue-900/10 border border-blue-500/20">
               <h4 className="font-bold mb-3 flex items-center gap-2">
                 <Activity size={18} className="text-blue-400" />
-                兑换保障逻辑
+                兑换结算逻辑
               </h4>
               <ul className="space-y-2 text-sm text-slate-300">
                 <li className="flex justify-between border-b border-slate-800 pb-2">
@@ -54,11 +54,11 @@ export default function Economics() {
                 </li>
                 <li className="flex justify-between border-b border-slate-800 pb-2 pt-2">
                   <span>市场价格</span>
-                  <span className="font-medium text-white">由 AMM 流动池实时形成</span>
+                  <span className="font-medium text-white">由后台配置与运营资金池维护</span>
                 </li>
                 <li className="flex justify-between pt-2">
-                  <span>滑点控制</span>
-                  <span className="font-medium text-white">前端最小到手量保护</span>
+                  <span>到账核对</span>
+                  <span className="font-medium text-white">订单、打款与哈希记录可追踪</span>
                 </li>
               </ul>
             </div>
@@ -100,7 +100,7 @@ export default function Economics() {
             </div>
 
             <div className="mt-6 p-4 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-400">
-              以上为示例性估算，实际收益受网络难度、活跃设备数量和链上兑换价格影响。
+              以上为示例性估算，实际收益受网络难度、活跃设备数量和后台兑换价格影响。
             </div>
           </div>
         </div>

@@ -61,7 +61,7 @@ export default function Architecture() {
                   <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-2"></div>
                   <div>
                     <div className="font-medium">挖矿引擎</div>
-                    <div className="text-sm text-slate-400">后台静默运行，MM代币产出</div>
+                    <div className="text-sm text-slate-400">后台静默运行，SUPER 产出</div>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
@@ -98,7 +98,7 @@ export default function Architecture() {
                   <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-2"></div>
                   <div>
                     <div className="font-medium">兑换中心</div>
-                    <div className="text-sm text-slate-400">USDT变现与提现通道</div>
+                    <div className="text-sm text-slate-400">运营结算与提现通道</div>
                   </div>
                 </li>
               </ul>

@@ -4,5 +4,4 @@
 export type { AdminAccess } from "./AdminAccess";
 export type { MiningPool } from "./MiningPool";
 export type { SUPER } from "./SUPER";
-export type { SwapRouter } from "./SwapRouter";
 export type { USDT_Mock } from "./USDT_Mock";

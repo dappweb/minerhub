@@ -23,8 +23,6 @@
   "onChainSnapshot": {
     "totalEmitted": "0",
     "totalActiveHashrate": "2600",
-    "totalMiners": "1",
-    "reserveSuper": "49991550279002718432631444",
-    "reserveUSDT": "50008477399"
+    "totalMiners": "1"
   }
 }

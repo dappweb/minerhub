@@ -25,6 +25,21 @@ type ExchangeOrder = {
   updated_at: string;
 };
 
+type ExchangeTradeLogRow = {
+  id: string;
+  user_id: string | null;
+  wallet: string | null;
+  direction: string;
+  amount_in: string;
+  amount_out: string;
+  price_snapshot: string;
+  status: string;
+  tx_hash: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 let exchangeOrderColumnsReady = false;
 
 async function ensureExchangeOrderColumns(env: Env): Promise<void> {
@@ -257,57 +272,70 @@ async function handleExchangeComplete(request: Request, env: Env, orderId: strin
     .bind(String(amountUsdt), payoutWallet ?? null, usdtTxHash, usdtTxHash, owner.wallet, now, now, now, orderId)
     .run();
 
-  await env.DB.prepare(
-    `UPDATE swap_trade_logs
+  const updateExchangeLog = async (tableName: "exchange_trade_logs" | "swap_trade_logs") => {
+    await env.DB.prepare(
+      `UPDATE ${tableName}
      SET status = 'completed', amount_out = ?, tx_hash = ?, note = ?, updated_at = ?
      WHERE id = (
        SELECT id
-       FROM swap_trade_logs
+       FROM ${tableName}
        WHERE user_id = ? AND status IN ('manual_pending', 'auto_processing', 'approved', 'submitted')
        ORDER BY created_at DESC
        LIMIT 1
      )`
-  )
-    .bind(String(amountUsdt), usdtTxHash, `exchange completed; SUPER tx: ${order.super_tx_hash ?? "-"}; USDT tx: ${usdtTxHash ?? "-"}`, now, order.user_id)
-    .run();
+    )
+      .bind(String(amountUsdt), usdtTxHash, `exchange completed; SUPER tx: ${order.super_tx_hash ?? "-"}; USDT tx: ${usdtTxHash ?? "-"}`, now, order.user_id)
+      .run();
+  };
+
+  try {
+    await updateExchangeLog("exchange_trade_logs");
+  } catch {
+    await updateExchangeLog("swap_trade_logs");
+  }
 
   return json({ ok: true, id: orderId, status: "completed", amountUsdt: String(amountUsdt), txHash: usdtTxHash, usdtTxHash, completedAt: now });
 }
 
-async function handleSwapLogs(request: Request, env: Env): Promise<Response> {
+async function handleExchangeLogs(request: Request, env: Env): Promise<Response> {
   const owner = await requireOwner(request, env);
   if (owner instanceof Response) return owner;
 
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM swap_trade_logs ORDER BY created_at DESC LIMIT 500"
-  ).all<{
-    id: string;
-    user_id: string | null;
-    wallet: string | null;
-    direction: string;
-    amount_in: string;
-    amount_out: string;
-    price_snapshot: string;
-    status: string;
-    tx_hash: string | null;
-    note: string | null;
-    created_at: string;
-    updated_at: string;
-  }>();
+  const readLogs = (tableName: "exchange_trade_logs" | "swap_trade_logs") => env.DB.prepare(
+    `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT 500`
+  ).all<ExchangeTradeLogRow>();
+
+  let results: ExchangeTradeLogRow[] | undefined;
+  try {
+    results = (await readLogs("exchange_trade_logs")).results;
+  } catch {
+    results = (await readLogs("swap_trade_logs")).results;
+  }
   return json({ items: results ?? [] });
 }
 
-async function handleSwapPriceUpdate(request: Request, env: Env): Promise<Response> {
+async function handleExchangePriceUpdate(request: Request, env: Env): Promise<Response> {
   const owner = await requireOwner(request, env);
   if (owner instanceof Response) return owner;
 
-  const body = (await request.json().catch(() => null)) as { priceSuperPerUsdt?: string | number; note?: string } | null;
-  const price = Number(body?.priceSuperPerUsdt ?? "0");
+  const body = (await request.json().catch(() => null)) as {
+    exchangePriceSuperPerUsdt?: string | number;
+    priceSuperPerUsdt?: string | number;
+    note?: string;
+  } | null;
+  const price = Number(body?.exchangePriceSuperPerUsdt ?? body?.priceSuperPerUsdt ?? "0");
   if (!Number.isFinite(price) || price <= 0) {
-    return badRequest("priceSuperPerUsdt must be positive");
+    return badRequest("exchangePriceSuperPerUsdt must be positive");
   }
 
   const now = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO system_settings (key, value, updated_at)
+     VALUES ('exchange_price_super_per_usdt', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  )
+    .bind(String(price), now)
+    .run();
   await env.DB.prepare(
     `INSERT INTO system_settings (key, value, updated_at)
      VALUES ('swap_price_super_per_usdt', ?, ?)
@@ -316,13 +344,21 @@ async function handleSwapPriceUpdate(request: Request, env: Env): Promise<Respon
     .bind(String(price), now)
     .run();
 
-  await env.DB.prepare(
-    "INSERT INTO swap_price_history (id, price_super_per_usdt, source, operator_wallet, note, created_at) VALUES (?, ?, 'admin', ?, ?, ?)"
-  )
-    .bind(createId("sph"), String(price), owner.wallet, body?.note?.trim() || null, now)
-    .run();
+  const insertPriceHistory = async (tableName: "exchange_price_history" | "swap_price_history") => {
+    await env.DB.prepare(
+      `INSERT INTO ${tableName} (id, price_super_per_usdt, source, operator_wallet, note, created_at) VALUES (?, ?, 'admin', ?, ?, ?)`
+    )
+      .bind(createId("eph"), String(price), owner.wallet, body?.note?.trim() || null, now)
+      .run();
+  };
 
-  return json({ ok: true, priceSuperPerUsdt: price, updatedAt: now });
+  try {
+    await insertPriceHistory("exchange_price_history");
+  } catch {
+    await insertPriceHistory("swap_price_history");
+  }
+
+  return json({ ok: true, exchangePriceSuperPerUsdt: price, priceSuperPerUsdt: price, updatedAt: now });
 }
 
 async function handlePayoutBatchList(request: Request, env: Env): Promise<Response> {
@@ -470,12 +506,20 @@ export async function handleOperations(request: Request, env: Env, pathParts: st
       return handleExchangeComplete(request, env, pathParts[2]);
     }
 
+    if (request.method === "GET" && pathParts.length === 2 && pathParts[0] === "exchange" && pathParts[1] === "logs") {
+      return handleExchangeLogs(request, env);
+    }
+
+    if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "exchange" && pathParts[1] === "price") {
+      return handleExchangePriceUpdate(request, env);
+    }
+
     if (request.method === "GET" && pathParts.length === 2 && pathParts[0] === "swap" && pathParts[1] === "logs") {
-      return handleSwapLogs(request, env);
+      return handleExchangeLogs(request, env);
     }
 
     if (request.method === "POST" && pathParts.length === 2 && pathParts[0] === "swap" && pathParts[1] === "price") {
-      return handleSwapPriceUpdate(request, env);
+      return handleExchangePriceUpdate(request, env);
     }
 
     if (request.method === "GET" && pathParts.length === 2 && pathParts[0] === "payout" && pathParts[1] === "batches") {

@@ -17,7 +17,7 @@ const dict = {
     'admin.section.overview.desc': '核心 KPI 与系统状态',
     'admin.section.owner.desc': '代币 / 收益 / 出款 / 审计',
     'admin.section.onchain.desc': '全网算力与矿工明细',
-    'admin.section.tokens.desc': 'SUPER 增发 / Swap 资金池 / 手续费归集',
+    'admin.section.tokens.desc': 'SUPER 增发 / 抵押门槛配置',
     'admin.section.funding.desc': '向设备钱包发放燃料费 / SUPER',
     'admin.section.customers.desc': '客户合同与收益',
     'admin.section.records.desc': '充值 / 提现 / 兑换记录',
@@ -56,10 +56,10 @@ const dict = {
     'customers.extend.hint': '天（点行末按钮）',
 
     'records.title': '交易记录',
-    'records.subtitle': '充值（Gas 购买）、提现（SUPER→USDT）、兑换（链上 Swap）',
+    'records.subtitle': '充值（Gas 购买）、提现（SUPER→USDT）、兑换（后台流程）',
     'records.recharge': '充值记录 · Gas 订单',
     'records.withdrawal': '提现记录 · SUPER→USDT / Claim',
-    'records.exchange': '兑换记录 · 链上 Swap',
+    'records.exchange': '兑换记录 · 后台流程',
     'records.action.approve': '批准',
     'records.action.complete': '完成',
 
@@ -80,7 +80,7 @@ const dict = {
     'admin.section.overview.desc': 'Key KPIs and system status',
     'admin.section.owner.desc': 'Tokens / earnings / payouts / audit',
     'admin.section.onchain.desc': 'Network hashrate and miners',
-    'admin.section.tokens.desc': 'SUPER mint / swap liquidity / fee collection',
+    'admin.section.tokens.desc': 'SUPER mint / stake threshold',
     'admin.section.funding.desc': 'Send Gas / SUPER to device wallets',
     'admin.section.customers.desc': 'Customer contracts and rewards',
     'admin.section.records.desc': 'Recharge / withdrawal / exchange',
@@ -119,10 +119,10 @@ const dict = {
     'customers.extend.hint': 'days (click row button)',
 
     'records.title': 'Transactions',
-    'records.subtitle': 'Recharge (Gas), Withdrawal (SUPER→USDT), Exchange (on-chain Swap)',
+    'records.subtitle': 'Recharge (Gas), Withdrawal (SUPER→USDT), Exchange (backend workflow)',
     'records.recharge': 'Recharge · Gas Orders',
     'records.withdrawal': 'Withdrawal · SUPER→USDT / Claim',
-    'records.exchange': 'Exchange · On-chain Swap',
+    'records.exchange': 'Exchange · Backend workflow',
     'records.action.approve': 'Approve',
     'records.action.complete': 'Complete',
 

@@ -44,6 +44,8 @@ type SystemStatus = {
   contractTermYearsDefault: number;
   contractTermDaysDefault: number;
   rewardRateUsdtPerHour: number;
+  exchangePriceSuperPerUsdt: number;
+  /** @deprecated Use exchangePriceSuperPerUsdt. */
   swapPriceSuperPerUsdt: number;
   exchangeSuperRecipientAddress: string | null;
   payoutWallets: Array<{ walletAddress: string; priority: number; isPrimary: boolean }>;
@@ -83,6 +85,7 @@ const DEFAULT_STATUS: SystemStatus = {
   contractTermYearsDefault: 3,
   contractTermDaysDefault: 1095,
   rewardRateUsdtPerHour: 0.084,
+  exchangePriceSuperPerUsdt: 0,
   swapPriceSuperPerUsdt: 0,
   exchangeSuperRecipientAddress: null,
   payoutWallets: [],
@@ -196,6 +199,12 @@ async function readStatus(env: Env): Promise<SystemStatus> {
 
   const supportContacts = parseSupportContactsRaw(settings.get("support_contacts_json") ?? "[]");
 
+  const exchangePriceSuperPerUsdt = Number(
+    settings.get("exchange_price_super_per_usdt")
+      ?? settings.get("swap_price_super_per_usdt")
+      ?? DEFAULT_STATUS.exchangePriceSuperPerUsdt
+  );
+
   return {
     maintenanceEnabled,
     maintenanceMessageZh: settings.get("maintenance_message_zh") ?? DEFAULT_STATUS.maintenanceMessageZh,
@@ -205,7 +214,8 @@ async function readStatus(env: Env): Promise<SystemStatus> {
     contractTermYearsDefault: Number(settings.get("contract_term_years_default") ?? DEFAULT_STATUS.contractTermYearsDefault),
     contractTermDaysDefault: Number(settings.get("contract_term_days_default") ?? DEFAULT_STATUS.contractTermDaysDefault),
     rewardRateUsdtPerHour: Number(settings.get("reward_rate_usdt_per_hour") ?? DEFAULT_STATUS.rewardRateUsdtPerHour),
-    swapPriceSuperPerUsdt: Number(settings.get("swap_price_super_per_usdt") ?? DEFAULT_STATUS.swapPriceSuperPerUsdt),
+    exchangePriceSuperPerUsdt,
+    swapPriceSuperPerUsdt: exchangePriceSuperPerUsdt,
     exchangeSuperRecipientAddress: env.OWNER_ADDRESS?.trim() || null,
     payoutWallets,
     contract,
@@ -260,7 +270,6 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
   // Fields that must always carry a non-empty value (numeric-as-string etc.).
   const nonEmptyStringFields: Array<[string, string]> = [
     ["rewardRateUsdtPerHour", "reward_rate_usdt_per_hour"],
-    ["swapPriceSuperPerUsdt", "swap_price_super_per_usdt"],
     ["userAgreementVersion", "user_agreement_version"],
     ["contractVersion", "contract_version"],
   ];
@@ -273,6 +282,19 @@ async function handleSettingsUpdate(request: Request, env: Env): Promise<Respons
       updates.push([targetKey, String(value)]);
     } else {
       return badRequest(`Field ${sourceKey} must be a non-empty string or finite number`);
+    }
+  }
+
+  const exchangePriceValue = body.exchangePriceSuperPerUsdt ?? body.swapPriceSuperPerUsdt;
+  if (exchangePriceValue !== undefined) {
+    if (typeof exchangePriceValue === "string" && exchangePriceValue.trim()) {
+      updates.push(["exchange_price_super_per_usdt", exchangePriceValue.trim()]);
+      updates.push(["swap_price_super_per_usdt", exchangePriceValue.trim()]);
+    } else if (typeof exchangePriceValue === "number" && Number.isFinite(exchangePriceValue)) {
+      updates.push(["exchange_price_super_per_usdt", String(exchangePriceValue)]);
+      updates.push(["swap_price_super_per_usdt", String(exchangePriceValue)]);
+    } else {
+      return badRequest("Field exchangePriceSuperPerUsdt must be a non-empty string or finite number");
     }
   }
 

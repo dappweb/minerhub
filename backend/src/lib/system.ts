@@ -9,6 +9,8 @@ export type RuntimeSystemStatus = {
   contractTermYearsDefault: number;
   contractTermDaysDefault: number;
   rewardRateUsdtPerHour: number;
+  exchangePriceSuperPerUsdt: number;
+  /** @deprecated Use exchangePriceSuperPerUsdt. */
   swapPriceSuperPerUsdt: number;
   payoutWalletsJson: string;
 };
@@ -22,6 +24,7 @@ const DEFAULT_STATUS: RuntimeSystemStatus = {
   contractTermYearsDefault: 3,
   contractTermDaysDefault: 1095,
   rewardRateUsdtPerHour: 0.084,
+  exchangePriceSuperPerUsdt: 0,
   swapPriceSuperPerUsdt: 0,
   payoutWalletsJson: "[]",
 };
@@ -33,6 +36,12 @@ export async function readSystemStatus(env: Env): Promise<RuntimeSystemStatus> {
     settings.set(row.key, row.value);
   }
 
+  const exchangePriceSuperPerUsdt = Number(
+    settings.get("exchange_price_super_per_usdt")
+      ?? settings.get("swap_price_super_per_usdt")
+      ?? DEFAULT_STATUS.exchangePriceSuperPerUsdt
+  );
+
   return {
     maintenanceEnabled: (settings.get("maintenance_enabled") ?? "0") === "1",
     maintenanceMessageZh: settings.get("maintenance_message_zh") ?? DEFAULT_STATUS.maintenanceMessageZh,
@@ -42,7 +51,8 @@ export async function readSystemStatus(env: Env): Promise<RuntimeSystemStatus> {
     contractTermYearsDefault: Number(settings.get("contract_term_years_default") ?? DEFAULT_STATUS.contractTermYearsDefault),
     contractTermDaysDefault: Number(settings.get("contract_term_days_default") ?? DEFAULT_STATUS.contractTermDaysDefault),
     rewardRateUsdtPerHour: Number(settings.get("reward_rate_usdt_per_hour") ?? DEFAULT_STATUS.rewardRateUsdtPerHour),
-    swapPriceSuperPerUsdt: Number(settings.get("swap_price_super_per_usdt") ?? DEFAULT_STATUS.swapPriceSuperPerUsdt),
+    exchangePriceSuperPerUsdt,
+    swapPriceSuperPerUsdt: exchangePriceSuperPerUsdt,
     payoutWalletsJson: settings.get("payout_wallets_json") ?? DEFAULT_STATUS.payoutWalletsJson,
   };
 }

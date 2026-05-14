@@ -7,7 +7,6 @@
   RPC_URL: string;
   SUPER_TOKEN_ADDRESS: string;
   MINING_POOL_ADDRESS: string;
-  SWAP_ROUTER_ADDRESS: string;
   /** Admin wallet address, used to guard upload endpoints */
   OWNER_ADDRESS?: string;
   /** Comma-separated additional admin wallets (same privileges as OWNER_ADDRESS) */

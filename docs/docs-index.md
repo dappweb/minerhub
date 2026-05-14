@@ -1,199 +1,57 @@
-﻿# Coin Planet 璁捐鏂囨。绱㈠紩
+# Coin Planet Docs Index
 
-瀹屾暣鐨?Coin Planet 绯荤粺璁捐鍖呮嫭涓変釜鏍稿績鏂囨。锛?
+This index points to the current project documentation.
 
-## 馃搵 鏍稿績璁捐鏂囨。
+## Core Docs
 
-### 1. [浠ｅ竵妯″瀷涓庢寲鐭胯璁(./token-model.md)
-娑电洊 SUPER 浠ｅ竵鐨勫畬鏁寸粡娴庢ā鍨嬭璁★紝鍖呮嫭锛?
-- **浠ｅ竵鍒嗛厤鏂规**锛氭€讳緵搴?10 浜?MM锛?0% 鎸栫熆濂栧姳 + 50% 鍚勭被鍌ㄥ
-- **App 鎸栫熆缁戝畾**锛氳澶囨敞鍐屻€乀EE 纭欢鍔犲瘑銆侀槻浣滃紛鏈哄埗
-- **鎸栫熆濂栧姳閫昏緫**锛氱嚎鎬ч噴鏀俱€侀毦搴﹁皟鏁淬€佹瘡鏃ュ垎閰嶈鍒?
-- **Swap 鍏戞崲鏈哄埗**锛歁M/USDT AMM 姹犮€佽垂鐢ㄧ粨鏋勩€佹祦鍔ㄦ€х鐞?
-- **鏅鸿兘鍚堢害鏋舵瀯**锛? 涓牳蹇冨悎绾︺€侀儴缃茶剼鏈€佺粡娴庡钩琛℃ā鍨?
+- [Token and Reward Model](./token-model.md)
+- [Implementation Guide](./implementation-guide.md)
+- [System Integration Roadmap](./system-integration-roadmap.md)
+- [Requirements Gap Analysis](./requirements-gap-analysis.zh-en.md)
+- [Admin System Design](./admin-system-design.md)
+- [Development Timeline and Costs](./development-timeline-and-costs.md)
+- [Investment Quick Reference](./investment-quickref.md)
+- [SUPER Token Mechanism Analysis](./SUPER-token-mechanism-analysis.md)
 
-**閫傜敤浜虹兢**锛氫骇鍝佺粡鐞嗐€佽繍钀ャ€佸悎绾﹀紑鍙戣€?
+## Current Architecture Snapshot
 
----
+- Web app: `src/`
+- Mobile app: `app-client/`
+- Backend Worker: `backend/`
+- Contracts: `contracts/`
+- Database schema: `backend/db/schema.sql`
+- Exchange naming patch: `backend/db/patch-exchange-naming.sql`
 
-### 2. [鍚庡彴绠＄悊绯荤粺璁捐](./admin-system-design.md)
-璇︾粏鐨勮繍钀ュ悗鍙扮郴缁熸灦鏋勶紝鍖呮嫭锛?
-- **鐢ㄦ埛绠＄悊妯″潡**锛氱敤鎴锋悳绱€佺姸鎬佺鐞嗐€佽鎯呮煡鐪嬨€佹壒閲忔搷浣?
-- **鐭挎満鐩戞帶妯″潡**锛氳澶囧疄鏃剁洃鎺с€佺畻鍔涚粺璁°€佸仴搴风洃鎺с€佸紓甯搁璀?
-- **鏀剁泭绠＄悊妯″潡**锛氭敹鐩婄粺璁°€佹彁鐜板鏍搞€侀摼涓婃煡璇€佽储鍔℃姤琛?
-- **椋庢帶鍙嶄綔寮婃ā鍧?*锛氶闄╂娴嬭鍒欍€佸缁村害椋庨櫓璇勪及銆佸缃祦绋?
-- **绯荤粺閰嶇疆绠＄悊**锛氬彲璋冨弬鏁般€佸绛炬壒鍑嗐€侀厤缃巻鍙层€佸璁℃棩蹇?
-- **鍚庣 API 鍒楄〃**锛氭墍鏈?REST 鎺ュ彛鐨勮缁嗗畾涔夛紙璇锋眰/鍝嶅簲鏍煎紡锛?
-- **鎶€鏈爤涓庨儴缃?*锛歂ode.js + Express + MongoDB + Redis + K8s
+## Current Contract Set
 
-**閫傜敤浜虹兢**锛氬悗绔紑鍙戙€佽繍缁淬€佽储鍔￠鎺?
+- `SUPER`
+- `USDT_Mock` for tests/demo
+- `MiningPool`
 
----
+Exchange settlement is implemented in backend operations tables and APIs rather than a dedicated on-chain exchange contract.
 
-### 3. [绯荤粺闆嗘垚涓庡疄鐜拌矾绾垮浘](./system-integration-roadmap.md)
-浠庤璁″埌涓婄嚎鐨勫畬鏁村疄鐜版寚鍗楋紝鍖呮嫭锛?
-- **鍏ㄧ郴缁熸灦鏋勬€昏**锛氬畼缃戙€丄pp銆佸悗鍙般€佸尯鍧楅摼鐨勫畬鏁翠氦浜掑浘
-- **鐢ㄦ埛鏃呯▼宸ヤ綔娴?*锛氫粠涓嬭浇 App 鍒版彁鐜板彉鐜扮殑瀹屾暣 12 姝ユ祦绋?
-- **鍚勬ā鍧楅棿鏁版嵁娴?*锛氭寲鐭垮鍔辨祦鍔ㄣ€丼wap 娴佸姩鎬у垏鎹€佸悗鍙板鎵规祦绋?
-- **鍚堢害閮ㄧ讲娓呭崟**锛氶儴缃查『搴忋€佸垵濮嬪寲姝ラ銆佸悎绾︾粨鏋勫缓璁?
-- **鍓嶇搴旂敤闆嗘垚娓呭崟**锛氬畼缃戜笌 App 闇€瑕佺殑寮€鍙戞竻鍗?
-- **鍚庣绯荤粺瀹炵幇娓呭崟**锛欰PI 妯″潡銆乁I 椤甸潰娓呭崟
-- **娴嬭瘯涓庨獙璇佹竻鍗?*锛氬崟鍏冩祴璇曘€侀泦鎴愭祴璇曘€佸畨鍏ㄥ璁°€佷笂绾挎鏌?
-- **鍙戝竷鏃堕棿绾?*锛歋epolia 娴嬭瘯 + Base 涓荤綉鐏板害 + 鍏ㄩ噺鍙戣鐨?3 闃舵璁″垝
+## Useful Commands
 
-**閫傜敤浜虹兢**锛氶」鐩粡鐞嗐€佹妧鏈礋璐ｄ汉銆佸紑鍙戝洟闃熷叏鍛?
-
----
-
-### 4. [寮€鍙戝懆鏈熶笌棰勬湡璐圭敤](./development-timeline-and-costs.md)
-椤圭洰鎴愭湰璇勪及涓庤瀺璧勬寚鍗楋紝鍖呮嫭锛?
-- **寮€鍙戞椂闂寸嚎**锛?鏈?7鏈堝畬鏁磋鍒掋€佸悇闃舵浜や粯鐗┿€佸叧閿噷绋嬬
-- **浜哄姏鎴愭湰**锛?2浜烘牳蹇冨洟闃熼厤缃笌鏈堥绠椼€佸鍖呮湇鍔℃竻鍗?
-- **鍩虹璁炬柦鎴愭湰**锛氫簯鏈嶅姟銆佹暟鎹簱銆佺洃鎺у伐鍏枫€佽妭鐐规湇鍔?
-- **铻嶈祫寤鸿**锛氭帹鑽愯瀺璧勮妯★紙$600K-$800K锛夈€佽祫閲戠敤閫斻€佽瀺璧勬笭閬?
-- **ROI 棰勬祴**锛歒ear 1-3 鐨勬敹鍏ユā鍨嬩笌鍥炴姤棰勬湡
-- **椋庨櫓璇勪及**锛氫富瑕侀闄╄瘑鍒笌搴斿鎺柦銆佹垚鏈紭鍖栫瓥鐣?
-- **鎴愭湰鎬荤粨**锛氬畬鏁撮绠楄〃銆佹姇璧勫洖鎶ュ懆鏈熷垎鏋?
-
-**閫傜敤浜虹兢**锛氭姇璧勪汉銆佽储鍔＄鐞嗐€佸叕鍙稿喅绛栧眰銆佽瀺璧勪富瀵?
-
----
-
-### 5. [鎶曡祫蹇€熷弬鑰冭〃](./investment-quickref.md)
-铻嶈祫涓庢垚鏈喅绛栭€熸煡琛紝鍖呮嫭锛?
-- **鏍稿績鎸囨爣涓€瑙?*锛氭€绘姇鍏?$596K銆佽瀺璧勫缓璁?$600K-$800K銆?鏈?7鏈堝懆鏈?
-- **鎴愭湰鏋勬垚璇︽儏**锛氫汉鍔?$375K銆佸鍖?$109K銆佸熀纭€璁炬柦 $7.6K銆佽繍钀?$40.5K銆佸簲鎬?$54K
-- **鎸夋湀搴︽姇鍏ヨ〃**锛?鏈?7鏈堝悇鏈堟垚鏈垎甯冦€佺疮璁℃姇鍏ヨ窡韪?
-- **闃舵浜や粯鐗╀笌鎴愭湰**锛氫笁闃舵锛圫epolia/鐏板害/鍏ㄩ噺锛夌殑鍏抽敭浜や粯鍜屾垚鏈┍鍔?
-- **ROI 涓庤瀺璧勬ā鍨?*锛歒ear 1-3 鏀跺叆棰勬祴銆佽瀺璧勫缓璁柟妗堛€佽瀺璧勬笭閬撳姣?
-- **鎴愭湰椋庨櫓闃叉帶**锛氳秴鏀闄╄瘑鍒€侀鐣欒祫閲戝缓璁€佸喅绛栨鏌ユ竻鍗?
-
-**閫傜敤浜虹兢**锛氭姇璧勪汉銆佽瀺璧勫洟闃熴€丆FO銆侀」鐩喅绛栧眰  
-**鐢ㄩ€?*锛氬揩閫熷喅绛栥€佽瀺璧?Pitch銆侀绠楀鎵广€佽繘搴︾洃鎺?
-
----
-
-## 馃梻锔?鏂囨。蹇€熷鑸?
-
-### 鎸夎亴鑳芥煡闃?
-
-**浜у搧 & 杩愯惀**
-- 浠ｅ竵妯″瀷锛歚docs/token-model.md` 绗?1-8 绔?
-- 鎸栫熆娴佺▼锛歚docs/system-integration-roadmap.md` 绗?2 绔?
-- 鐢ㄦ埛绠＄悊锛歚docs/admin-system-design.md` 绗?2.1 绔?
-
-**鏅鸿兘鍚堢害宸ョ▼甯?*
-- 浠ｅ竵妯″瀷锛歚docs/token-model.md` 绗?6-7 绔?
-- 閮ㄧ讲娓呭崟锛歚docs/system-integration-roadmap.md` 绗?5 绔?
-- 娴嬭瘯璁″垝锛歚docs/system-integration-roadmap.md` 绗?8 绔?
-
-**Mobile 寮€鍙?*
-- App 缁戝畾娴佺▼锛歚docs/token-model.md` 绗?2 绔?
-- 鐢ㄦ埛鏃呯▼锛歚docs/system-integration-roadmap.md` 绗?2 绔?
-- 闆嗘垚娓呭崟锛歚docs/system-integration-roadmap.md` 绗?7.2 绔?
-
-**鍚庣 & 鍩虹璁炬柦**
-- API 璁捐锛歚docs/admin-system-design.md` 绗?2 绔?
-- 绯荤粺鏋舵瀯锛歚docs/admin-system-design.md` 绗?3 绔?
-- 瀹炵幇娓呭崟锛歚docs/system-integration-roadmap.md` 绗?7.1 绔?
-
-**DBA & 椋庢帶**
-- 鏁版嵁缁撴瀯锛歚docs/admin-system-design.md` 绗?2.1-2.5 绔?
-- 椋庢帶瑙勫垯锛歚docs/admin-system-design.md` 绗?2.4 绔?
-- 瀹¤鏃ュ織锛歚docs/admin-system-design.md` 绗?2.7 绔?
-
----
-
-## 馃搳 鍏抽敭鏁版嵁閫熻
-
-### 浠ｅ竵缁忔祹
-| 鎸囨爣 | 鍊?|
-|------|-----|
-| 鎬讳緵搴旈噺 | 10 浜?SUPER |
-| 鎸栫熆濂栧姳姹?| 5 浜?SUPER (50%) |
-| 4 骞存湀浜ч噺 | 1041.67 涓?SUPER |
-| 鍒濆 Swap 姹?| 50M SUPER + 50k USDT |
-| 鐩爣鍒濆浠锋牸 | 1 SUPER = 0.001 USDT |
-| LP 鎵嬬画璐瑰垎閰?| 70% 鈫?LP, 20% 鈫?骞冲彴, 10% 鈫?鐢熸€?|
-
-### 鎸栫熆鍙傛暟
-| 鍙傛暟 | 鍊?|
-|------|-----|
-| 鏈€灏忕畻鍔?| 0.1 MH/s |
-| 鏈€澶х畻鍔?| 10 MH/s |
-| 闅惧害璋冩暣鍛ㄦ湡 | 7 澶?|
-| 鎻愬彇鍐峰嵈鏃堕棿 | 1 澶?|
-| 棣栨湀閿佷粨鏈?| 7 澶?|
-| 鏈堟彁鐜伴檺棰?| 100k SUPER |
-
-### 鍚庡彴绠＄悊
-| 鎸囨爣 | 鍊?|
-|------|-----|
-| 澶氱閰嶇疆 | 3/3 |
-| API 鍝嶅簲鐩爣 | < 200ms |
-| 绯荤粺鍙敤鎬?| 99.9% |
-| 閿欒鐜?SLA | < 0.1% |
-
----
-
-## 馃敆 鐩稿叧鏂囦欢浣嶇疆
-
-```
-minerhub/
-鈹溾攢鈹€ docs/                          # 鏂囨。鐩綍
-鈹?  鈹溾攢鈹€ token-model.md            # 浠ｅ竵涓庢寲鐭挎ā鍨?
-鈹?  鈹溾攢鈹€ admin-system-design.md    # 鍚庡彴绠＄悊绯荤粺
-鈹?  鈹溾攢鈹€ system-integration-roadmap.md  # 闆嗘垚璺嚎鍥?
-鈹?  鈹斺攢鈹€ docs-index.md             # 鏈枃浠?
-鈹?
-鈹溾攢鈹€ src/                          # Web 鍓嶇浠ｇ爜
-鈹?  鈹溾攢鈹€ components/
-鈹?  鈹溾攢鈹€ lib/blockchain.ts         # 閾句笂浜や簰锛圓pp + 瀹樼綉锛?
-鈹?  鈹斺攢鈹€ App.tsx                   # 涓夎鍥惧叆鍙?
-鈹?
-鈹溾攢鈹€ app-client/                   # Mobile App 浠ｇ爜
-鈹?  鈹溾攢鈹€ src/App.tsx               # App 棣栭〉
-鈹?  鈹溾攢鈹€ app.json                  # Expo 閰嶇疆
-鈹?  鈹斺攢鈹€ package.json              # 渚濊禆
-鈹?
-鈹斺攢鈹€ README.md                      # 椤圭洰涓绘枃妗?
+```bash
+npm run test:deprecated-swaprouter
+npm run lint
+npm run build
+npm --prefix backend run typecheck
+npm --prefix backend test -- --run
+npm --prefix contracts test
 ```
 
----
+Mobile type-check:
 
-## 馃殌 涓嬩竴姝ヨ鍔?
+```bash
+cd app-client
+npx tsc --noEmit
+```
 
-鏍规嵁浣犵殑瑙掕壊閫夋嫨瀵瑰簲鐨勮鍔ㄩ」锛?
+## Release Reading Order
 
-### 濡傛灉浣犳槸 PM/杩愯惀
-- [ ] 璇诲畬 `token-model.md` 绗?1-3 绔狅紝鐞嗚В浠ｅ竵缁忔祹
-- [ ] 璇诲畬 `admin-system-design.md` 绗?2 绔狅紝鐔熸倝鍚庡彴鍔熻兘
-- [ ] 涓庡洟闃熷榻愪笂绾挎椂闂寸嚎 (`system-integration-roadmap.md` 绗?10 绔?
-
-### 濡傛灉浣犳槸鍚堢害宸ョ▼甯?
-- [ ] 瑙勫垝鍚堢害妯″潡缁撴瀯 (`token-model.md` 绗?6 绔?+ roadmap 绗?5 绔?
-- [ ] 鍑嗗 Hardhat 宸ョ▼涓庢祴璇曟鏋?
-- [ ] 棰勭害 CertiK 瀹¤鏃堕棿
-
-### 濡傛灉浣犳槸鍚庣/鍏ㄦ爤
-- [ ] 鍚姩鍚庡彴 API 寮€鍙?(`admin-system-design.md` 绗?2 绔?
-- [ ] MongoDB/Redis 鍓嶇疆璁捐
-- [ ] 瀹炵幇娓呭崟瀵归綈 (`system-integration-roadmap.md` 绗?7.1 绔?
-
-### 濡傛灉浣犳槸绉诲姩绔?
-- [ ] 灏?`app-client/src/App.tsx` 鍗囩骇鍒扮湡瀹為摼闆嗘垚
-- [ ] 闆嗘垚 WalletConnect + Viem
-- [ ] 瀹炵幇娓呭崟瀵归綈 (`system-integration-roadmap.md` 绗?7.2 绔?
-
----
-
-## 馃摓 鏂囨。缁存姢
-
-鏂囨。鏈€鍚庢洿鏂颁簬锛?*2026-04-04**
-
-濡傚彂鐜版枃妗ｄ笌瀹炵幇涓嶇鎴栭渶瑕佽ˉ鍏咃紝璇峰湪 PR 涓爣璁扮浉鍏虫枃妗ｆ枃浠跺苟闄勪笂璇存槑銆?
-
----
-
-**绁濅綘椤哄埄寮€鍙戯紒馃帀**
-
+1. Read [Implementation Guide](./implementation-guide.md).
+2. Confirm [Token and Reward Model](./token-model.md).
+3. Follow [System Integration Roadmap](./system-integration-roadmap.md).
+4. Review [Requirements Gap Analysis](./requirements-gap-analysis.zh-en.md).
+5. Run the verification commands above.

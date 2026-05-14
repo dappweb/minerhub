@@ -119,7 +119,7 @@ async function accrueHourlyReward(env: Env, userId: string, deviceId: string): P
   if (!Number.isFinite(rewardUsdt) || rewardUsdt <= 0) return;
 
   const systemStatus = await readSystemStatus(env);
-  const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+  const superPerUsdt = Math.max(0, Number(systemStatus.exchangePriceSuperPerUsdt ?? systemStatus.swapPriceSuperPerUsdt ?? "0"));
   const rewardSuper = rewardUsdt * superPerUsdt;
 
   const nowIsoValue = new Date(now).toISOString();
@@ -401,7 +401,7 @@ async function accrueHeartbeatReward(
   }
 
   const systemStatus = await readSystemStatus(env);
-  const superPerUsdt = Math.max(0, Number(systemStatus.swapPriceSuperPerUsdt ?? "0"));
+  const superPerUsdt = Math.max(0, Number(systemStatus.exchangePriceSuperPerUsdt ?? systemStatus.swapPriceSuperPerUsdt ?? "0"));
   const rewardSuper = rewardUsdt * superPerUsdt;
   const accruedSeconds = Math.max(0, Math.floor(accruedMs / 1000));
 

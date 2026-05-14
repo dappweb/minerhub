@@ -168,7 +168,7 @@ export default function Hero() {
           {[
             { icon: Smartphone, title: '上手明确', desc: '首页直接告诉用户下一步该做什么' },
             { icon: Zap, title: '收益闭环', desc: '激活设备后即可持续累计收益' },
-            { icon: Shield, title: '链上透明', desc: '兑换与收益进度都可持续追踪' },
+            { icon: Shield, title: '流程透明', desc: '兑换与收益进度都可持续追踪' },
             { icon: Coins, title: '移动优先', desc: '团队、收益、订单都在 App 内查看' },
           ].map((item, i) => (
             <div key={i} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5 backdrop-blur-sm">

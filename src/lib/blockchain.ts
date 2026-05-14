@@ -32,19 +32,6 @@ export type SuperTokenStats = {
   totalSupply: bigint;
   totalMinted: bigint;
   remainingSupply: bigint;
-  routerBalance: bigint;
-};
-
-export type SwapPoolStats = {
-  reserveSuper: bigint;
-  reserveUsdt: bigint;
-  priceSuperPerUsdt: bigint;
-  totalLPShares: bigint;
-  accumulatedPlatformFee: bigint;
-  accumulatedEcosystemFee: bigint;
-  lpFeeShare: bigint;
-  platformFeeShare: bigint;
-  ecosystemFeeShare: bigint;
 };
 
 export type AdminSyncResult = {
@@ -203,127 +190,6 @@ const minerAbi = [
     stateMutability: 'view',
     inputs: [{ name: '', type: 'address' }],
     outputs: [{ name: '', type: 'bool' }],
-  },
-] as const;
-
-const swapAbi = [
-  {
-    type: 'function',
-    name: 'superToken',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'usdtToken',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'reserveSuper',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'reserveUSDT',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'getPrice',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'totalLPShares',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'accumulatedPlatformFee',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'accumulatedEcosystemFee',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'lpFeeShare',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'platformFeeShare',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'ecosystemFeeShare',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'initializeLiquidity',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: '_superAmount', type: 'uint256' },
-      { name: '_usdtAmount', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'addLiquidity',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: '_superAmount', type: 'uint256' },
-      { name: '_usdtAmount', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'swapSuperToUsdt',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'amountIn', type: 'uint256' }],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'collectPlatformFee',
-    stateMutability: 'nonpayable',
-    inputs: [],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'collectEcosystemFee',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: '_recipient', type: 'address' }],
-    outputs: [],
   },
 ] as const;
 
@@ -502,9 +368,6 @@ const chain = defineChain({
 const minerContractAddress =
   (import.meta.env.VITE_MINING_POOL_ADDRESS as Address | undefined) ??
   (import.meta.env.VITE_MINER_CONTRACT_ADDRESS as Address | undefined);
-const swapContractAddress =
-  (import.meta.env.VITE_SWAP_ROUTER_ADDRESS as Address | undefined) ??
-  (import.meta.env.VITE_SWAP_CONTRACT_ADDRESS as Address | undefined);
 const superTokenAddress =
   (import.meta.env.VITE_SUPER_ADDRESS as Address | undefined);
 const usdtTokenAddress =
@@ -563,10 +426,6 @@ export function getMiningPoolAddress(): Address | undefined {
   return minerContractAddress;
 }
 
-export function getSwapRouterAddress(): Address | undefined {
-  return swapContractAddress;
-}
-
 export function getSuperTokenAddress(): Address | undefined {
   return superTokenAddress;
 }
@@ -574,13 +433,6 @@ export function getSuperTokenAddress(): Address | undefined {
 async function waitForTx(hash: Hex) {
   const publicClient = getPublicClient();
   await publicClient.waitForTransactionReceipt({ hash });
-}
-
-function requireSwapRouterAddress(): Address {
-  if (!swapContractAddress) {
-    throw new Error('缺少 VITE_SWAP_ROUTER_ADDRESS（或 VITE_SWAP_CONTRACT_ADDRESS）配置。');
-  }
-  return swapContractAddress;
 }
 
 function requireMiningPoolAddress(): Address {
@@ -601,13 +453,7 @@ async function requireUsdtAddress(): Promise<Address> {
   if (usdtTokenAddress) {
     return usdtTokenAddress;
   }
-  const router = requireSwapRouterAddress();
-  const publicClient = getPublicClient();
-  return publicClient.readContract({
-    address: router,
-    abi: swapAbi,
-    functionName: 'usdtToken',
-  }) as Promise<Address>;
+  throw new Error('Missing VITE_USDT_ADDRESS configuration.');
 }
 
 export async function getMiningPoolOwnerOnChain(): Promise<Address> {
@@ -651,7 +497,7 @@ async function syncAdminAcrossContracts(target: Address, mode: 'add' | 'remove')
   const account = await ensureConnectedAddress();
   const publicClient = getPublicClient();
   const walletClient = getWalletClient();
-  const targets = [requireMiningPoolAddress(), requireSuperAddress(), requireSwapRouterAddress()];
+  const targets = [requireMiningPoolAddress(), requireSuperAddress()];
   const hashes: Hex[] = [];
 
   for (const contractAddress of targets) {
@@ -930,93 +776,20 @@ export async function claimRewardsOnChain() {
   return hash;
 }
 
-export async function swapSuperToUsdtOnChain(superAmount: string) {
-  const router = requireSwapRouterAddress();
-
-  const parsedAmount = Number(superAmount);
-  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-    throw new Error('请输入有效的 SUPER 数量。');
-  }
-
-  const account = await ensureConnectedAddress();
-  const walletClient = getWalletClient();
-  const publicClient = getPublicClient();
-
-  const hash = await walletClient.writeContract({
-    account,
-    address: router,
-    abi: swapAbi,
-    functionName: 'swapSuperToUsdt',
-    args: [parseUnits(superAmount, 18)],
-  });
-
-  await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
-  return hash;
-}
-
-export async function getSwapPoolStatsOnChain(): Promise<SwapPoolStats> {
-  const router = requireSwapRouterAddress();
-  const publicClient = getPublicClient();
-
-  const [
-    reserveSuper,
-    reserveUsdt,
-    priceSuperPerUsdt,
-    totalLPShares,
-    accumulatedPlatformFee,
-    accumulatedEcosystemFee,
-    lpFeeShare,
-    platformFeeShare,
-    ecosystemFeeShare,
-  ] = await Promise.all([
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'reserveSuper' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'reserveUSDT' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'getPrice' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'totalLPShares' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'accumulatedPlatformFee' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'accumulatedEcosystemFee' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'lpFeeShare' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'platformFeeShare' }),
-    publicClient.readContract({ address: router, abi: swapAbi, functionName: 'ecosystemFeeShare' }),
-  ]);
-
-  return {
-    reserveSuper,
-    reserveUsdt,
-    priceSuperPerUsdt,
-    totalLPShares,
-    accumulatedPlatformFee,
-    accumulatedEcosystemFee,
-    lpFeeShare,
-    platformFeeShare,
-    ecosystemFeeShare,
-  };
-}
-
 export async function getSuperTokenStatsOnChain(): Promise<SuperTokenStats> {
   const superToken = requireSuperAddress();
   const publicClient = getPublicClient();
 
-  const router = swapContractAddress;
-  const [totalSupply, totalMinted, remainingSupply, routerBalance] = await Promise.all([
+  const [totalSupply, totalMinted, remainingSupply] = await Promise.all([
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'totalSupply' }),
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'totalMinted' }),
     publicClient.readContract({ address: superToken, abi: superAbi, functionName: 'remainingSupply' }),
-    router
-      ? publicClient.readContract({
-          address: superToken,
-          abi: superAbi,
-          functionName: 'balanceOf',
-          args: [router],
-        })
-      : Promise.resolve(0n),
   ]);
 
   return {
     totalSupply,
     totalMinted,
     remainingSupply,
-    routerBalance,
   };
 }
 
@@ -1037,126 +810,6 @@ export async function mintSuperOnChain(to: Address, superAmount: string) {
     abi: superAbi,
     functionName: 'mint',
     args: [to, parseUnits(superAmount, 18)],
-  });
-
-  await waitForTx(hash as Hex);
-  return hash;
-}
-
-async function approveForRouter(superAmount: bigint, usdtAmount: bigint) {
-  const router = requireSwapRouterAddress();
-  const superToken = requireSuperAddress();
-
-  const publicClient = getPublicClient();
-  const walletClient = getWalletClient();
-  const account = await ensureConnectedAddress();
-
-  const superApproveHash = await walletClient.writeContract({
-    account,
-    address: superToken,
-    abi: superAbi,
-    functionName: 'approve',
-    args: [router, superAmount],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: superApproveHash as Hex });
-
-  const usdtAddress = await publicClient.readContract({
-    address: router,
-    abi: swapAbi,
-    functionName: 'usdtToken',
-  });
-
-  const usdtApproveHash = await walletClient.writeContract({
-    account,
-    address: usdtAddress,
-    abi: erc20Abi,
-    functionName: 'approve',
-    args: [router, usdtAmount],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: usdtApproveHash as Hex });
-}
-
-export async function initializeSwapLiquidityOnChain(superAmount: string, usdtAmount: string) {
-  const router = requireSwapRouterAddress();
-  const superParsed = Number(superAmount);
-  const usdtParsed = Number(usdtAmount);
-  if (!Number.isFinite(superParsed) || superParsed <= 0 || !Number.isFinite(usdtParsed) || usdtParsed <= 0) {
-    throw new Error('请输入有效的 SUPER / USDT 数量。');
-  }
-
-  const superUnits = parseUnits(superAmount, 18);
-  const usdtUnits = parseUnits(usdtAmount, 18);
-
-  await approveForRouter(superUnits, usdtUnits);
-
-  const account = await ensureConnectedAddress();
-  const walletClient = getWalletClient();
-  const hash = await walletClient.writeContract({
-    account,
-    address: router,
-    abi: swapAbi,
-    functionName: 'initializeLiquidity',
-    args: [superUnits, usdtUnits],
-  });
-
-  await waitForTx(hash as Hex);
-  return hash;
-}
-
-export async function addSwapLiquidityOnChain(superAmount: string, usdtAmount: string) {
-  const router = requireSwapRouterAddress();
-  const superParsed = Number(superAmount);
-  const usdtParsed = Number(usdtAmount);
-  if (!Number.isFinite(superParsed) || superParsed <= 0 || !Number.isFinite(usdtParsed) || usdtParsed <= 0) {
-    throw new Error('请输入有效的 SUPER / USDT 数量。');
-  }
-
-  const superUnits = parseUnits(superAmount, 18);
-  const usdtUnits = parseUnits(usdtAmount, 18);
-
-  await approveForRouter(superUnits, usdtUnits);
-
-  const account = await ensureConnectedAddress();
-  const walletClient = getWalletClient();
-  const hash = await walletClient.writeContract({
-    account,
-    address: router,
-    abi: swapAbi,
-    functionName: 'addLiquidity',
-    args: [superUnits, usdtUnits],
-  });
-
-  await waitForTx(hash as Hex);
-  return hash;
-}
-
-export async function collectPlatformFeeOnChain() {
-  const router = requireSwapRouterAddress();
-  const account = await ensureConnectedAddress();
-  const walletClient = getWalletClient();
-
-  const hash = await walletClient.writeContract({
-    account,
-    address: router,
-    abi: swapAbi,
-    functionName: 'collectPlatformFee',
-  });
-
-  await waitForTx(hash as Hex);
-  return hash;
-}
-
-export async function collectEcosystemFeeOnChain(recipient: Address) {
-  const router = requireSwapRouterAddress();
-  const account = await ensureConnectedAddress();
-  const walletClient = getWalletClient();
-
-  const hash = await walletClient.writeContract({
-    account,
-    address: router,
-    abi: swapAbi,
-    functionName: 'collectEcosystemFee',
-    args: [recipient],
   });
 
   await waitForTx(hash as Hex);

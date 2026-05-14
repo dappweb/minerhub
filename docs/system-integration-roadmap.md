@@ -1,618 +1,153 @@
-﻿# Coin Planet 绯荤粺闆嗘垚涓庡疄鐜拌矾绾垮浘
+# Coin Planet System Integration Roadmap
 
-## 1. 鍏ㄧ郴缁熸灦鏋勬€昏
+This roadmap reflects the current repository state.
 
-```
-鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?                Coin Planet 瀹屾暣鐢熸€佺郴缁?                            鈹?
-鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-鈹?                                                                 鈹?
-鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?
-鈹? 鈹?             瀹樼綉 + 鍚庡彴绠＄悊绯荤粺锛圵eb锛?                     鈹?鈹?
-鈹? 鈹? - Cloudflare Pages 閮ㄧ讲                                   鈹?鈹?
-鈹? 鈹? - 閽卞寘鐧诲綍銆佸悗鍙拌繍缁淬€佹暟鎹睍绀?                            鈹?鈹?
-鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?
-鈹?             鈹?                         鈹?                    鈹?
-鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈻尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?    鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈻尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?         鈹?
-鈹?   鈹?  绉诲姩绔?App      鈹?    鈹? 鍚庡彴 API        鈹?         鈹?
-鈹?   鈹?(Android + iOS)   鈹?    鈹? (Node.js)       鈹?         鈹?
-鈹?   鈹? React Native    鈹?    鈹? MongoDB + Redis 鈹?         鈹?
-鈹?   鈹? Expo 妗嗘灦       鈹?    鈹? 椋庢帶 + 瀹¤      鈹?         鈹?
-鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?    鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?         鈹?
-鈹?            鈹?                        鈹?                   鈹?
-鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈻尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈻尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?        鈹?
-鈹?   鈹?      鍖哄潡閾炬櫤鑳藉悎绾︾綉缁?                     鈹?        鈹?
-鈹?   鈹?                                            鈹?        鈹?
-鈹?   鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   SUPER Token锛圗RC20锛?               鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 閾搁€?閿€姣?| 瀹℃壒              鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 浠ｅ竵娴侀€氭帶鍒?                 鈹?  鈹?        鈹?
-鈹?   鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹?                                            鈹?        鈹?
-鈹?   鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   MiningPool锛堟寲鐭垮悎绾︼級           鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 鐭垮伐娉ㄥ唽 | 楠岃瘉               鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 濂栧姳璁＄畻 | 鍒嗛厤               鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 鎻愬彇鍐峰嵈 | 瀹夊叏鎬?            鈹?  鈹?        鈹?
-鈹?   鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹?                                            鈹?        鈹?
-鈹?   鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   SwapRouter锛堟祦鍔ㄦ€у垏鎹級         鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - SUPER 鈫?USDT 鍏戞崲                鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 娴佸姩鎬х鐞?                   鈹?  鈹?        鈹?
-鈹?   鈹? 鈹?   - 浠锋牸棰勮█鏈?                   鈹?  鈹?        鈹?
-鈹?   鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹?        鈹?
-鈹?   鈹?                                            鈹?        鈹?
-鈹?   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?        鈹?
-鈹?                                                             鈹?
-鈹? 閾撅細Base Mainnet (鐢熶骇) + BSC Mainnet                         鈹?
-鈹? 璺ㄩ摼妗ユ帴锛堟湭鏉ワ級锛欱ase 鈫?Ethereum 鈫?Polygon              鈹?
-鈹?                                                             鈹?
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-```
+## Current Direction
 
----
+Coin Planet now uses a split model:
 
-## 2. 鐢ㄦ埛鏃呯▼宸ヤ綔娴?
+- On-chain: SUPER token, USDT token address, and MiningPool.
+- Backend: customer profiles, rewards, exchange orders, payout batches, agreements, announcements, audit logs, and owner operations.
+- Frontend/mobile: wallet flows, mining actions, account state, reward withdrawal, and exchange request UI.
 
-### 2.1 鏂扮敤鎴蜂笂杞﹁矾寰?
+Exchange settlement is handled by the backend operations layer. There is no dedicated on-chain exchange router in the active architecture.
 
-```
-1锔忊儯 璁块棶瀹樼綉 (Website)
-   鈫?鐐瑰嚮"涓嬭浇鍙岀瀹㈡埛绔?
-   
-2锔忊儯 涓嬭浇 App (Android / iOS)
-   鈫?棣栨鎵撳紑
-   
-3锔忊儯 App 鐢熸垚鏈湴閽卞寘
-   鈫?TEE 纭欢鍔犲瘑锛岀閽ヤ笉绂昏澶?
-   
-4锔忊儯 杩炴帴閽卞寘鍒伴摼
-   鈫?璋冪敤 MinerRegistry.registerMiner()
-   
-5锔忊儯 閫夋嫨鎸栫熆绛栫暐
-   鈫?璁剧疆绠楀姏銆佽€楃數棰勬湡銆佹椂闂存
-   
-6锔忊儯 鍚庡彴寮€濮嬪垎閰嶅鍔?
-   鈫?MiningPool 瀹炴椂璁＄畻
-   
-7锔忊儯 鐢ㄦ埛瀹炴椂鏌ョ湅鏀剁泭
-   鈫?UI 鏄剧ず pending_reward
-   
-8锔忊儯 鍙戣捣鎻愬彇
-   鈫?MiningPool.claimReward()
-   
-9锔忊儯 閫夋嫨鍏戞崲鏂规
-   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
-   鈹溾攢 淇濇寔 SUPER 浠ｅ竵           鈹溾攢 鍚庣画浜ゆ槗鎵€浠锋定
-   鈹溾攢 鍏戞崲涓?USDT (0.5% 璐?  鈹溾攢 椹笂鍙樼幇
-   鈹斺攢 鎻愮幇鍒伴挶鍖?            鈹溾攢 鐢ㄤ簬鏀粯娑堣垂
-     鈹斺攢 鍒拌处鐢ㄦ埛閽卞寘
-     
-馃敓 鍚庡彴瀹℃壒涓庨鎺ф鏌?
-   鈫?鑷姩妫€娴嬩綔寮?| 楂橀鎻愮幇闇€浜哄伐瀹℃牳
-   
-1锔忊儯1锔忊儯 閾句笂杞处瀹屾垚
-   鈫?Swap Router 鎵ц MM鈫扷SDT + 鎻愮幇
-   
-1锔忊儯2锔忊儯 閽卞寘鏀跺埌璧勯噾
-   鉁?瀹屾垚
-```
+## End-to-End User Flow
 
----
+1. User opens the mobile app.
+2. App creates or loads the wallet identity.
+3. App syncs the wallet/user record with the backend.
+4. User accepts required agreements/contracts.
+5. Operator activates the user profile and contract/month-card term.
+6. User registers a miner on-chain through `MiningPool`.
+7. Device heartbeats update backend online status.
+8. Backend accrues hourly rewards into `reward_ledger`.
+9. User claims on-chain mining rewards where applicable.
+10. User submits a reward withdrawal or exchange request.
+11. Backend stores an `exchange_orders` record.
+12. Operator approves/completes the order and records payout transaction hashes.
 
-## 3. 鍚勬ā鍧楅棿鏁版嵁娴?
+## Admin / Owner Flow
 
-### 3.1 鎸栫熆濂栧姳娴佸姩
+1. Owner signs in with wallet-based auth.
+2. Admin dashboard reads customers, devices, rewards, exchange orders, payout batches, and audit logs.
+3. Owner can configure system settings:
+   - maintenance mode
+   - agreement/contract content
+   - monthly-card and contract terms
+   - reward rates
+   - exchange price
+   - support contacts
+4. Owner can run token operations:
+   - SUPER mint/transfer/burn workflows where enabled
+   - distribution records
+   - token lock/release workflows
+5. Operators process exchange orders and payout batches.
 
-```
-App 涓婃姤绠楀姏
-   鈫?deviceId + hashrate + timestamp (TEE 绛惧悕)
-   鈫?
-鍚庡彴鐩戝惉 (MiningPool.submitProof())
-   鈫?楠岃瘉绛惧悕 + 闃蹭綔寮婃鏌?
-   鈫?
-MiningPool 鍚堢害
-   鈹溾攢 绱姞 totalMined
-   鈹溾攢 璁板綍 lastClaimTime
-   鈹斺攢 emit MiningRewardAccrued
-   鈫?
-App 鍓嶇璁㈤槄浜嬩欢
-   鈹溾攢 瀹炴椂鏄剧ず getPendingReward()
-   鈹斺攢 鍥捐〃灞曠ず鏃ョ疮璁¤秼鍔?
-   
-鐢ㄦ埛鍙戣捣 claimReward()
-   鈫?MiningPool.claimReward(amount)
-   鈫?楠岃瘉鍐峰嵈 + 閲戦鏈夋晥鎬?
-   鈫?
-SUPER Token 杞处
-   鈹溾攢 95% 鈫?鐢ㄦ埛閽卞寘
-   鈹溾攢 5% 鈫?骞冲彴鍌ㄥ
-   鈹斺攢 emit Reward Claimed
-   
-鍚庡彴璁板綍
-   鈹溾攢 MongoDB: claims collection
-   鈹溾攢 瀹¤鏃ュ織鏇存柊
-   鈹斺攢 璐㈠姟鎶ヨ〃淇
+## Integration Surfaces
+
+### Contracts
+
+- `SUPER`: token permissions and minting surface.
+- `USDT_Mock`: local/demo support.
+- `MiningPool`: miner registration, hashrate, staking threshold, and reward claiming.
+
+### Backend API
+
+- `/api/users`
+- `/api/devices`
+- `/api/claims`
+- `/api/gas`
+- `/api/operations`
+- `/api/owner`
+- `/api/admin`
+- `/api/system`
+- `/api/downloads`
+
+### Database
+
+Core D1 tables:
+
+- `users`
+- `devices`
+- `customer_profiles`
+- `device_status_history`
+- `reward_ledger`
+- `exchange_orders`
+- `exchange_trade_logs`
+- `exchange_price_history`
+- `payout_batches`
+- `payout_batch_items`
+- `super_distributions`
+- `token_locks`
+- `reward_withdrawals`
+- `owner_sessions`
+- `owner_audit_logs`
+- `referral_edges`
+- `referral_closure`
+
+## Completed Work
+
+- Web app builds successfully.
+- Backend type-checks and tests pass.
+- Contract test suite passes.
+- Mobile TypeScript check passes.
+- Deprecated exchange-router references are guarded by `npm run test:deprecated-swaprouter`.
+- Exchange naming is aligned around `exchange_*` storage and API fields.
+- Contract deployment output now contains `SUPER`, `USDT`, and `MiningPool`.
+
+## Remaining Operational Work
+
+- Apply D1 migrations in each deployed environment.
+- Confirm production contract addresses in Web, backend, and mobile envs.
+- Set exchange price before enabling production exchange requests.
+- Configure owner/sub-admin wallets.
+- Configure payout wallets and payout operating procedure.
+- Verify download links and app release channels.
+- Run a staged end-to-end test using a small user/account before opening the flow broadly.
+
+## Suggested Verification Matrix
+
+### Web
+
+```bash
+npm run lint
+npm run build
 ```
 
-### 3.2 Swap 娴佸姩鎬у垏鎹?
+### Backend
 
-```
-鐢ㄦ埛鍙戣捣 Swap (100 SUPER 鈫?? USDT)
-   鈫?SwapRouter.swapSuperToUsdt(100)
-   鈫?
-妫€鏌ユ祦鍔ㄦ€?
-   鈹溾攢 SUPER Reserve: 50M
-   鈹溾攢 USDT Reserve: 50k
-   鈹溾攢 璁＄畻婊戠偣涓庡厬鎹㈢巼
-   鈹斺攢 1 SUPER 鈮?0.001 USDT 鈫?100 SUPER 鈮?0.1 USDT
-   
-鎵嬬画璐硅绠?
-   鈹溾攢 0.5% 鎵嬬画璐?= 0.0005 USDT
-   鈹溾攢 鐢ㄦ埛瀹為檯鑾峰緱 0.0995 USDT
-   鈹斺攢 鏀惰垂鍒嗛厤锛?
-      鈹溾攢 70% 鈫?LP (0.0003525)
-      鈹溾攢 20% 鈫?骞冲彴 (0.0001)
-      鈹斺攢 10% 鈫?鐢熸€?(0.00005)
-
-閾句笂鎵ц
-   鈹溾攢 SUPER: 鐢ㄦ埛 鈫?SwapRouter 鈫?Reserve
-   鈹溾攢 USDT: Reserve 鈫?SwapRouter 鈫?鐢ㄦ埛
-   鈹溾攢 鏇存柊 Reserves
-   鈹斺攢 emit Swap Event
-   
-鍚庡彴璁板綍
-   鈹溾攢 MongoDB: swaps collection
-   鈹溾攢 鏇存柊鐢ㄦ埛浣欓
-   鈹溾攢 璐㈠姟鎶ヨ〃缁熻
-   鈹斺攢 Redis 缂撳瓨瀹炴椂浠锋牸
+```bash
+npm --prefix backend run typecheck
+npm --prefix backend test -- --run
 ```
 
----
+### Contracts
 
-## 4. 鍚庡彴绠＄悊鍛樻搷浣滄祦绋?
-
-### 4.1 椋庢帶鍛婅澶勭悊
-
-```
-绯荤粺鑷姩妫€娴嬩綔寮?
-   鈹溾攢 澶氳澶囧埛鍗?
-   鈹溾攢 寮傚父绠楀姏婵€澧?
-   鈹溾攢 鍦扮悊浣嶇疆寮傚父
-   鈹斺攢 鎻愮幇棰戠巼寮傚父
-   
-鍛婅鐢熸垚
-   鈹溾攢 severity: critical / warning / info
-   鈹溾攢 confidence score: 0.0 ~ 1.0
-   鈹斺攢 寤鸿澶勭疆: suspend / throttle / review
-   
-鍚庡彴绠＄悊鍛樻敹鍒伴€氱煡
-   鈹溾攢 Dashboard 绾㈢偣闂儊
-   鈹溾攢 閽夐拤/Slack 閫氱煡
-   鈹斺攢 Email 鍙戦€?
-   
-鎵撳紑鍛婅璇︽儏
-   鈹溾攢 鏌ョ湅鍏宠仈璐︽埛
-   鈹溾攢 鍘嗗彶鎶曡瘔璁板綍
-   鈹溾攢 閾句笂浜ゆ槗杩芥函
-   鈹斺攢 璁惧閲嶅悎搴﹀垎鏋?
-   
-鍋氬嚭澶勭疆鍐冲畾
-   鈹溾攢 鑷姩鎵瑰噯 (score > 0.95) 鈫?鐩存帴鎵ц
-   鈹溾攢 浜哄伐瀹℃牳 (0.7 < score < 0.95) 鈫?瀹℃壒娴?
-   鈹斺攢 鎵嬪姩蹇界暐 (score < 0.7) 鈫?鐧藉悕鍗?
-   
-鎵ц澶勭疆
-   鈹溾攢 鏂规 A: suspend -> 璐︽埛鍐荤粨 -> MiningPool.suspend(user)
-   鈹溾攢 鏂规 B: throttle -> 闄嶉€?-> 绠楀姏闄愰 0.1 MH/s
-   鈹斺攢 鏂规 C: review -> 鏍囪浜哄伐瀹℃煡 -> 缁х画鐩戞帶
-   
-璁板綍瀹¤鏃ュ織
-   鈹溾攢 adminWallet, action, target
-   鈹溾攢 reason, confidence, txHash
-   鈹斺攢 timestamp, approval_count
+```bash
+npm --prefix contracts test
 ```
 
-### 4.2 鎻愮幇鐢宠瀹℃牳
+### Mobile
 
-```
-鐢ㄦ埛鍙戣捣鎻愮幇 (1000 SUPER)
-   鈹溾攢 灏忎簬鏃ラ搴?5000 SUPER
-   鈹溾攢 涓嶅湪榛戝悕鍗曚腑
-   鈹溾攢 鍐峰嵈鏃堕棿宸茶繃
-   鈫?鑷姩鎵瑰噯 鉁?
-   
-鐢ㄦ埛鍙戣捣鎻愮幇 (20000 SUPER)
-   鈹溾攢 瓒呰繃鏃ラ搴﹂檺鍒?
-   鈹溾攢 闇€瑕佷汉宸ュ鏍?
-   鈫?杩涘叆寰呭姹?
-   
-鍚庡彴璐㈠姟浜哄憳鏀跺埌閫氱煡
-   鈹溾攢 鏌ョ湅鐢宠鍗曡鎯?
-   鈹溾攢 鐢ㄦ埛鍘嗗彶鎻愮幇璁板綍
-   鈹溾攢 褰撴棩鎬绘彁鐜伴搴︾洃鎺?
-   鈹斺攢 閾句笂娴佸姩鎬ф鏌?
-   
-瀹℃牳鍐崇瓥
-   鈹溾攢 纭 鈫?鑷姩鎵ц Swap 涓庤浆璐?
-   鈹溾攢 鎷掔粷 鈫?杩旇繕 SUPER 鍒扮敤鎴烽挶鍖?
-   鈹斺攢 鍒嗘壒 鈫?鍒?2 娆℃彁鐜?(10k/day)
-   
-鎵ц澶勭疆
-   鈹溾攢 Swap Router: 20k SUPER 鈫?20 USDT
-   鈹溾攢 閾句笂杞处 20 USDT 鍒扮敤鎴?
-   鈹溾攢 MongoDB 璁板綍 status=completed
-   鈹斺攢 鐢ㄦ埛 App 鏀跺埌纭閫氱煡
+```bash
+cd app-client
+npx tsc --noEmit
 ```
 
----
+### Deprecated Reference Guard
 
-## 5. 鏅鸿兘鍚堢害閮ㄧ讲娓呭崟
-
-### 5.1 鍚堢害娓呭崟涓庨『搴?
-
-```
-閮ㄧ讲椤哄簭锛圫epolia 娴嬭瘯缃戯級:
-  1. SUPER Token (ERC20)
-  2. MiningPool (鎸栫熆姝ｄ富)
-  3. SwapRouter (娴佸姩鎬?
-  4. AdminController (澶氱绠＄悊)
-
-閮ㄧ讲椤哄簭锛圔ase 涓荤綉锛屾湀搴曪級:
-  1. SUPER Token (鍓嶆彁锛氬璁￠€氳繃)
-  2. MiningPool
-  3. SwapRouter
-  4. AdminController
-
-鍒濆鍖栨楠?
-  a) SUPER: 閾搁€犳€讳緵搴旈噺 1B
-  b) MiningPool: 杞叆 500M SUPER (鎸栫熆姹?
-  c) SwapRouter: 杞叆 50M SUPER + 鍒濆鍖?50k USDT (LP)
-  d) AdminController: 閰嶇疆 3/3 澶氱admin
+```bash
+npm run test:deprecated-swaprouter
 ```
 
-### 5.2 鍚堢害鍩虹妗嗘灦
+## Deployment Order
 
-```solidity
-// 鏂囦欢缁撴瀯寤鸿
-contracts/
-鈹溾攢鈹€ token/
-鈹?  鈹溾攢鈹€ SUPER.sol (ERC20 浠ｅ竵)
-鈹?  鈹斺攢鈹€ extensions/
-鈹?      鈹溾攢鈹€ MMBurnable.sol
-鈹?      鈹斺攢鈹€ MMVoting.sol (鏈潵娌荤悊)
-鈹?
-鈹溾攢鈹€ mining/
-鈹?  鈹溾攢鈹€ MinerRegistry.sol (鐭垮伐娉ㄥ唽琛?
-鈹?  鈹溾攢鈹€ MiningPool.sol (涓诲悎绾?
-鈹?  鈹斺攢鈹€ ProofOfWork.sol (宸ヤ綔閲忚瘉鏄?
-鈹?
-鈹溾攢鈹€ swap/
-鈹?  鈹溾攢鈹€ SwapRouter.sol (AMM 璺敱)
-鈹?  鈹溾攢鈹€ LiquidityPool.sol (娴佸姩鎬ф睜)
-鈹?  鈹斺攢鈹€ PriceOracle.sol (浠锋牸棰勮█鏈?
-鈹?
-鈹溾攢鈹€ governance/
-鈹?  鈹溾攢鈹€ MultiSigController.sol (澶氱绠＄悊)
-鈹?  鈹斺攢鈹€ TimeLock.sol (鏃堕棿閿?
-鈹?
-鈹斺攢鈹€ test/
-    鈹斺攢鈹€ *.test.ts
-```
-
----
-
-## 6. 鍓嶇搴旂敤闆嗘垚娓呭崟
-
-### 6.1 瀹樼綉锛圵ebsite锛夐渶瑕佺殑鏀瑰姩
-
-```
-鉁?宸插畬鎴?
-  - 涓夎鍥惧鑸?(website / admin / mining)
-  - 閽卞寘杩炴帴鍏ュ彛
-  - Android/iOS 鍙屼笅杞介摼鎺?
-
-鈴?寰呭疄鐜?
-  - 瀹樼綉閮ㄥ垎: 瀹炴椂鏁版嵁灞曠ず (鎬绘寲鐭裤€佺敤鎴锋暟銆佹祦鍔ㄦ€?
-  - 鍚庡彴绠＄悊: 瀹屾暣 CRUD 鐣岄潰
-    鈹溾攢 鐢ㄦ埛绠＄悊琛ㄦ牸
-    鈹溾攢 鐭挎満瀹炴椂鐩戞帶
-    鈹溾攢 鏀剁泭缁熻鍥捐〃
-    鈹溾攢 椋庢帶鍛婅鍒楄〃
-    鈹斺攢 璐㈠姟鎶ヨ〃
-  - 鏁版嵁鏇存柊锛歐ebSocket 璁㈤槄閾句簨浠?
-```
-
-### 6.2 App 瀹㈡埛绔紙Mobile锛夐渶瑕佺殑鏀瑰姩
-
-```
-鉁?宸插畬鎴?
-  - React Native + Expo 妗嗘灦
-  - 绉诲姩绔?UI 楠ㄦ灦
-  - 閽卞寘杩炴帴 Mock
-
-鈴?寰呭疄鐜?
-  - 闆嗘垚鐪熷疄閽卞寘 SDK
-    鈹溾攢 WalletConnect SDK
-    鈹溾攢 Ethers.js / Viem
-    鈹斺攢 TEE 绛惧悕搴?
-  
-  - App 鏍稿績鍔熻兘
-    鈹溾攢 娉ㄥ唽涓庤澶囩粦瀹?
-    鈹溾攢 鍚庡彴鎸栫熆绠＄悊
-    鈹溾攢 瀹炴椂鏀剁泭灞曠ず
-    鈹溾攢 Swap 涓庢彁鐜版祦绋?
-    鈹斺攢 璁惧鍋ュ悍鐩戞帶
-  
-  - 閾句笂浜や簰
-    鈹溾攢 MinerRegistry.registerMiner()
-    鈹溾攢 MiningPool.claimReward()
-    鈹溾攢 SwapRouter.swapSuperToUsdt()
-    鈹斺攢 浜ゆ槗绛惧悕 + 骞挎挱
-  
-  - 鍚庡彴鏈嶅姟瀵规帴
-    鈹溾攢 API 闆嗘垚 (axios / fetch)
-    鈹溾攢 韬唤楠岃瘉 (JWT)
-    鈹斺攢 閿欒澶勭悊涓庨噸璇?
-```
-
----
-
-## 7. 鍚庡彴绯荤粺锛圓dmin锛夊疄鐜版竻鍗?
-
-### 7.1 闇€瑕佸紑鍙戠殑鍚庣 API 妯″潡
-
-```
-鉁?妗嗘灦鎼缓:
-  - Express 鏈嶅姟鍣ㄩ厤缃?
-  - MongoDB 杩炴帴
-  - Redis 缂撳瓨鍒濆鍖?
-
-鈴?闇€瑕佸疄鐜?
-
-鐢ㄦ埛绠＄悊妯″潡 (/api/admin/users)
-  鈹溾攢 GET /users (鍒嗛〉鏌ヨ)
-  鈹溾攢 GET /users/:wallet (璇︽儏)
-  鈹溾攢 PUT /users/:wallet/status (灏佺)
-  鈹溾攢 DELETE /users/:wallet (娉ㄩ攢)
-  鈹斺攢 POST /users/bulk-export (瀵煎嚭)
-
-鐭挎満鐩戞帶妯″潡 (/api/admin/devices)
-  鈹溾攢 GET /devices (鍒楄〃)
-  鈹溾攢 GET /devices/:deviceId (璇︽儏)
-  鈹溾攢 PUT /devices/:deviceId/action (闄愭祦/灏佺)
-  鈹斺攢 GET /devices/stats (鑱氬悎缁熻)
-
-鏀剁泭绠＄悊妯″潡 (/api/admin/revenue)
-  鈹溾攢 GET /stats (鏃?鏈堢粺璁?
-  鈹溾攢 GET /claims/pending (寰呭鍒楄〃)
-  鈹溾攢 PUT /claims/:claimId/approve (鎵瑰噯)
-  鈹斺攢 GET /withdrawals/history (鎻愮幇璁板綍)
-
-椋庢帶绠＄悊妯″潡 (/api/admin/risk)
-  鈹溾攢 GET /alerts (鍛婅鍒楄〃)
-  鈹溾攢 PUT /alerts/:alertId/resolve (澶勭疆)
-  鈹斺攢 GET /detections (妫€娴嬭鍒?
-
-璐㈠姟鎶ヨ〃妯″潡 (/api/admin/finance)
-  鈹溾攢 GET /report (璐㈠姟鎶ヨ〃)
-  鈹溾攢 GET /balance (璐︽埛浣欓)
-  鈹斺攢 POST /payout (鎵嬪姩鎵撴)
-
-绯荤粺閰嶇疆妯″潡 (/api/admin/config)
-  鈹溾攢 GET /config (鑾峰彇鍙傛暟)
-  鈹溾攢 PUT /config/:key (淇敼鍙傛暟锛岄渶澶氱)
-  鈹斺攢 GET /audit-log (瀹¤鏃ュ織)
-```
-
-### 7.2 鍓嶇 UI 椤甸潰娓呭崟
-
-```
-鉁?宸叉湁:
-  - 鐧诲綍/閽卞寘楠岃瘉椤甸潰
-
-鈴?闇€瑕佸紑鍙?
-
-Dashboard (棣栭〉)
-  鈹溾攢 KPI 鍗＄墖 (鎬荤畻鍔涖€佺敤鎴锋暟銆佹棩浜ч噺)
-  鈹溾攢 鍥捐〃 (鎸栫熆瓒嬪娍銆佹彁鐜拌秼鍔?
-  鈹斺攢 蹇€熷憡璀﹂潰鏉?
-
-鐢ㄦ埛绠＄悊椤甸潰
-  鈹溾攢 鐢ㄦ埛鍒楄〃琛ㄦ牸
-  鈹溾攢 鎼滅储涓庣瓫閫?
-  鈹溾攢 鎵归噺鎿嶄綔宸ュ叿鏍?
-  鈹斺攢 鐢ㄦ埛璇︽儏妯℃€佹
-
-鐭挎満鐩戞帶椤甸潰
-  鈹溾攢 璁惧鐑姏鍥?
-  鈹溾攢 绠楀姏鎺掕姒?
-  鈹溾攢 璁惧鐘舵€侀ゼ鍥?
-  鈹斺攢 鍗曡澶囪鎯?
-
-鏀剁泭涓庢彁鐜伴〉闈?
-  鈹溾攢 鏃ユ敹鐩婅秼鍔垮浘
-  鈹溾攢 寰呭鎻愮幇鍒楄〃
-  鈹溾攢 娴佸姩鎬х洃鎺?
-  鈹斺攢 鎻愮幇鎿嶄綔宸ュ叿
-
-椋庢帶闈㈡澘
-  鈹溾攢 鍛婅榛勯噾鍒楄〃
-  鈹溾攢 鍛婅璇︽儏灞曞紑
-  鈹溾攢 澶勭疆鍘嗗彶璁板綍
-  鈹斺攢 妫€娴嬭鍒欒皟璇?
-
-璐㈠姟鎶ヨ〃
-  鈹溾攢 鍛ㄦ湡璐㈠姟姹囨€?
-  鈹溾攢 鏀跺叆/鏀嚭鍒嗙被
-  鈹溾攢 K绾夸笌铚＄儧鍥?
-  鈹斺攢 瀵煎嚭 Excel
-```
-
----
-
-## 8. 娴嬭瘯涓庨獙璇佹竻鍗?
-
-### 8.1 鍗曞厓娴嬭瘯
-
-```
-鍚堢害娴嬭瘯 (Hardhat):
-  鈹溾攢 SUPER Token
-  鈹? 鈹溾攢 閾搁€?閿€姣佹祴璇?
-  鈹? 鈹溾攢 杞处娴嬭瘯
-  鈹? 鈹斺攢 鏉冮檺娴嬭瘯
-  鈹溾攢 MiningPool
-  鈹? 鈹溾攢 娉ㄥ唽娴嬭瘯
-  鈹? 鈹溾攢 濂栧姳璁＄畻娴嬭瘯
-  鈹? 鈹溾攢 鎻愬彇娴嬭瘯
-  鈹? 鈹斺攢 鍐峰嵈娴嬭瘯
-  鈹斺攢 SwapRouter
-     鈹溾攢 鍏戞崲娴嬭瘯
-     鈹溾攢 婊戠偣娴嬭瘯
-     鈹溾攢 浠锋牸娴嬭瘯
-     鈹斺攢 闂數璐锋祴璇?
-
-鍓嶇鍗曞厓娴嬭瘯 (Jest + React Testing Library):
-  鈹溾攢 缁勪欢娓叉煋娴嬭瘯
-  鈹溾攢 浜嬩欢澶勭悊娴嬭瘯
-  鈹溾攢 鐘舵€佺鐞嗘祴璇?
-  鈹斺攢 API Mock 娴嬭瘯
-
-鍚庣鍗曞厓娴嬭瘯 (Jest):
-  鈹溾攢 API 绔偣娴嬭瘯
-  鈹溾攢 鏁版嵁搴撴搷浣?
-  鈹溾攢 椋庢帶瑙勫垯
-  鈹斺攢 涓氬姟閫昏緫
-```
-
-### 8.2 闆嗘垚娴嬭瘯
-
-```
-BSC Mainnet 闆嗘垚楠岃瘉
-  1. 閮ㄧ讲鎵€鏈夊悎绾?
-  2. 鍒濆鍖栨祦鍔ㄦ€т笌鍙傛暟
-  3. Mock 鐢ㄦ埛鍦烘櫙:
-     鈹溾攢 鐢ㄦ埛娉ㄥ唽
-     鈹溾攢 鎸栫熆涓婃姤
-     鈹溾攢 鎻愬彇鏀剁泭
-     鈹溾攢 Swap 鍏戞崲
-     鈹斺攢 鎻愮幇娴佺▼
-  4. 鍚庡彴楠屾敹:
-     鈹溾攢 鐢ㄦ埛绠＄悊鎿嶄綔
-     鈹溾攢 椋庢帶鍛婅瑙﹀彂
-     鈹溾攢 瀹℃牳娴佺▼
-     鈹斺攢 鎶ヨ〃鐢熸垚
-```
-
-### 8.3 瀹夊叏瀹¤
-
-```
-浠ｇ爜瀹¤ (浠ｇ爜璐ㄩ噺):
-  鈹溾攢 Solidity 鍚堢害: SlitherAI / Mythril
-  鈹溾攢 鍓嶇浠ｇ爜: ESLint + SonarQube
-  鈹斺攢 鍚庣浠ｇ爜: SonarQube + OWASP
-
-绗笁鏂瑰璁?(瀹夊叏璇勪及):
-  鈹溾攢 CertiK / OpenZeppelin (BSC Mainnet)
-  鈹溾攢 Formal Verification (濡傞€傜敤)
-  鈹斺攢 Penetration Testing (鍚庡彴)
-```
-
----
-
-## 9. 涓婄嚎鍓嶆鏌ユ竻鍗?
-
-```
-鏅鸿兘鍚堢害:
-  鈽?浠ｇ爜瀹¤閫氳繃
-  鈽?BSC Mainnet 楠岃瘉瀹屾垚
-  鈽?鍚堢害閮ㄧ讲鑴氭湰楠岃瘉
-  鈽?澶氱閰嶇疆纭
-  鈽?绱ф€ュ仠姝㈡満鍒舵祴璇?
-
-Mobile App:
-  鈽?鍐呮祴鐢ㄦ埛 100+ 鍙嶉
-  鈽?鐪熸満娴嬭瘯 (Android + iOS)
-  鈽?鎬ц兘鍩哄噯娴嬭瘯 (鍐呭瓨/鐢甸噺)
-  鈽?缃戠粶寮傚父妯℃嫙娴嬭瘯
-  鈽?App Store/Play Store 瀹℃牳鍑嗗
-
-鍚庡彴绯荤粺:
-  鈽?鏉冮檺妯″瀷娴嬭瘯
-  鈽?骞跺彂鍘嬪姏娴嬭瘯 (QPS)
-  鈽?鏁版嵁搴撳浠戒笌鎭㈠娴嬭瘯
-  鈽?鐩戞帶鍛婅绯荤粺閰嶇疆
-  鈽?鐏鹃毦鎭㈠婕旂粌
-
-杩愯惀鏂囨。:
-  鈽?鍚庡彴绠＄悊鍛樻墜鍐?
-  鈽?鐢ㄦ埛甯歌闂 FAQ
-  鈽?搴旀€ラ妗堟枃妗?
-  鈽?鑱旂郴鏂瑰紡涓庢敮鎸佹祦绋?
-```
-
----
-
-## 10. 鍙戝竷鏃堕棿绾匡紙鎺ㄨ崘锛?
-
-```
-绗?1 闃舵 - BSC Mainnet 鍑嗗 (4 鏈?- 5 鏈?
-  Week 1-2: 鍚堢害缂栧啓 + 鍚庡彴 API 寮€鍙?
-  Week 3-4: Mobile App 闆嗘垚寮€鍙?
-  Week 5-6: 闆嗘垚娴嬭瘯 + 鍘嬪姏娴嬭瘯
-  Week 7-8: 淇 Bug + CertiK 瀹¤
-
-绗?2 闃舵 - Base 涓荤綉鐏板害 (6 鏈?
-  Week 1: 鍚堢害閮ㄧ讲 + 鍒濆鍖栨祦鍔ㄦ€?
-  Week 2: 閭€璇?1000 鍐呮祴鐢ㄦ埛
-  Week 3-4: 鐩戞帶 & 浼樺寲
-
-绗?3 闃舵 - 鍏ㄩ噺鍙戣 (7 鏈?
-  Week 1: 瀹樻柟瀹ｅ竷姝ｅ紡涓婄嚎
-  Week 2: 甯傚満钀ラ攢娲诲姩鍚姩
-  鎸佺画: 绀惧尯寤鸿 & 鐢熸€佹墿灞?
-```
-
----
-
-## 鎬荤粨
-
-MinerHub 浠庤璁″埌涓婄嚎鐨勫畬鏁磋矾寰勶細
-
-```
-闇€姹傚畾涔?
-    鈫?
-浠ｅ竵妯″瀷璁捐 (Token Model) 鉁?
-    鈫?
-鍚庡彴绯荤粺璁捐 (Admin System) 鉁?
-    鈫?
-鏅鸿兘鍚堢害寮€鍙?
-    鈹溾攢 SUPER Token
-    鈹溾攢 MiningPool
-    鈹溾攢 SwapRouter
-    鈹斺攢 AdminController
-    鈫?
-Mobile App 寮€鍙?(React Native)
-    鈹溾攢 閽卞寘闆嗘垚
-    鈹溾攢 鎸栫熆鍔熻兘
-    鈹斺攢 鎻愮幇鍏戞崲
-    鈫?
-鍚庡彴绯荤粺寮€鍙?(Node.js)
-    鈹溾攢 鐢ㄦ埛/鐭挎満绠＄悊
-    鈹溾攢 椋庢帶绯荤粺
-    鈹斺攢 璐㈠姟鎶ヨ〃
-    鈫?
-闆嗘垚娴嬭瘯 (BSC Mainnet)
-    鈹溾攢 绔埌绔祦绋?
-    鈹溾攢 鍘嬪姏娴嬭瘯
-    鈹斺攢 瀹夊叏瀹¤
-    鈫?
-涓荤綉閮ㄧ讲 (Base Mainnet)
-    鈹溾攢 鍚堢害涓婄嚎
-    鈹溾攢 鐏板害鐢ㄦ埛閭€璇?
-    鈹斺攢 鍏ㄩ噺鍙戣
-```
-
-鎵€鏈夊叧閿枃妗ｅ凡浣嶄簬 `docs/` 鐩綍锛屽彲闅忔椂鏌ラ槄涓庢洿鏂般€?
-
+1. Deploy or confirm contracts.
+2. Sync contract addresses to root, backend, and mobile environments.
+3. Apply D1 schema and exchange naming patch where needed.
+4. Deploy backend Worker.
+5. Build and deploy Web app.
+6. Publish or update mobile app.
+7. Configure admin settings.
+8. Run smoke tests for wallet login, user sync, miner registration, rewards, exchange request, order approval, and payout completion.

@@ -20,7 +20,8 @@
     "cf:bootstrap": "npm --prefix backend run cf:bootstrap",
     "build:cf": "npm run build",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:deprecated-swaprouter": "node scripts/check-deprecated-swaprouter.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

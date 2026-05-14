@@ -16,7 +16,6 @@ import { coinPlanetChain } from './lib/wallet';
 
 // Lazy-load non-critical components for faster initial render
 const AppPreview = React.lazy(() => import('./components/AppPreview'));
-const DappSwap = React.lazy(() => import('./components/DappSwap'));
 const Download = React.lazy(() => import('./components/Download'));
 const Features = React.lazy(() => import('./components/Features'));
 const AdminAppSyncGuide = React.lazy(() => import('./components/AdminAppSyncGuide'));
@@ -519,7 +518,6 @@ export default function App() {
             <Architecture />
             <Economics />
             <AppPreview />
-            <DappSwap />
             <Comparison />
             <Roadmap />
           </>

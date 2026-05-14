@@ -51,9 +51,8 @@ console.log(`   Network:    ${deployment.network}`);
 console.log(`   Deployer:   ${deployment.deployer}`);
 console.log(`   Timestamp:  ${deployment.timestamp}`);
 console.log(`   SUPER:      ${contracts.SUPER}`);
-console.log(`   USDT_Mock:  ${contracts.USDT_Mock}`);
+console.log(`   USDT:       ${contracts.USDT || contracts.USDT_Mock}`);
 console.log(`   MiningPool: ${contracts.MiningPool}`);
-console.log(`   SwapRouter: ${contracts.SwapRouter}`);
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 
@@ -106,12 +105,10 @@ const frontendUpdates = {
   VITE_SUPER_ADDRESS: contracts.SUPER,
   VITE_MINING_POOL_ADDRESS: contracts.MiningPool,
   VITE_MINER_CONTRACT_ADDRESS: contracts.MiningPool,
-  VITE_SWAP_ROUTER_ADDRESS: contracts.SwapRouter,
-  VITE_SWAP_CONTRACT_ADDRESS: contracts.SwapRouter,
   VITE_OWNER_ADDRESS: ownerAddress,
   VITE_OWNER_WALLET: ownerAddress,
   VITE_ADMIN_ADDRESSES: adminAddresses.join(','),
-  VITE_USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support both real USDT and mock
+  VITE_USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support legacy deployment.json files
 };
 const frontendContent = mergeEnvVars(readEnvFile(frontendEnvPath), frontendUpdates);
 writeEnvFile(frontendEnvPath, frontendContent);
@@ -122,9 +119,8 @@ const appUpdates = {
   EXPO_PUBLIC_CHAIN_ID: CHAIN_ID,
   EXPO_PUBLIC_RPC_URL: RPC_URL,
   EXPO_PUBLIC_MINING_POOL_ADDRESS: contracts.MiningPool,
-  EXPO_PUBLIC_SWAP_ROUTER_ADDRESS: contracts.SwapRouter,
   EXPO_PUBLIC_SUPER_ADDRESS: contracts.SUPER,
-  EXPO_PUBLIC_USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support both real USDT and mock
+  EXPO_PUBLIC_USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support legacy deployment.json files
 };
 const appContent = mergeEnvVars(readEnvFile(appEnvPath), appUpdates);
 writeEnvFile(appEnvPath, appContent);
@@ -137,10 +133,9 @@ const backendUpdates = {
   RPC_URL: RPC_URL,
   SUPER_TOKEN_ADDRESS: contracts.SUPER,
   MINING_POOL_ADDRESS: contracts.MiningPool,
-  SWAP_ROUTER_ADDRESS: contracts.SwapRouter,
   OWNER_ADDRESS: ownerAddress,
   ADMIN_ADDRESSES: adminAddresses.join(','),
-  USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support both real USDT and mock
+  USDT_ADDRESS: contracts.USDT || contracts.USDT_Mock,  // Support legacy deployment.json files
 };
 const backendContent = mergeEnvVars(readEnvFile(backendEnvPath), backendUpdates);
 writeEnvFile(backendEnvPath, backendContent);

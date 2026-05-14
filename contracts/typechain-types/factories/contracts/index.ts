@@ -4,5 +4,4 @@
 export { AdminAccess__factory } from "./AdminAccess__factory";
 export { MiningPool__factory } from "./MiningPool__factory";
 export { SUPER__factory } from "./SUPER__factory";
-export { SwapRouter__factory } from "./SwapRouter__factory";
 export { USDT_Mock__factory } from "./USDT_Mock__factory";

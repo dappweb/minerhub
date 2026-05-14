@@ -5,7 +5,7 @@ export default function Comparison() {
     { feature: '安全性', traditional: '无', software: '软件级（易攻击）', coinPlanet: '硬件TEE（金融级）' },
     { feature: '便捷性', traditional: '无', software: '需下载配置', coinPlanet: '开机即用，后台自动' },
     { feature: '成本', traditional: '无', software: '耗电高、效率低', coinPlanet: '系统级优化，成本最低' },
-    { feature: '收益保障', traditional: '无', software: '无保底', coinPlanet: '官方池保底+市场双通道' },
+    { feature: '收益保障', traditional: '无', software: '无保底', coinPlanet: '后台兑换+运营结算' },
     { feature: '资产归属', traditional: '无', software: '平台控制', coinPlanet: '私钥自持，链上确权' },
     { feature: '二手价值', traditional: '折旧', software: '无', coinPlanet: '挖矿权可转让，残值+' },
   ];

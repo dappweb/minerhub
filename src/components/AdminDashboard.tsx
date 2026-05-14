@@ -3,9 +3,6 @@ import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import {
-    addSwapLiquidityOnChain,
-    collectEcosystemFeeOnChain,
-    collectPlatformFeeOnChain,
     getGlobalStatsOnChain,
     getMinerInfoOnChain,
     getMiningPoolAddress,
@@ -13,9 +10,6 @@ import {
     getMiningPoolOwnerOnChain,
     getSuperTokenAddress,
     getSuperTokenStatsOnChain,
-    getSwapPoolStatsOnChain,
-    getSwapRouterAddress,
-    initializeSwapLiquidityOnChain,
     mintSuperOnChain,
     sendGasToAddressOnChain,
     sendSuperToAddressOnChain,
@@ -24,8 +18,7 @@ import {
     startMiningOnChain,
     type MiningPoolGlobalStats,
     type MiningPoolMinerInfo,
-    type SuperTokenStats,
-    type SwapPoolStats
+    type SuperTokenStats
 } from '../lib/blockchain';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import OwnerConsole from './OwnerConsole';
@@ -75,14 +68,6 @@ function formatHashrate(hashrate: bigint): string {
 }
 
 function formatTokenAmount(amount: bigint): string {
-  const parsed = Number(formatUnits(amount, 18));
-  if (!Number.isFinite(parsed)) {
-    return '0';
-  }
-  return parsed.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
-}
-
-function formatUsdtAmount(amount: bigint): string {
   const parsed = Number(formatUnits(amount, 18));
   if (!Number.isFinite(parsed)) {
     return '0';
@@ -561,7 +546,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [globalStats, setGlobalStats] = useState<MiningPoolGlobalStats | null>(null);
   const [minerInfo, setMinerInfo] = useState<MiningPoolMinerInfo | null>(null);
   const [superStats, setSuperStats] = useState<SuperTokenStats | null>(null);
-  const [swapStats, setSwapStats] = useState<SwapPoolStats | null>(null);
   const [chainOwnerAddress, setChainOwnerAddress] = useState<string>('');
   const [chainAdminAddresses, setChainAdminAddresses] = useState<readonly string[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -589,9 +573,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   const [mintRecipient, setMintRecipient] = useState<string>(adminWallet);
   const [mintAmount, setMintAmount] = useState<string>('1000');
   const [minSuperStakeForReward, setMinSuperStakeForReward] = useState<string>('0');
-  const [liquiditySuper, setLiquiditySuper] = useState<string>('1000');
-  const [liquidityUsdt, setLiquidityUsdt] = useState<string>('1');
-  const [ecosystemRecipient, setEcosystemRecipient] = useState<string>(adminWallet);
   const [deviceFundingAddress, setDeviceFundingAddress] = useState<string>('');
   const [deviceFundingGas, setDeviceFundingGas] = useState<string>('0.01');
   const [deviceFundingSuper, setDeviceFundingSuper] = useState<string>('100');
@@ -670,7 +651,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   const poolAddress = getMiningPoolAddress();
   const superAddress = getSuperTokenAddress();
-  const swapRouterAddress = getSwapRouterAddress();
   const isSubAdminReadOnly = ownerSessionRole === 'subadmin';
   const canOperateCustomers = ownerSessionRole === 'owner';
 
@@ -1210,9 +1190,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         getMinerInfoOnChain(adminWallet as `0x${string}`),
       ]);
 
-      const [superToken, swapPool, chainOwner, chainAdmins] = await Promise.all([
+      const [superToken, chainOwner, chainAdmins] = await Promise.all([
         superAddress ? getSuperTokenStatsOnChain().catch(() => null) : Promise.resolve(null),
-        swapRouterAddress ? getSwapPoolStatsOnChain().catch(() => null) : Promise.resolve(null),
         getMiningPoolOwnerOnChain().catch(() => '' as `0x${string}`),
         getMiningPoolAdminsOnChain().catch(() => [] as `0x${string}`[]),
       ]);
@@ -1220,7 +1199,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       setGlobalStats(global);
       setMinerInfo(miner);
       setSuperStats(superToken);
-      setSwapStats(swapPool);
       setChainOwnerAddress(chainOwner);
       setChainAdminAddresses(chainAdmins);
     } catch (loadError) {
@@ -1229,7 +1207,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     } finally {
       setLoading(false);
     }
-  }, [adminWallet, poolAddress, superAddress, swapRouterAddress]);
+  }, [adminWallet, poolAddress, superAddress]);
 
   useEffect(() => {
     if (!globalStats?.stakeGateSupported) return;
@@ -1238,7 +1216,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
   useEffect(() => {
     setMintRecipient(adminWallet);
-    setEcosystemRecipient(adminWallet);
   }, [adminWallet]);
 
   useEffect(() => {
@@ -1483,64 +1460,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
       await refreshOnChainData();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : '保存 SUPER 抵押挖矿最小额失败';
-      setError(message);
-    } finally {
-      setAdminActionLoading('');
-    }
-  };
-
-  const handleManageLiquidity = async () => {
-    const parsedSuper = Number(liquiditySuper);
-    const parsedUsdt = Number(liquidityUsdt);
-    if (!Number.isFinite(parsedSuper) || parsedSuper <= 0 || !Number.isFinite(parsedUsdt) || parsedUsdt <= 0) {
-      setError('请输入有效的 SUPER / USDT 流动性数量。');
-      return;
-    }
-
-    try {
-      setAdminActionLoading('liquidity');
-      setError('');
-      if (swapStats && swapStats.reserveSuper === 0n && swapStats.reserveUsdt === 0n) {
-        await initializeSwapLiquidityOnChain(liquiditySuper, liquidityUsdt);
-      } else {
-        await addSwapLiquidityOnChain(liquiditySuper, liquidityUsdt);
-      }
-      await refreshOnChainData();
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : '流动性管理失败';
-      setError(message);
-    } finally {
-      setAdminActionLoading('');
-    }
-  };
-
-  const handleCollectPlatformFee = async () => {
-    try {
-      setAdminActionLoading('platformFee');
-      setError('');
-      await collectPlatformFeeOnChain();
-      await refreshOnChainData();
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : '提取平台手续费失败';
-      setError(message);
-    } finally {
-      setAdminActionLoading('');
-    }
-  };
-
-  const handleCollectEcosystemFee = async () => {
-    if (!isAddress(ecosystemRecipient)) {
-      setError('生态手续费接收地址不合法。');
-      return;
-    }
-
-    try {
-      setAdminActionLoading('ecosystemFee');
-      setError('');
-      await collectEcosystemFeeOnChain(ecosystemRecipient as `0x${string}`);
-      await refreshOnChainData();
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : '提取生态手续费失败';
       setError(message);
     } finally {
       setAdminActionLoading('');
@@ -2398,8 +2317,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     });
   };
 
-  const priceSuperPerUsdt = swapStats ? Number(formatUnits(swapStats.priceSuperPerUsdt, 18)) : 0;
-  const priceUsdtPerSuper = priceSuperPerUsdt > 0 ? 1 / priceSuperPerUsdt : 0;
 
   const customerInsights = useMemo<CustomerRecommendation[]>(() => {
     const now = Date.now();
@@ -2861,7 +2778,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 <div className="text-sm font-semibold text-slate-200 mb-3">管理规则</div>
                 <div className="space-y-3 text-xs text-slate-400 leading-6">
                   <p>所有链上管理员与 owner 拥有同等业务管理权限。</p>
-                  <p>管理员增删会同步写入 MiningPool、SUPER、SwapRouter 三份核心合约。</p>
+                  <p>管理员增删会同步写入 MiningPool、SUPER 两份核心合约。</p>
                   <p>Owner 作为永久管理员保留，不能从管理员列表移除。</p>
                 </div>
               </div>
@@ -4215,7 +4132,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
             )}
 
             {section === 'tokens' && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 gap-6 mb-6">
               <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4">
                 <div className="text-sm font-semibold text-blue-200 mb-3">SUPER 代币管理</div>
                 <div className="grid grid-cols-2 gap-3 text-xs mb-4">
@@ -4230,10 +4147,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
                     <div className="text-slate-400">可增发余额</div>
                     <div className="text-slate-100 mt-1">{superStats ? formatTokenAmount(superStats.remainingSupply) : '--'}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="text-slate-400">Swap 池内 SUPER</div>
-                    <div className="text-slate-100 mt-1">{superStats ? formatTokenAmount(superStats.routerBalance) : '--'}</div>
                   </div>
                 </div>
 
@@ -4289,94 +4202,6 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div className="text-sm font-semibold text-emerald-200 mb-3">Swap 资金池与兑换比例管理</div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="text-slate-400">池内 SUPER</div>
-                    <div className="text-slate-100 mt-1">{swapStats ? formatTokenAmount(swapStats.reserveSuper) : '--'}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="text-slate-400">池内 USDT</div>
-                    <div className="text-slate-100 mt-1">{swapStats ? formatUsdtAmount(swapStats.reserveUsdt) : '--'}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="text-slate-400">1 USDT 约等于</div>
-                    <div className="text-slate-100 mt-1">{priceSuperPerUsdt > 0 ? `${priceSuperPerUsdt.toFixed(6)} SUPER` : '--'}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
-                    <div className="text-slate-400">1 SUPER 约等于</div>
-                    <div className="text-slate-100 mt-1">{priceUsdtPerSuper > 0 ? `${priceUsdtPerSuper.toFixed(6)} USDT` : '--'}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 col-span-2">
-                    <div className="text-slate-400">手续费分配 (LP / 平台 / 生态)</div>
-                    <div className="text-slate-100 mt-1">
-                      {swapStats
-                        ? `${swapStats.lpFeeShare.toString()}% / ${swapStats.platformFeeShare.toString()}% / ${swapStats.ecosystemFeeShare.toString()}%`
-                        : '--'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                  <input
-                    value={liquiditySuper}
-                    onChange={(event) => setLiquiditySuper(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="注入 SUPER"
-                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                  />
-                  <input
-                    value={liquidityUsdt}
-                    onChange={(event) => setLiquidityUsdt(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="注入 USDT"
-                    className="h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-3 mb-3">
-                  <button
-                    onClick={handleManageLiquidity}
-                    disabled={adminActionLoading === 'liquidity' || !swapRouterAddress || !superAddress}
-                    className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium text-slate-950"
-                  >
-                    {adminActionLoading === 'liquidity'
-                      ? '提交中...'
-                      : swapStats && swapStats.reserveSuper === 0n && swapStats.reserveUsdt === 0n
-                        ? '初始化资金池'
-                        : '注入流动性（影响兑换比例）'}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <button
-                    onClick={handleCollectPlatformFee}
-                    disabled={adminActionLoading === 'platformFee' || !swapRouterAddress}
-                    className="bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700"
-                  >
-                    {adminActionLoading === 'platformFee' ? '提取中...' : '提取平台手续费'}
-                  </button>
-                  <div className="flex gap-2">
-                    <input
-                      value={ecosystemRecipient}
-                      onChange={(event) => setEcosystemRecipient(event.target.value)}
-                      placeholder="生态手续费接收地址"
-                      className="h-10 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-emerald-400"
-                    />
-                    <button
-                      onClick={handleCollectEcosystemFee}
-                      disabled={adminActionLoading === 'ecosystemFee' || !swapRouterAddress}
-                      className="bg-slate-800 hover:bg-slate-700 disabled:opacity-60 px-3 py-2 rounded-lg text-sm font-medium border border-slate-700"
-                    >
-                      {adminActionLoading === 'ecosystemFee' ? '处理中...' : '提取生态费'}
-                    </button>
-                  </div>
-                </div>
-
-                {!swapRouterAddress && <div className="mt-3 text-xs text-amber-200">缺少 VITE_SWAP_ROUTER_ADDRESS，暂不可管理。</div>}
-              </div>
             </div>
             )}
 
@@ -4469,7 +4294,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-white">交易记录</h3>
-                  <p className="text-xs text-slate-400 mt-1">充值（Gas 购买）、提现（SUPER→USDT）、兑换（链上 Swap）</p>
+                  <p className="text-xs text-slate-400 mt-1">充值（Gas 购买）、提现（SUPER→USDT）、兑换（后台流程）</p>
                 </div>
                 <button
                   type="button"
@@ -4681,7 +4506,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
 
               {/* Exchange */}
               <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
-                <div className="text-sm font-semibold text-cyan-200 mb-3">兑换记录 · 链上 Swap（{exchangeRecords.length}）</div>
+                <div className="text-sm font-semibold text-cyan-200 mb-3">兑换记录 · 后台流程（{exchangeRecords.length}）</div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-xs text-left">
                     <thead className="text-slate-400">
@@ -4858,8 +4683,8 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
               </h3>
               <p className="text-slate-400 text-sm mb-4">
                 {locale === 'zh'
-                  ? 'Coin Planet 是一套「挖矿+代币+Swap」一体化运营平台，核心链路如下：'
-                  : 'Coin Planet is an integrated mining + token + swap operating platform. The core flow is:'}
+                  ? 'Coin Planet 是一套「挖矿+代币+后台兑换」一体化运营平台，核心链路如下：'
+                  : 'Coin Planet is an integrated mining + token + exchange workflow operating platform. The core flow is:'}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
@@ -4867,15 +4692,15 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                     icon: '📱',
                     title: locale === 'zh' ? '用户侧 APP' : 'User App',
                     items: locale === 'zh'
-                      ? ['用户在 APP 完成实名 / 钱包绑定', '注册矿机并提交链上 hashrate', '按在线时长自动累计 USDT/SUPER 收益', '每日可领取（Claim）或兑换（Swap）']
-                      : ['User completes KYC / wallet binding in app', 'Registers miner & submits on-chain hashrate', 'Earnings accrue by online duration (USDT/SUPER)', 'Daily claim or swap rewards'],
+                      ? ['用户在 APP 完成实名 / 钱包绑定', '注册矿机并提交链上 hashrate', '按在线时长自动累计 USDT/SUPER 收益', '每日可领取（Claim）或提交兑换申请']
+                      : ['User completes KYC / wallet binding in app', 'Registers miner & submits on-chain hashrate', 'Earnings accrue by online duration (USDT/SUPER)', 'Daily claim or exchange request'],
                   },
                   {
                     icon: '⛓️',
                     title: locale === 'zh' ? '链上合约' : 'Smart Contracts',
                     items: locale === 'zh'
-                      ? ['MiningPool：矿机注册 / 收益分发 / 领取', 'SUPER ERC-20：收益代币增发与授权', 'SwapRouter：USDT ↔ SUPER 内盘兑换', '链上数据所有人为 owner 钱包控制']
-                      : ['MiningPool: registration / reward distribution / claim', 'SUPER ERC-20: mint & approve', 'SwapRouter: USDT ↔ SUPER swap', 'Owner wallet controls all on-chain data'],
+                      ? ['MiningPool：矿机注册 / 收益分发 / 领取', 'SUPER ERC-20：收益代币增发与授权', '链上数据所有人为 owner 钱包控制']
+                      : ['MiningPool: registration / reward distribution / claim', 'SUPER ERC-20: mint & approve', 'Owner wallet controls all on-chain data'],
                   },
                   {
                     icon: '🖥️',
@@ -4912,7 +4737,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   { section: '概览', icon: '📊', desc: '展示链上 KPI（矿工数、算力、已发 SUPER）和当前钱包矿工状态。数据来自链上合约，每 15 秒自动刷新。' },
                   { section: 'Owner 控制台', icon: '🔑', desc: '包含链上安全操作：转账、费率调整、出款审核等，均需 owner 钱包签名。' },
                   { section: '链上数据', icon: '⛓️', desc: '链上全局数据与当前 owner 矿工的注册/算力/待领取收益明细。' },
-                  { section: '代币 & Swap', icon: '🪙', desc: 'SUPER 代币增发（mint），Swap 资金池初始化与流动性管理，平台手续费 / 生态费收取。' },
+                  { section: '代币管理', icon: '🪙', desc: 'SUPER 代币增发（mint）与挖矿抵押门槛配置。' },
                   { section: '设备充值', icon: '⛽', desc: '向指定用户钱包转入测试 Gas（BNB）或 SUPER 代币，用于用户 Gas 费补贴。' },
                   { section: '客户列表', icon: '👥', desc: '查看所有用户合同状态、收益率和在线情况；支持激活、续期、批量修改收益率。' },
                   { section: '交易记录', icon: '📋', desc: '查看充值（Gas 购买）、提现（SUPER→USDT）、兑换记录；支持批准和完成操作。' },
@@ -4922,7 +4747,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                   { section: 'Overview', icon: '📊', desc: 'On-chain KPIs (miner count, hashrate, SUPER emitted) and current owner miner status. Auto-refreshes every 15s.' },
                   { section: 'Owner Console', icon: '🔑', desc: 'Secure on-chain operations: transfers, fee adjustments, payout review — all require owner wallet signature.' },
                   { section: 'On-chain', icon: '⛓️', desc: 'Global on-chain stats and current owner miner registration / hashrate / pending reward.' },
-                  { section: 'Tokens & Swap', icon: '🪙', desc: 'SUPER mint, swap pool initialization & liquidity management, platform and ecosystem fee collection.' },
+                  { section: 'Tokens', icon: '🪙', desc: 'SUPER minting and mining stake threshold configuration.' },
                   { section: 'Device Funding', icon: '⛽', desc: 'Transfer test gas (BNB) or SUPER tokens to specified user wallets as gas subsidies.' },
                   { section: 'Customers', icon: '👥', desc: 'View all user contract status, yield rates and online status; support activation, extension, bulk rate changes.' },
                   { section: 'Transactions', icon: '📋', desc: 'View recharge (gas purchase), withdrawal (SUPER→USDT) and exchange records; support approve and complete.' },
@@ -4968,7 +4793,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       { name: 'contractTermDaysDefault', default: '1095', desc: '新用户激活时默认的合同期限（天），1095 ≈ 3 年。' },
                       { name: 'maintenanceEnabled', default: 'false', desc: '维护模式开关，开启后 APP 用户会看到维护提示，所有业务操作暂停。' },
                       { name: 'maintenanceMessageZh/En', default: '系统维护中', desc: '维护模式下展示给用户的中英文提示语。' },
-                      { name: 'exchangeAutoEnabled', default: 'true', desc: '自动兑换开关（预留），当前控制 APP 内 Swap 功能是否对用户可见。' },
+                      { name: 'exchangeAutoEnabled', default: 'true', desc: '自动兑换开关（预留），当前控制 APP 内兑换功能是否对用户可见。' },
                       { name: 'payoutWallets', default: '[]', desc: '出款钱包列表，用于 SUPER→USDT 提现的目标钱包，priority 越小优先级越高。' },
                       { name: 'userAgreementRequired', default: 'false', desc: '用户协议强制阅读开关，开启后新用户首次进入 APP 必须同意协议。' },
                       { name: 'userAgreementVersion', default: '1.0.0', desc: '协议版本号，更新版本号后所有用户会被要求重新阅读并同意。' },
@@ -4979,7 +4804,7 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
                       { name: 'contractTermDaysDefault', default: '1095', desc: 'Default contract duration in days for new users (1095 ≈ 3 years).' },
                       { name: 'maintenanceEnabled', default: 'false', desc: 'Maintenance mode toggle. When on, app users see a maintenance notice and all operations are paused.' },
                       { name: 'maintenanceMessageZh/En', default: 'System maintenance', desc: 'Localized maintenance message shown to users in Chinese and English.' },
-                      { name: 'exchangeAutoEnabled', default: 'true', desc: 'Auto-exchange toggle (reserved). Controls whether the Swap feature is visible to users in the app.' },
+                      { name: 'exchangeAutoEnabled', default: 'true', desc: 'Auto-exchange toggle (reserved). Controls whether exchange is visible to users in the app.' },
                       { name: 'payoutWallets', default: '[]', desc: 'Payout wallet list for SUPER→USDT withdrawals. Lower priority number = higher priority.' },
                       { name: 'userAgreementRequired', default: 'false', desc: 'Mandatory user agreement toggle. When enabled, new users must accept the agreement on first launch.' },
                       { name: 'userAgreementVersion', default: '1.0.0', desc: 'Agreement version. Bumping the version will require all users to re-read and re-accept.' },
@@ -5161,4 +4986,3 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
     </section>
   );
 }
-

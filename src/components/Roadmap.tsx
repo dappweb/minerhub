@@ -22,7 +22,7 @@ export default function Roadmap() {
       phase: '生态阶段',
       time: '第 5-12 个月',
       title: '生态建设',
-      items: ['DEX去中心化交易所上线', '治理DAO成立', '突破百万用户，实现盈亏平衡']
+      items: ['运营兑换自动化上线', '治理DAO成立', '突破百万用户，实现盈亏平衡']
     }
   ];
 
