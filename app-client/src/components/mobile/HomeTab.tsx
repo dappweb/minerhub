@@ -14,9 +14,11 @@ export interface HomeTabProps {
   identityReady: boolean;
   isBusy: boolean;
   contractExpired: boolean;
+  rewardAccrualReady: boolean;
+  rewardBlockText: string;
   totalOnlineMinutes: number;
   monthProgressMinutes: number;
-  estimatedRewardUsdtPerDay: number;
+  estimatedRewardSuperPerDay: number;
   lang: Lang;
   guideCtaLabel: string;
   guideDescription: string;
@@ -67,9 +69,11 @@ export default function HomeTab({
   identityReady,
   isBusy,
   contractExpired,
+  rewardAccrualReady,
+  rewardBlockText,
   totalOnlineMinutes,
   monthProgressMinutes,
-  estimatedRewardUsdtPerDay,
+  estimatedRewardSuperPerDay,
   lang,
   guideCtaLabel,
   guideDescription,
@@ -89,6 +93,8 @@ export default function HomeTab({
     ? (lang === 'zh' ? '待完成身份同步' : 'Identity sync required')
     : contractExpired
       ? (lang === 'zh' ? '合同已到期，待续期' : 'Contract expired')
+      : !rewardAccrualReady
+        ? (lang === 'zh' ? '自检未通过，收益暂停' : 'Self-check incomplete, rewards paused')
       : onlineState === (lang === 'zh' ? '在线' : 'Online')
         ? (lang === 'zh' ? '设备在线，正在累计收益' : 'Device online and earning')
         : (lang === 'zh' ? '设备待激活或暂时离线' : 'Device inactive or offline');
@@ -96,6 +102,8 @@ export default function HomeTab({
     ? guideDescription
     : contractExpired
       ? (lang === 'zh' ? '续期后即可恢复收益累计与兑换操作。' : 'Renew to restore rewards and exchanges.')
+      : !rewardAccrualReady
+        ? (rewardBlockText || (lang === 'zh' ? '请先完成自检中的待处理项，通过后再开始累计收益。' : 'Complete the pending self-check items before rewards accrue.'))
       : onlineState === (lang === 'zh' ? '在线' : 'Online')
         ? (lang === 'zh' ? '保持手机在线，收益会按在线时长累计。' : 'Keep the device online to continue accruing rewards.')
         : (lang === 'zh' ? '完成激活并保持设备在线，今日收益会开始增长。' : 'Activate and keep the device online to grow today\'s rewards.');
@@ -105,7 +113,7 @@ export default function HomeTab({
       <View style={styles.stageCard}>
         <View style={s.rowBetween}>
           <Text style={styles.stageLabel}>{lang === 'zh' ? '当前状态' : 'Current status'}</Text>
-          <View style={[styles.dotPill, identityReady && !contractExpired ? styles.dotOnline : styles.dotOffline]}>
+          <View style={[styles.dotPill, identityReady && !contractExpired && rewardAccrualReady ? styles.dotOnline : styles.dotOffline]}>
             <Text style={styles.dotPillText}>{onlineState}</Text>
           </View>
         </View>
@@ -113,7 +121,7 @@ export default function HomeTab({
         <Text style={styles.stageHint}>{stageHint}</Text>
         <View style={s.rowBetween}>
           <View style={styles.stageMetric}>
-            <Text style={styles.stageMetricValue}>{estimatedRewardUsdtPerDay.toFixed(3)} USDT</Text>
+            <Text style={styles.stageMetricValue}>{estimatedRewardSuperPerDay.toFixed(3)} super</Text>
             <Text style={styles.stageMetricLabel}>{lang === 'zh' ? '今日预计收益' : 'Estimated today'}</Text>
           </View>
           <View style={styles.stageMetric}>
@@ -197,7 +205,7 @@ export default function HomeTab({
             </View>
             <View style={styles.balanceRow}>
               <Text style={styles.balanceLabel}>SUPER</Text>
-              <Text style={styles.balanceValue}>{superBalance}</Text>
+              <Text style={styles.balanceValue}>{superBalance} super</Text>
             </View>
             <View style={styles.balanceRow}>
               <Text style={styles.balanceLabel}>USDT</Text>

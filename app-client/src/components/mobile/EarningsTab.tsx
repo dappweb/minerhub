@@ -6,15 +6,17 @@ export interface EarningsTabProps {
   marketTrend: string;
   marketRisk: string;
   marketHint: string;
-  configuredRewardRateUsdtPerHour: number;
-  effectiveRewardRateUsdtPerHour: number;
-  estimatedRewardUsdtPerDay: number;
-  totalRewardUsdt: number;
+  configuredRewardRateSuperPerHour: number;
+  effectiveRewardRateSuperPerHour: number;
+  estimatedRewardSuperPerDay: number;
   totalRewardSuper: number;
-  todayRewardUsdt: number;
-  yesterdayRewardUsdt: number;
-  claimableRewardUsdt: number;
-  rewardTokenSymbol: string;
+  todayRewardSuper: number;
+  yesterdayRewardSuper: number;
+  claimableRewardSuper: number;
+  chainClaimableSuper: string;
+  chainTotalClaimedSuper: string;
+  superBalance: string;
+  convertibleSuper: string;
   lockCycleDays: number;
   lockRemainingDays: number | null;
   lockStatusText: string;
@@ -22,10 +24,12 @@ export interface EarningsTabProps {
   monthProgressMinutes: number;
   isBusy: boolean;
   identityReady: boolean;
+  rewardAccrualReady: boolean;
+  rewardBlockText: string;
   chartValues: number[];
   chartMax: number;
   recentRewards: Array<{
-    rewardUsdt: number;
+    rewardSuper: number;
     source: string;
     createdAt: string;
   }>;
@@ -60,15 +64,17 @@ export default function EarningsTab({
   marketTrend,
   marketRisk,
   marketHint,
-  configuredRewardRateUsdtPerHour,
-  effectiveRewardRateUsdtPerHour,
-  estimatedRewardUsdtPerDay,
-  totalRewardUsdt,
+  configuredRewardRateSuperPerHour,
+  effectiveRewardRateSuperPerHour,
+  estimatedRewardSuperPerDay,
   totalRewardSuper,
-  todayRewardUsdt,
-  yesterdayRewardUsdt,
-  claimableRewardUsdt,
-  rewardTokenSymbol,
+  todayRewardSuper,
+  yesterdayRewardSuper,
+  claimableRewardSuper,
+  chainClaimableSuper,
+  chainTotalClaimedSuper,
+  superBalance,
+  convertibleSuper,
   lockCycleDays,
   lockRemainingDays,
   lockStatusText,
@@ -76,6 +82,8 @@ export default function EarningsTab({
   monthProgressMinutes,
   isBusy,
   identityReady,
+  rewardAccrualReady,
+  rewardBlockText,
   chartValues,
   chartMax,
   recentRewards,
@@ -84,7 +92,14 @@ export default function EarningsTab({
 }: EarningsTabProps) {
   const isZh = t.claimReward !== 'Claim Reward';
   const onlineHoursToday = Math.min(24, monthProgressMinutes % 1440 / 60);
-  const missedRewardUsdt = Math.max(0, estimatedRewardUsdtPerDay - todayRewardUsdt);
+  const missedRewardSuper = Math.max(0, estimatedRewardSuperPerDay - todayRewardSuper);
+  const rewardUnit = 'super';
+  const formatSuper = (value: string | number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return '0.0000';
+    return parsed.toLocaleString(isZh ? 'zh-CN' : 'en-US', { maximumFractionDigits: 4 });
+  };
+  const hasChainClaimable = Number(chainClaimableSuper) > 0;
   const formatDuration = (minutes: number) => {
     const days = Math.floor(minutes / 1440);
     const hours = Math.floor((minutes % 1440) / 60);
@@ -96,23 +111,47 @@ export default function EarningsTab({
     <>
       <View style={s.actionCard}>
         <Text style={styles.heroLabel}>{isZh ? '收益总览' : 'Reward overview'}</Text>
-        <Text style={styles.heroValue}>{Number.isFinite(claimableRewardUsdt) ? claimableRewardUsdt.toFixed(3) : '0.000'} USDT</Text>
+        <Text style={styles.heroValue}>{formatSuper(chainClaimableSuper)} {rewardUnit}</Text>
         <Text style={styles.heroHint}>
-          {isZh
-            ? `当前可领取，今日已累计 ${todayRewardUsdt.toFixed(3)} USDT。`
-            : `Available to claim now, with ${todayRewardUsdt.toFixed(3)} USDT earned today.`}
+          {hasChainClaimable
+            ? (isZh ? '链上 MiningPool 当前可领取 SUPER 收益。' : 'Claimable SUPER is read directly from MiningPool.')
+            : !rewardAccrualReady
+            ? (rewardBlockText || (isZh ? '自检未通过，收益暂停累计。' : 'Self-check is incomplete; reward accrual is paused.'))
+            : isZh
+            ? `当前可领取，今日已累计 ${todayRewardSuper.toFixed(3)} ${rewardUnit}。`
+            : `Available to claim now, with ${todayRewardSuper.toFixed(3)} ${rewardUnit} earned today.`}
         </Text>
+        <View style={styles.statusGrid}>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>{isZh ? '链上可领取' : 'On-chain claimable'}</Text>
+            <Text style={styles.statusValue}>{formatSuper(chainClaimableSuper)} {rewardUnit}</Text>
+          </View>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>{isZh ? '累计领取' : 'Total claimed'}</Text>
+            <Text style={styles.statusValue}>{formatSuper(chainTotalClaimedSuper)} {rewardUnit}</Text>
+          </View>
+        </View>
+        <View style={styles.statusGrid}>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>{isZh ? '余额' : 'Balance'}</Text>
+            <Text style={styles.statusValue}>{formatSuper(superBalance)} {rewardUnit}</Text>
+          </View>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>{isZh ? '可兑换余额' : 'Exchangeable balance'}</Text>
+            <Text style={styles.statusValue}>{formatSuper(convertibleSuper)} {rewardUnit}</Text>
+          </View>
+        </View>
         <View style={styles.heroMetaRow}>
           <View style={styles.heroMetaItem}>
             <Text style={styles.heroMetaLabel}>{t.totalRewardLabel}</Text>
-            <Text style={styles.heroMetaValue}>{Number.isFinite(totalRewardUsdt) ? totalRewardUsdt.toFixed(3) : '0.000'} USDT</Text>
+            <Text style={styles.heroMetaValue}>{Number.isFinite(totalRewardSuper) ? totalRewardSuper.toFixed(3) : '0.000'} {rewardUnit}</Text>
           </View>
           <View style={styles.heroMetaItem}>
             <Text style={styles.heroMetaLabel}>{t.estimatedDailyRewardLabel}</Text>
-            <Text style={styles.heroMetaValue}>{Number.isFinite(estimatedRewardUsdtPerDay) ? estimatedRewardUsdtPerDay.toFixed(3) : '0.000'} USDT</Text>
+            <Text style={styles.heroMetaValue}>{Number.isFinite(estimatedRewardSuperPerDay) ? estimatedRewardSuperPerDay.toFixed(3) : '0.000'} {rewardUnit}</Text>
           </View>
         </View>
-        <TouchableOpacity style={[styles.claimBtn, (isBusy || !identityReady) && s.disabledBtn]} onPress={claimReward} disabled={isBusy || !identityReady}>
+        <TouchableOpacity style={[styles.claimBtn, (isBusy || !identityReady || (!rewardAccrualReady && !hasChainClaimable)) && s.disabledBtn]} onPress={claimReward} disabled={isBusy || !identityReady || (!rewardAccrualReady && !hasChainClaimable)}>
           <Text style={styles.claimBtnText}>{t.claimReward}</Text>
         </TouchableOpacity>
       </View>
@@ -125,13 +164,13 @@ export default function EarningsTab({
             <Text style={s.metricLabel}>{isZh ? '今日在线时长估算' : 'Estimated online today'}</Text>
           </View>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{Math.max(0, todayRewardUsdt - yesterdayRewardUsdt).toFixed(3)} USDT</Text>
+            <Text style={s.metricValue}>{Math.max(0, todayRewardSuper - yesterdayRewardSuper).toFixed(3)} {rewardUnit}</Text>
             <Text style={s.metricLabel}>{isZh ? '较昨日新增' : 'Increase vs yesterday'}</Text>
           </View>
         </View>
         <View style={s.metricsRow}>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{missedRewardUsdt.toFixed(3)} USDT</Text>
+            <Text style={s.metricValue}>{missedRewardSuper.toFixed(3)} {rewardUnit}</Text>
             <Text style={s.metricLabel}>{isZh ? '离线少赚估算' : 'Estimated missed reward'}</Text>
           </View>
           <View style={s.metricCard}>
@@ -142,6 +181,9 @@ export default function EarningsTab({
         <View style={styles.explainCard}>
           <Text style={styles.explainLine}>
             {isZh ? `设备累计在线 ${formatDuration(totalOnlineMinutes)}。` : `Device total online time: ${formatDuration(totalOnlineMinutes)}.`}
+          </Text>
+          <Text style={styles.explainLine}>
+            {isZh ? `后台预计可领取 ${claimableRewardSuper.toFixed(3)} ${rewardUnit}。` : `Backend estimated claimable: ${claimableRewardSuper.toFixed(3)} ${rewardUnit}.`}
           </Text>
           <Text style={styles.explainLine}>
             {isZh ? `${marketTrend} / ${marketRisk}，${marketHint}` : `${marketTrend} / ${marketRisk}. ${marketHint}`}
@@ -156,18 +198,18 @@ export default function EarningsTab({
         <Text style={s.sectionTitle}>{t.yieldRateTitle}</Text>
         <View style={s.metricsRow}>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{Number.isFinite(configuredRewardRateUsdtPerHour) ? configuredRewardRateUsdtPerHour.toFixed(3) : '0.000'} USDT/h</Text>
+            <Text style={s.metricValue}>{Number.isFinite(configuredRewardRateSuperPerHour) ? configuredRewardRateSuperPerHour.toFixed(3) : '0.000'} {rewardUnit}/h</Text>
             <Text style={s.metricLabel}>{t.configuredYieldRateLabel}</Text>
           </View>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{Number.isFinite(effectiveRewardRateUsdtPerHour) ? effectiveRewardRateUsdtPerHour.toFixed(3) : '0.000'} USDT/h</Text>
+            <Text style={s.metricValue}>{Number.isFinite(effectiveRewardRateSuperPerHour) ? effectiveRewardRateSuperPerHour.toFixed(3) : '0.000'} {rewardUnit}/h</Text>
             <Text style={s.metricLabel}>{t.effectiveYieldRateLabel}</Text>
           </View>
         </View>
         <View style={s.metricsRow}>
           <View style={s.metricCard}>
-            <Text style={s.metricValue}>{Number.isFinite(totalRewardSuper) ? totalRewardSuper.toFixed(3) : '0.000'} {rewardTokenSymbol}</Text>
-            <Text style={s.metricLabel}>{t.quote}</Text>
+            <Text style={s.metricValue}>{Number.isFinite(totalRewardSuper) ? totalRewardSuper.toFixed(3) : '0.000'} {rewardUnit}</Text>
+            <Text style={s.metricLabel}>{t.totalRewardLabel}</Text>
           </View>
           <View style={s.metricCard}>
             <Text style={s.metricValue}>{lockCycleDays} {lockCycleDays > 1 ? 'days' : 'day'}</Text>
@@ -206,7 +248,7 @@ export default function EarningsTab({
           recentRewards.map((item, index) => (
             <View key={`${item.createdAt}-${index}`} style={styles.recentItem}>
               <View style={styles.recentItemTop}>
-                <Text style={styles.recentItemValue}>+{item.rewardUsdt.toFixed(3)} USDT</Text>
+                <Text style={styles.recentItemValue}>+{item.rewardSuper.toFixed(3)} {rewardUnit}</Text>
                 <Text style={styles.recentItemTime}>
                   {new Date(item.createdAt).toLocaleString(isZh ? 'zh-CN' : 'en-US')}
                 </Text>

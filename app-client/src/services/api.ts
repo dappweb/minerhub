@@ -211,7 +211,16 @@ async function signedRequest<T>(
 }
 
 export type UserDto = { id: string; wallet: string; email?: string | null };
-export type DeviceDto = { id: string; userId: string; deviceId: string; hashrate: number; status: string };
+export type DeviceDto = {
+  id: string;
+  userId: string;
+  deviceId: string;
+  hashrate: number;
+  status: string;
+  oracleTxHash?: string;
+  oracleDeviceIdHash?: string;
+  oracleSkippedReason?: string;
+};
 export type GasPayToken = 'SUPER' | 'USDT';
 
 export type GasQuoteDto = {
@@ -367,8 +376,10 @@ export type ReferralSummaryDto = {
   wallet: string;
   directCount: number;
   directAmountUsdt: string;
+  directAmountSuper?: string;
   teamCount: number;
   teamAmountUsdt: string;
+  teamAmountSuper?: string;
 };
 
 export type ReferralMemberDto = {
@@ -377,6 +388,7 @@ export type ReferralMemberDto = {
   nickname: string | null;
   level: number;
   totalRewardUsdt: string;
+  totalRewardSuper?: string;
   contractActive: number;
   createdAt: string;
 };
@@ -423,22 +435,31 @@ export function isExchangeOrderPendingStatus(status: string): boolean {
 
 export type BindReferralResultDto = {
   ok: boolean;
-  inviterUserId: string;
+  onChain?: boolean;
+  bound?: boolean;
+  referralTxHash?: string | null;
+  inviterUserId?: string;
   inviteeUserId: string;
-  inviterSummary: ReferralSummaryDto;
+  inviterSummary?: ReferralSummaryDto;
 };
 
-export async function createUser(wallet: string, referralWallet?: string): Promise<UserDto> {
+export async function createUser(wallet: string): Promise<UserDto> {
   return signedRequest<UserDto>("/api/users", "POST", {
     wallet,
-    ...(referralWallet ? { referralWallet } : {}),
   });
 }
 
-export async function bindReferral(wallet: string, referralWallet: string): Promise<BindReferralResultDto> {
+export async function bindReferral(wallet: string, referralWallet: string, referralTxHash?: string | null): Promise<BindReferralResultDto> {
   return signedRequest<BindReferralResultDto>('/api/referrals/bind', 'POST', {
     wallet,
     referralWallet,
+    ...(referralTxHash ? { referralTxHash } : {}),
+  });
+}
+
+export async function syncReferralFromChain(wallet: string): Promise<BindReferralResultDto> {
+  return signedRequest<BindReferralResultDto>('/api/referrals/sync', 'POST', {
+    wallet,
   });
 }
 
@@ -499,7 +520,19 @@ export async function registerDevice(payload: {
 }
 
 export async function createClaim(payload: { userId: string; amount: string; wallet?: string }) {
-  return signedRequest<{ id: string; status: string }>("/api/claims", "POST", payload);
+  return signedRequest<{
+    ok: boolean;
+    id: string;
+    amountSuper: string;
+    txHash: string;
+    status: string;
+    totalRewardSuper: string;
+    oracleTxHash?: string;
+  }>("/api/claims/reward-withdraw", "POST", {
+    userId: payload.userId,
+    wallet: payload.wallet,
+    amountSuper: payload.amount,
+  });
 }
 
 export async function createExchangeRequest(payload: {

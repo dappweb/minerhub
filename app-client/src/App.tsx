@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     AppState,
@@ -30,8 +30,8 @@ import {
     acceptContractAgreement,
     acceptUserAgreement,
     bindReferral,
-    createExchangeRequest,
     createUser,
+    getAppDownloadInfo,
     getAnnouncements,
     getExchangeRequests,
     getGasWalletBalance,
@@ -43,32 +43,37 @@ import {
     getUserDetails,
     isExchangeOrderPendingStatus,
     markAnnouncementRead as markAnnouncementReadApi,
+    pingApiHealth,
     registerDevice,
     reportDeviceHeartbeat,
+    syncReferralFromChain,
     type AnnouncementDto,
     type ExchangeRequestDto,
     type ReferralMemberDto,
     type ReferralSummaryDto
 } from './services/api';
 import {
+    bindReferralOnChain,
     claimRewardOnChain,
     getMiningStakeRequirement,
+    getOnChainRewardSummary,
     getWalletAddress,
     getWalletBalances,
-    registerMinerOnChain,
+    isMinerRegisteredOnChain,
     sendNativeTokenOnChain,
-    sendSuperToAddressOnChain,
     stakeSuperOnChain,
+    swapSuperForUsdtOnChain,
     unstakeSuperOnChain,
 } from './services/blockchain';
 import { manualCheckForUpdateFull, useAutoUpdate } from './services/updates';
+import { LOW_BNB_THRESHOLD, buildSelfCheckReport, type SelfCheckReport } from './services/selfCheck';
 import {
     exportWalletPrivateKey,
     importWalletPrivateKey
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.8';
 
 type Lang = 'en' | 'zh';
 
@@ -111,7 +116,7 @@ const translations = {
     totalOnline: 'Total Online Time',
     monthOnline: 'Current Month Online',
     earningsChart: 'Earnings Trend',
-    chartYAxis: 'USDT',
+    chartYAxis: 'super',
     ruleHint: 'Rewards accrue by online duration and settle according to backend policy.',
     maintenanceTitle: 'Maintenance Mode',
     maintenanceBody: 'System maintenance in progress. Please try again later.',
@@ -233,7 +238,7 @@ const translations = {
     claimFail: 'Claim failed: ',
     invalidSwapAmount: 'Please enter a valid SUPER amount',
     swapDoing: 'Submitting exchange request...',
-    swapSuccess: 'Exchange request submitted: ',
+    swapSuccess: 'Exchange completed: ',
     swapFail: 'Exchange request failed: ',
     invalidAddress: 'Please enter a valid destination address',
     invalidAmount: 'Please enter a valid transfer amount',
@@ -307,15 +312,25 @@ const translations = {
     checkUpdateButton: 'Check for Updates',
     checkUpdateHint: 'Fetches the latest features and fixes without reinstalling.',
     appVersionLabel: 'Current Version',
+    selfCheckTitle: 'App Self-check',
+    selfCheckButton: 'Run Self-check',
+    selfCheckRunning: 'Checking...',
+    selfCheckHint: 'Checks service connection, identity, admin activation, heartbeat, stake, gas, and version.',
+    selfCheckScore: 'Score',
+    selfCheckLastAt: 'Last checked',
+    selfCheckOk: 'Normal',
+    selfCheckWarn: 'Needs attention',
+    selfCheckFail: 'Action required',
+    selfCheckAligned: 'Admin aligned',
     inviterTitle: 'My Inviter',
     inviterWallet: 'Inviter Wallet',
     inviterEmpty: 'No inviter bound yet',
     bindInviterButton: 'Bind Inviter',
     referralTitle: 'Referral Summary',
     referralDirectCount: 'Direct Accounts',
-    referralDirectAmount: 'Direct Amount (USDT)',
+    referralDirectAmount: 'Direct Amount (super)',
     referralTeamCount: 'Team Accounts',
-    referralTeamAmount: 'Team Amount (USDT)',
+    referralTeamAmount: 'Team Amount (super)',
     referralMembersTitle: 'Team Members',
     referralMembersDirectTab: 'Direct',
     referralMembersTeamTab: 'Team',
@@ -349,7 +364,7 @@ const translations = {
     totalOnline: '当前设备累计时长',
     monthOnline: '当月收益累计时长',
     earningsChart: '收益数据统计',
-    chartYAxis: 'USDT',
+    chartYAxis: 'super',
     ruleHint: '收益按在线时长累计，并按后台策略实时结算。',
     maintenanceTitle: '系统维护中',
     maintenanceBody: '系统正在维护，请稍后再试。',
@@ -471,7 +486,7 @@ const translations = {
     claimFail: '领取失败：',
     invalidSwapAmount: '请输入有效的SUPER数量',
     swapDoing: '正在提交兑换申请...',
-    swapSuccess: '兑换申请已提交：',
+    swapSuccess: '兑换完成：',
     swapFail: '兑换申请失败：',
     invalidAddress: '请输入有效的目标地址',
     invalidAmount: '请输入有效转账数量',
@@ -545,15 +560,25 @@ const translations = {
     checkUpdateButton: '检查更新',
     checkUpdateHint: '无需重新安装，在线获取最新功能与修复。',
     appVersionLabel: '当前版本',
+    selfCheckTitle: 'APP 自检',
+    selfCheckButton: '开始自检',
+    selfCheckRunning: '自检中...',
+    selfCheckHint: '检查服务连接、身份、后台激活、在线心跳、抵押、Gas 和版本。',
+    selfCheckScore: '评分',
+    selfCheckLastAt: '上次自检',
+    selfCheckOk: '正常',
+    selfCheckWarn: '需关注',
+    selfCheckFail: '需处理',
+    selfCheckAligned: '已对齐 Admin',
     inviterTitle: '我的推荐人',
     inviterWallet: '推荐人钱包',
     inviterEmpty: '暂未绑定推荐人',
     bindInviterButton: '绑定推荐人',
     referralTitle: '推荐统计',
     referralDirectCount: '直推账号数',
-    referralDirectAmount: '直推金额(USDT)',
+    referralDirectAmount: '直推金额(super)',
     referralTeamCount: '团队账号数',
-    referralTeamAmount: '团队金额(USDT)',
+    referralTeamAmount: '团队金额(super)',
     referralMembersTitle: '团队成员',
     referralMembersDirectTab: '直推',
     referralMembersTeamTab: '团队',
@@ -727,6 +752,7 @@ export default function App() {
   const [transferAmount, setTransferAmount] = useState<string>('0.001');
   const [deviceId, setDeviceId] = useState<string>('');
   const [minerReady, setMinerReady] = useState<boolean>(false);
+  const [chainMinerRegistered, setChainMinerRegistered] = useState<boolean | null>(null);
   const [status, setStatus] = useState<string>('');
   const [lastTxHash, setLastTxHash] = useState<string>('');
   const [activeAction, setActiveAction] = useState<ActionType>('');
@@ -745,6 +771,19 @@ export default function App() {
   const [bnbBalance, setBnbBalance] = useState<string>('0');
   const [superBalance, setSuperBalance] = useState<string>('0');
   const [usdtBalance, setUsdtBalance] = useState<string>('0');
+  const [onChainRewardSummary, setOnChainRewardSummary] = useState<{
+    claimableSuper: string;
+    totalClaimedSuper: string;
+    oracleClaimedSuper: string;
+    superBalance: string;
+    convertibleSuper: string;
+  }>({
+    claimableSuper: '0',
+    totalClaimedSuper: '0',
+    oracleClaimedSuper: '0',
+    superBalance: '0',
+    convertibleSuper: '0',
+  });
   const [minSuperStakeForReward, setMinSuperStakeForReward] = useState<string>('0');
   const [stakedSuper, setStakedSuper] = useState<string>('0');
   const [stakeRequirementReady, setStakeRequirementReady] = useState<boolean>(false);
@@ -766,6 +805,7 @@ export default function App() {
   const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
   const [referralMembers, setReferralMembers] = useState<ReferralMemberDto[]>([]);
   const [referralMembersTotal, setReferralMembersTotal] = useState(0);
+  const [referralMembersMode, setReferralMembersMode] = useState<'direct' | 'team'>('direct');
   const [referralMembersPage, setReferralMembersPage] = useState(1);
   const [referralMembersLoading, setReferralMembersLoading] = useState(false);
   const [referralMembersError, setReferralMembersError] = useState('');
@@ -779,12 +819,16 @@ export default function App() {
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const [exchangeOrders, setExchangeOrders] = useState<ExchangeRequestDto[]>([]);
   const [exchangeOrdersLoading, setExchangeOrdersLoading] = useState(false);
+  const [selfCheckReport, setSelfCheckReport] = useState<SelfCheckReport | null>(null);
+  const [selfCheckRunning, setSelfCheckRunning] = useState(false);
+  const [selfCheckError, setSelfCheckError] = useState('');
   const [appState, setAppState] = useState(AppState.currentState);
   const swapConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementAutoShownRef = useRef(false);
   const manualRefreshInFlightRef = useRef(false);
+  const backendDeviceRepairInFlightRef = useRef(false);
 
   const t = translations[lang] as typeof translations.en;
   const isBusy = activeAction !== '';
@@ -798,15 +842,10 @@ export default function App() {
   const serverDeviceId = (typeof userDetails?.devices?.[0]?.device_id === 'string' && userDetails.devices[0].device_id.trim())
     ? userDetails.devices[0].device_id.trim()
     : rewardDeviceId || deviceId;
-  const serverHasRewardActivity = Boolean(
-    userDetails?.rewards?.length
-    || Number(userDetails?.totalRewardUsdt ?? 0) > 0
-    || Number(userDetails?.totalRewardSuper ?? 0) > 0
-  );
-  const serverHasRegisteredMiner = Boolean(
-    userDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-    || serverHasRewardActivity
-  );
+  const backendDeviceKnown = Array.isArray(userDetails?.devices);
+  const hasBackendDevice = backendDeviceKnown ? (userDetails?.devices?.length ?? 0) > 0 : true;
+  const backendDeviceMissing = backendDeviceKnown && !hasBackendDevice;
+  const minerSetupComplete = Boolean((minerReady || chainMinerRegistered === true) && hasBackendDevice);
   const effectiveDeviceId = (serverDeviceId || deviceId).trim();
   const identityReady = Boolean(walletAddress && userId && effectiveDeviceId);
   const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
@@ -881,6 +920,9 @@ export default function App() {
         const parsed = JSON.parse(normalized);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           const obj = parsed as Record<string, unknown>;
+          if (typeof obj.blockReason === 'string' && obj.blockReason.trim()) {
+            return obj.blockReason.trim();
+          }
           if (typeof obj.error === 'string' && obj.error.trim()) {
             return obj.error.trim();
           }
@@ -906,6 +948,11 @@ export default function App() {
     if (msg.includes('user rejected') || msg.includes('rejected') || msg.includes('denied')) {
       return t.errRejected;
     }
+    if (msg.includes('mining_pool_config_outdated') || msg.includes('stake must cover contract')) {
+      return lang === 'zh'
+        ? '当前 App 连接的是旧矿池合约，请更新合约地址并重新打包/更新 App 后再抵押。'
+        : 'This app is connected to an outdated mining pool contract. Update the contract addresses and rebuild/update the app before staking.';
+    }
 
     // Map well-known contract revert reasons to friendly localized text.
     const revertReasonMatch = normalized.match(/(?:Transaction reverted:|reverted with the following reason:?)\s*([^\n]+)/i);
@@ -914,6 +961,9 @@ export default function App() {
     if (reasonLower) {
       if (reasonLower.includes('claim cooldown')) return t.errClaimCooldown;
       if (reasonLower.includes('no reward')) return t.errNoReward;
+      if (reasonLower.includes('price required')) return lang === 'zh' ? '矿池兑换比例未配置，请联系管理员。' : 'MiningPool exchange ratio is not configured.';
+      if (reasonLower.includes('insufficient available usdt')) return lang === 'zh' ? '矿池 USDT 余额不足，请联系管理员补充。' : 'MiningPool USDT balance is insufficient.';
+      if (reasonLower.includes('insufficient available super')) return lang === 'zh' ? '矿池 SUPER 奖励余额不足，请联系管理员补充。' : 'MiningPool SUPER reward balance is insufficient.';
       if (reasonLower.includes('miner already registered')) return t.errAlreadyRegistered;
       if (reasonLower.includes('miner not registered')) return t.errMinerNotRegistered;
       if (reasonLower.includes('miner not active')) return t.errMinerNotActive;
@@ -927,6 +977,12 @@ export default function App() {
     }
     if (msg.includes('system is under maintenance') || msg.includes('maintenance')) {
       return t.errMaintenance;
+    }
+    if (msg.includes('minimum_super_stake_unverified')) {
+      return lang === 'zh' ? '链上 SUPER 抵押状态暂未确认，收益已暂停累计。' : 'On-chain SUPER stake could not be verified, so rewards are paused.';
+    }
+    if (msg.includes('minimum_super_stake')) {
+      return lang === 'zh' ? 'SUPER 已抵押数量必须大于最低收益门槛。' : 'Staked SUPER must be greater than the reward threshold.';
     }
     if (
       msg.includes('signature verification failed')
@@ -986,9 +1042,9 @@ export default function App() {
 
   const flowHint = useMemo(() => {
     if (!identityReady) return t.flow1;
-    if (!minerReady) return t.flow2;
+    if (!minerSetupComplete) return t.flow2;
     return t.flow3;
-  }, [identityReady, minerReady, t.flow1, t.flow2, t.flow3]);
+  }, [identityReady, minerSetupComplete, t.flow1, t.flow2, t.flow3]);
 
   const displayId = useMemo(() => {
     if (!serverUserId) return '----';
@@ -1023,6 +1079,7 @@ export default function App() {
     if (reason === 'contract_expired') return lang === 'zh' ? '当前有效期已到期，请续期' : 'Expired, renewal required';
     if (reason === 'contract_inactive') return lang === 'zh' ? '服务暂未开通，请联系管理员' : 'Service is not active';
     if (reason.startsWith('minimum_super_stake:')) return lang === 'zh' ? 'SUPER 已抵押数量必须大于最低收益门槛。' : 'Staked SUPER must be greater than the reward threshold.';
+    if (reason === 'minimum_super_stake_unverified') return lang === 'zh' ? '链上 SUPER 抵押状态暂未确认，收益已暂停累计。' : 'On-chain SUPER stake could not be verified, so rewards are paused.';
     return reason;
   }, [lang, userDetails?.blockReason]);
 
@@ -1038,6 +1095,7 @@ export default function App() {
   const swapInputNumber = Number(swapAmount);
   const hasValidSwapInput = Number.isFinite(swapInputNumber) && swapInputNumber > 0;
   const isSwapPriceReady = Boolean(swapPriceValue && swapPriceValue > 0);
+  const availableSwapSuper = parseFiniteNumber(onChainRewardSummary.convertibleSuper || superBalance);
 
   const estimatedUsdt = useMemo(() => {
     if (!hasValidSwapInput || !swapPriceValue || swapPriceValue <= 0) {
@@ -1059,11 +1117,14 @@ export default function App() {
   const swapBlockedReason = useMemo(() => {
     if (!identityReady) return t.identityNotReady;
     if (!hasValidSwapInput) return t.invalidSwapAmount;
+    if (availableSwapSuper < swapInputNumber) {
+      return lang === 'zh' ? 'super 余额不足，可兑换数量不能超过钱包 super 余额。' : 'Insufficient super balance. Exchange amount cannot exceed wallet super balance.';
+    }
     if (!isSwapPriceReady || estimatedUsdt <= 0) return t.swapBlockedNoPrice;
     return '';
-  }, [estimatedUsdt, hasValidSwapInput, identityReady, isSwapPriceReady, t.identityNotReady, t.invalidSwapAmount, t.swapBlockedNoPrice]);
+  }, [availableSwapSuper, estimatedUsdt, hasValidSwapInput, identityReady, isSwapPriceReady, lang, swapInputNumber, t.identityNotReady, t.invalidSwapAmount, t.swapBlockedNoPrice]);
 
-  const swapSubmitDisabled = isBusy || !identityReady || !hasValidSwapInput || !isSwapPriceReady || estimatedUsdt <= 0;
+  const swapSubmitDisabled = isBusy || !identityReady || !hasValidSwapInput || !isSwapPriceReady || estimatedUsdt <= 0 || availableSwapSuper < swapInputNumber;
 
   const swapPriceText = useMemo(() => {
     if (!swapPriceValue || swapPriceValue <= 0) {
@@ -1085,6 +1146,7 @@ export default function App() {
   const rewardRows = useMemo(() => {
     return (userDetails?.rewards ?? []).map((item) => ({
       rewardUsdt: parseFiniteNumber(item.reward_usdt),
+      rewardSuper: parseFiniteNumber(item.reward_super),
       rateUsdtPerHour: parseFiniteNumber(item.rate_usdt_per_hour),
       source: item.source,
       createdAt: item.created_at,
@@ -1096,7 +1158,7 @@ export default function App() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 3)
         .map((item) => ({
-          rewardUsdt: item.rewardUsdt,
+          rewardSuper: item.rewardSuper,
           source: item.source,
           createdAt: item.createdAt,
         })),
@@ -1162,7 +1224,7 @@ export default function App() {
       if (Number.isNaN(date.getTime())) return;
       const bucketIndex = dayIndexMap.get(toDateKey(date));
       if (bucketIndex === undefined) return;
-      values[bucketIndex] += row.rewardUsdt;
+      values[bucketIndex] += row.rewardSuper;
     });
 
     return values.map((value) => Number(value.toFixed(3)));
@@ -1171,9 +1233,41 @@ export default function App() {
   const chartMax = Math.max(...chartValues, 1);
   const totalRewardUsdt = parseFiniteNumber(userDetails?.totalRewardUsdt);
   const totalRewardSuper = parseFiniteNumber(userDetails?.totalRewardSuper);
-  const todayRewardUsdt = chartValues[chartValues.length - 1] ?? 0;
-  const yesterdayRewardUsdt = chartValues[chartValues.length - 2] ?? 0;
-  const claimableRewardUsdt = Math.max(0, totalRewardUsdt);
+  const superPerUsdt = useMemo(() => {
+    const configuredPrice = Number(
+      swapPriceValue
+        ?? systemStatus?.exchangePriceSuperPerUsdt
+        ?? systemStatus?.swapPriceSuperPerUsdt
+        ?? 0
+    );
+    if (Number.isFinite(configuredPrice) && configuredPrice > 0) {
+      return configuredPrice;
+    }
+    if (totalRewardUsdt > 0 && totalRewardSuper > 0) {
+      return totalRewardSuper / totalRewardUsdt;
+    }
+    const ledgerTotals = rewardRows.reduce(
+      (acc, row) => ({
+        rewardUsdt: acc.rewardUsdt + row.rewardUsdt,
+        rewardSuper: acc.rewardSuper + row.rewardSuper,
+      }),
+      { rewardUsdt: 0, rewardSuper: 0 },
+    );
+    if (ledgerTotals.rewardUsdt > 0 && ledgerTotals.rewardSuper > 0) {
+      return ledgerTotals.rewardSuper / ledgerTotals.rewardUsdt;
+    }
+    return 0;
+  }, [
+    rewardRows,
+    swapPriceValue,
+    systemStatus?.exchangePriceSuperPerUsdt,
+    systemStatus?.swapPriceSuperPerUsdt,
+    totalRewardSuper,
+    totalRewardUsdt,
+  ]);
+  const todayRewardSuper = chartValues[chartValues.length - 1] ?? 0;
+  const yesterdayRewardSuper = chartValues[chartValues.length - 2] ?? 0;
+  const claimableRewardSuper = Math.max(0, totalRewardSuper);
   const configuredRewardRateUsdtPerHour = useMemo(() => {
     const profileRate = parseFiniteNumber(userDetails?.rewardRateUsdtPerHour);
     if (profileRate > 0) {
@@ -1187,11 +1281,14 @@ export default function App() {
 
     return 0.084;
   }, [systemStatus?.rewardRateUsdtPerHour, userDetails?.rewardRateUsdtPerHour]);
-  const effectiveRewardRateUsdtPerHour = useMemo(() => {
+  const configuredRewardRateSuperPerHour = configuredRewardRateUsdtPerHour * superPerUsdt;
+  const baseEffectiveRewardRateUsdtPerHour = useMemo(() => {
     const hashrateFactor = Math.max(1, deviceHashrate / DEFAULT_DEVICE_HASHRATE);
     return configuredRewardRateUsdtPerHour * hashrateFactor;
   }, [configuredRewardRateUsdtPerHour, deviceHashrate]);
-  const estimatedRewardUsdtPerDay = useMemo(() => effectiveRewardRateUsdtPerHour * 24, [effectiveRewardRateUsdtPerHour]);
+  const baseEstimatedRewardUsdtPerDay = useMemo(() => baseEffectiveRewardRateUsdtPerHour * 24, [baseEffectiveRewardRateUsdtPerHour]);
+  const baseEffectiveRewardRateSuperPerHour = baseEffectiveRewardRateUsdtPerHour * superPerUsdt;
+  const baseEstimatedRewardSuperPerDay = baseEstimatedRewardUsdtPerDay * superPerUsdt;
   const exchangeModeLabel = useMemo(() => {
     const globalAuto = Boolean(systemStatus?.exchangeAutoEnabled);
     const userAuto = Number(userDetails?.exchangeAutoEnabled ?? 1) === 1;
@@ -1201,7 +1298,7 @@ export default function App() {
     }
     return isAuto ? 'Current mode: auto' : 'Current mode: manual';
   }, [lang, systemStatus?.exchangeAutoEnabled, userDetails?.exchangeAutoEnabled]);
-  const showGasAssist = useMemo(() => parseFiniteNumber(bnbBalance) < 0.0005, [bnbBalance]);
+  const showGasAssist = useMemo(() => parseFiniteNumber(bnbBalance) < LOW_BNB_THRESHOLD, [bnbBalance]);
 
   const lockCycleDays = useMemo(() => {
     const startMs = userDetails?.contractStartAt ? new Date(userDetails.contractStartAt).getTime() : NaN;
@@ -1246,9 +1343,9 @@ export default function App() {
     return lang === 'zh' ? '合同已到期，请续期' : 'Expired, renewal required';
   }, [effectiveContractEndAt, lang, lockRemainingDays, userDetails?.contractStartAt]);
 
-  const rewardRateDailyChange = yesterdayRewardUsdt > 0
-    ? ((todayRewardUsdt - yesterdayRewardUsdt) / yesterdayRewardUsdt) * 100
-    : todayRewardUsdt > 0 ? 100 : 0;
+  const rewardRateDailyChange = yesterdayRewardSuper > 0
+    ? ((todayRewardSuper - yesterdayRewardSuper) / yesterdayRewardSuper) * 100
+    : todayRewardSuper > 0 ? 100 : 0;
 
   const curveAvg = chartValues.reduce((sum, item) => sum + item, 0) / Math.max(1, chartValues.length);
   const variance = chartValues.reduce((sum, item) => sum + (item - curveAvg) ** 2, 0) / Math.max(1, chartValues.length);
@@ -1296,12 +1393,49 @@ export default function App() {
     }
   };
 
+  const refreshMinerRegistrationStatus = async (wallet = walletAddress) => {
+    if (!wallet) {
+      setChainMinerRegistered(null);
+      return null;
+    }
+
+    try {
+      const registered = await isMinerRegisteredOnChain(wallet as Address);
+      setChainMinerRegistered(registered);
+      return registered;
+    } catch {
+      setChainMinerRegistered(null);
+      return null;
+    }
+  };
+
+  const getMinerChainSyncPendingMessage = (reason?: string) => {
+    const suffix = reason ? ` (${reason})` : '';
+    return lang === 'zh'
+      ? `后台设备已同步，但链上矿机注册尚未确认${suffix}。请稍后刷新，或检查后端 RPC/Owner Relayer 配置。`
+      : `Backend device is synced, but on-chain miner registration is not confirmed${suffix}. Refresh later or check backend RPC/Owner Relayer configuration.`;
+  };
+
+  const confirmMinerRegisteredOnChain = async (
+    device?: { oracleTxHash?: string; oracleSkippedReason?: string } | null,
+    wallet = walletAddress,
+  ) => {
+    if (device?.oracleTxHash) {
+      setChainMinerRegistered(true);
+      return true;
+    }
+    const registered = await refreshMinerRegistrationStatus(wallet);
+    return registered === true;
+  };
+
   const refreshRuntimeSnapshot = async () => {
-    const [latestStatus, latestDetails, latestStake, latestBalances] = await Promise.all([
+    const [latestStatus, latestDetails, latestStake, latestBalances, latestMinerRegistered, latestOnChainReward] = await Promise.all([
       getSystemStatus().catch(() => null),
       userId ? getUserDetails(userId).catch(() => null) : Promise.resolve(null),
       refreshStakeRequirement().catch(() => null),
       getWalletBalances().catch(() => null),
+      refreshMinerRegistrationStatus().catch(() => null),
+      getOnChainRewardSummary().catch(() => null),
     ]);
 
     if (latestStatus) setSystemStatus(latestStatus);
@@ -1311,12 +1445,18 @@ export default function App() {
       setSuperBalance(latestBalances.super);
       setUsdtBalance(latestBalances.usdt);
     }
+    if (latestOnChainReward) {
+      setOnChainRewardSummary(latestOnChainReward);
+      setSuperBalance(latestOnChainReward.superBalance);
+    }
 
     return {
       system: latestStatus ?? systemStatus,
       details: latestDetails ?? userDetails,
       stake: latestStake,
       balances: latestBalances,
+      minerRegistered: latestMinerRegistered,
+      onChainReward: latestOnChainReward,
     };
   };
 
@@ -1339,12 +1479,7 @@ export default function App() {
       && nextHasActiveContract
       && nextAcceptedContractVersion !== nextContract.version
     );
-    const nextHasRegisteredMiner = Boolean(
-      nextDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-      || nextDetails?.rewards?.length
-      || Number(nextDetails?.totalRewardUsdt ?? 0) > 0
-      || Number(nextDetails?.totalRewardSuper ?? 0) > 0
-    );
+    const nextHasRegisteredMiner = Boolean(snapshot.minerRegistered ?? minerSetupComplete);
     const nextStake = snapshot.stake;
     const minStake = Number(nextStake?.minSuperStakeForReward ?? minSuperStakeForReward);
     const currentStake = Number(nextStake?.stakedSuper ?? stakedSuper);
@@ -1388,6 +1523,68 @@ export default function App() {
       ? `SUPER 已抵押数量必须大于 ${minLabel} 才能开始收益，当前已抵押 ${stakedLabel} SUPER。`
       : `Staked SUPER must be greater than ${minLabel} to start rewards. Current stake: ${stakedLabel} SUPER.`;
   }, [hasEnoughStakedSuper, lang, minSuperStakeForReward, stakedSuper]);
+
+  const rewardAccrualBlockText = useMemo(() => {
+    if (!identityReady) return t.identityNotReady;
+    if (maintenanceEnabled) {
+      return lang === 'zh'
+        ? (systemStatus?.maintenanceMessageZh || t.maintenanceBody)
+        : (systemStatus?.maintenanceMessageEn || t.maintenanceBody);
+    }
+    if (!hasActiveContract) {
+      return contractExpired
+        ? t.contractExpiredBody
+        : (lang === 'zh' ? '请先联系客服开通月卡。' : 'Contact support to activate the monthly card first.');
+    }
+    if (contractNeedsAcceptance) {
+      return lang === 'zh' ? '请先到“我的”确认挖矿合同。' : 'Accept the mining contract in Profile first.';
+    }
+    if (!minerSetupComplete) {
+      return t.minerNotReady;
+    }
+    if (userDetails?.canMine === false && backendBlockText) {
+      return backendBlockText;
+    }
+    if (!stakeRequirementReady) {
+      return lang === 'zh'
+        ? '链上 SUPER 抵押状态暂未同步，收益暂停累计。'
+        : 'On-chain SUPER stake has not synced yet, so rewards are paused.';
+    }
+    if (!hasEnoughStakedSuper) {
+      return stakeBlockText;
+    }
+    if (userDetails?.canMine === false) {
+      return backendBlockText || t.minerNotReady;
+    }
+    if (onlineState !== t.online) {
+      return lang === 'zh' ? '设备当前离线，收益暂停累计。' : 'Device is offline, so rewards are paused.';
+    }
+    return '';
+  }, [
+    backendBlockText,
+    contractExpired,
+    contractNeedsAcceptance,
+    hasActiveContract,
+    hasEnoughStakedSuper,
+    identityReady,
+    lang,
+    maintenanceEnabled,
+    minerSetupComplete,
+    onlineState,
+    stakeBlockText,
+    stakeRequirementReady,
+    systemStatus?.maintenanceMessageEn,
+    systemStatus?.maintenanceMessageZh,
+    t.contractExpiredBody,
+    t.identityNotReady,
+    t.maintenanceBody,
+    t.minerNotReady,
+    t.online,
+    userDetails?.canMine,
+  ]);
+  const rewardAccrualReady = rewardAccrualBlockText === '';
+  const effectiveRewardRateSuperPerHour = rewardAccrualReady ? baseEffectiveRewardRateSuperPerHour : 0;
+  const estimatedRewardSuperPerDay = rewardAccrualReady ? baseEstimatedRewardSuperPerDay : 0;
 
   const toggleLang = async () => {
     const next: Lang = lang === 'zh' ? 'en' : 'zh';
@@ -1474,7 +1671,7 @@ export default function App() {
       await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
       setPendingReferralWallet(normalized);
       if (walletAddress && userId) {
-        await tryBindReferralIfNeeded(walletAddress, normalized);
+        await syncReferralStateFromChain(walletAddress, normalized);
         const details = await getUserDetails(userId);
         setUserDetails(details);
         await refreshReferralSummary(userId);
@@ -1597,6 +1794,47 @@ export default function App() {
       // ignore
     }
   };
+
+  const clearMinerReady = async () => {
+    setMinerReady(false);
+    try {
+      await AsyncStorage.removeItem(MINER_READY_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const syncBackendMinerDevice = useCallback(async (options?: { refreshBalances?: boolean }) => {
+    if (!userId || !walletAddress || !effectiveDeviceId) return null;
+
+    const device = await registerDevice({
+      userId,
+      deviceId: effectiveDeviceId,
+      hashrate: deviceHashrate,
+      wallet: walletAddress,
+    });
+
+    await reportDeviceHeartbeat({
+      deviceId: effectiveDeviceId,
+      userId,
+      wallet: walletAddress,
+      status: 'active',
+      hashrate: deviceHashrate,
+    });
+
+    const [details, balances] = await Promise.all([
+      getUserDetails(userId),
+      options?.refreshBalances ? getWalletBalances().catch(() => null) : Promise.resolve(null),
+    ]);
+    setUserDetails(details);
+    if (balances) {
+      setBnbBalance(balances.bnb);
+      setSuperBalance(balances.super);
+      setUsdtBalance(balances.usdt);
+    }
+
+    return device;
+  }, [deviceHashrate, effectiveDeviceId, userId, walletAddress]);
 
   const persistAnnouncementReads = async (ids: string[]) => {
     setAnnouncementReadIds(ids);
@@ -1803,11 +2041,12 @@ export default function App() {
   const refreshReferralMembers = async (
     nextUserId: string,
     page: number,
+    mode: 'direct' | 'team' = referralMembersMode,
   ) => {
     if (!nextUserId) return;
     setReferralMembersLoading(true);
     setReferralMembersError('');
-    const result = await getReferralMembers(nextUserId, 'direct', page, REFERRAL_PAGE_SIZE);
+    const result = await getReferralMembers(nextUserId, mode, page, REFERRAL_PAGE_SIZE);
     if (!result) {
       setReferralMembers([]);
       setReferralMembersTotal(0);
@@ -1827,13 +2066,21 @@ export default function App() {
       return false;
     }
     try {
-      await bindReferral(wallet, referralWallet);
+      const chainBinding = await bindReferralOnChain(referralWallet);
+      await bindReferral(wallet, chainBinding.inviter, chainBinding.txHash);
       setPendingReferralWallet('');
       await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
       return true;
     } catch {
       // keep local referral wallet for future retry
       return false;
+    }
+  };
+
+  const syncReferralStateFromChain = async (wallet: string, referralWalletOverride?: string): Promise<void> => {
+    const boundFromPending = await tryBindReferralIfNeeded(wallet, referralWalletOverride);
+    if (!boundFromPending) {
+      await syncReferralFromChain(wallet).catch(() => null);
     }
   };
 
@@ -1873,7 +2120,7 @@ export default function App() {
           if (existing.wallet.toLowerCase() !== address.toLowerCase()) {
             await AsyncStorage.removeItem(USER_ID_KEY).catch(() => null);
           } else {
-          await tryBindReferralIfNeeded(existing.wallet);
+          await syncReferralStateFromChain(existing.wallet);
           setUserId(existing.id);
           const details = await getUserDetails(existing.id);
           setUserDetails(details);
@@ -1893,7 +2140,7 @@ export default function App() {
       // 2. 本地无缓存或服务端已不存在，尝试按钱包地址查找
       const existingByWallet = await getUserByWallet(address);
       if (existingByWallet) {
-        await tryBindReferralIfNeeded(existingByWallet.wallet);
+        await syncReferralStateFromChain(existingByWallet.wallet);
         setUserId(existingByWallet.id);
         await AsyncStorage.setItem(USER_ID_KEY, existingByWallet.id).catch(() => null);
         const details = await getUserDetails(existingByWallet.id);
@@ -1910,7 +2157,7 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      let user = await createUser(address, pendingReferralWallet || undefined).catch(async (err) => {
+      let user = await createUser(address).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1922,8 +2169,7 @@ export default function App() {
       }
       setUserId(user.id);
       await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
-      setPendingReferralWallet('');
-      await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
+      await syncReferralStateFromChain(user.wallet);
       const details = await getUserDetails(user.id);
       setUserDetails(details);
       await refreshReferralSummary(user.id);
@@ -1975,14 +2221,103 @@ export default function App() {
   }, [serverDeviceId, deviceId]);
 
   useEffect(() => {
-    if (!serverHasRegisteredMiner) return;
-    if (!minerReady) {
-      void markMinerReady();
+    if (chainMinerRegistered === true) {
+      if (!backendDeviceKnown) return;
+      if (!hasBackendDevice) {
+        if (!identityReady || !hasActiveContract || contractNeedsAcceptance || backendDeviceRepairInFlightRef.current) {
+          return;
+        }
+
+        let cancelled = false;
+        backendDeviceRepairInFlightRef.current = true;
+
+        void (async () => {
+          try {
+            const device = await syncBackendMinerDevice();
+            if (cancelled) return;
+            if (!minerReady) {
+              await markMinerReady();
+            }
+            setChainMinerRegistered(true);
+            setStatus(device ? `${t.minerRecovered}${t.deviceRecord}${device.id}` : t.minerRecovered);
+          } catch {
+            if (!cancelled && minerReady) {
+              await clearMinerReady();
+            }
+          } finally {
+            backendDeviceRepairInFlightRef.current = false;
+          }
+        })();
+
+        return () => {
+          cancelled = true;
+        };
+      }
+      if (backendDeviceRepairInFlightRef.current) {
+        backendDeviceRepairInFlightRef.current = false;
+      }
+      if (!minerReady) {
+        void markMinerReady();
+      }
+      if (status.startsWith(t.minerRecoverFail) || status.startsWith(t.minerFail)) {
+        setStatus(t.minerRecovered);
+      }
+      return;
     }
-    if (status.startsWith(t.minerRecoverFail) || status.startsWith(t.minerFail)) {
-      setStatus(t.minerRecovered);
+
+    if (backendDeviceMissing && minerReady && !backendDeviceRepairInFlightRef.current) {
+      if (!identityReady || !hasActiveContract || contractNeedsAcceptance) {
+        return;
+      }
+      let cancelled = false;
+      backendDeviceRepairInFlightRef.current = true;
+      void (async () => {
+        try {
+          const device = await syncBackendMinerDevice();
+          if (cancelled) return;
+          const confirmed = await confirmMinerRegisteredOnChain(device);
+          if (!confirmed) {
+            await clearMinerReady();
+            setStatus(getMinerChainSyncPendingMessage(device?.oracleSkippedReason));
+            return;
+          }
+          if (!minerReady) {
+            await markMinerReady();
+          }
+          setChainMinerRegistered(true);
+          setStatus(device ? `${t.minerRecovered}${t.deviceRecord}${device.id}` : t.minerRecovered);
+        } catch {
+          if (!cancelled) {
+            await clearMinerReady();
+          }
+        } finally {
+          backendDeviceRepairInFlightRef.current = false;
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [minerReady, serverHasRegisteredMiner, status, t.minerFail, t.minerRecoverFail, t.minerRecovered]);
+
+    if (chainMinerRegistered === false && minerReady) {
+      void clearMinerReady();
+    }
+  }, [
+    backendDeviceKnown,
+    backendDeviceMissing,
+    chainMinerRegistered,
+    contractNeedsAcceptance,
+    hasActiveContract,
+    hasBackendDevice,
+    identityReady,
+    minerReady,
+    status,
+    syncBackendMinerDevice,
+    t.deviceRecord,
+    t.minerFail,
+    t.minerRecoverFail,
+    t.minerRecovered,
+  ]);
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -1992,6 +2327,14 @@ export default function App() {
   useEffect(() => {
     if (!walletAddress) return;
     void refreshStakeRequirement();
+  }, [walletAddress]);
+
+  useEffect(() => {
+    if (!walletAddress) {
+      setChainMinerRegistered(null);
+      return;
+    }
+    void refreshMinerRegistrationStatus(walletAddress);
   }, [walletAddress]);
 
   useEffect(() => {
@@ -2061,6 +2404,7 @@ export default function App() {
             getUserDetails(userId).catch(() => null),
             getWalletBalances().catch(() => null),
             refreshStakeRequirement().catch(() => null),
+            refreshMinerRegistrationStatus(walletAddress).catch(() => null),
           ]);
 
         if (cancelled) return;
@@ -2104,6 +2448,7 @@ export default function App() {
       setReferralMembers([]);
       setReferralMembersTotal(0);
       setReferralMembersPage(1);
+      setReferralMembersMode('direct');
       setReferralMembersError('');
       setExchangeOrders([]);
       return;
@@ -2170,6 +2515,7 @@ export default function App() {
         getUserDetails(userId).catch(() => null),
         getWalletBalances().catch(() => null),
         refreshStakeRequirement().catch(() => null),
+        refreshMinerRegistrationStatus(walletAddress).catch(() => null),
       ]);
 
       if (nextStatus) setSystemStatus(nextStatus);
@@ -2185,7 +2531,7 @@ export default function App() {
         refreshSwapPrice(nextStatus),
         refreshGasFundedBalance(walletAddress),
         refreshReferralSummary(userId),
-        refreshReferralMembers(userId, referralMembersPage),
+        refreshReferralMembers(userId, referralMembersPage, referralMembersMode),
         refreshExchangeOrders(true),
       ]);
 
@@ -2195,6 +2541,90 @@ export default function App() {
     } finally {
       manualRefreshInFlightRef.current = false;
       setIsManualRefreshing(false);
+    }
+  };
+
+  const handleRunSelfCheck = async () => {
+    if (selfCheckRunning) return;
+
+    setSelfCheckRunning(true);
+    setSelfCheckError('');
+
+    try {
+      const [apiHealthy, snapshot, downloadInfo] = await Promise.all([
+        pingApiHealth().catch(() => false),
+        refreshRuntimeSnapshot().catch(() => null),
+        getAppDownloadInfo().catch(() => null),
+      ]);
+
+      let latestDetails = snapshot?.details ?? userDetails;
+      let latestSystem = snapshot?.system ?? systemStatus;
+      let latestBalances = snapshot?.balances ?? {
+        bnb: bnbBalance,
+        super: superBalance,
+        usdt: usdtBalance,
+      };
+      let latestStake = snapshot?.stake;
+      let latestMinerRegistered = snapshot?.minerRegistered;
+      let latestDeviceId = latestDetails?.devices?.find((device) => device.device_id?.trim())?.device_id?.trim() || effectiveDeviceId;
+      let latestMinerRegisteredOnChain = Boolean(latestMinerRegistered ?? chainMinerRegistered);
+      let latestBackendDeviceKnown = Array.isArray(latestDetails?.devices);
+      let latestHasMatchingBackendDevice = latestBackendDeviceKnown
+        ? Boolean(latestDetails?.devices?.some((device) => device.device_id === latestDeviceId))
+        : hasBackendDevice;
+
+      if (latestMinerRegisteredOnChain && identityReady && latestBackendDeviceKnown && !latestHasMatchingBackendDevice) {
+        try {
+          await syncBackendMinerDevice({ refreshBalances: true });
+          const repairedSnapshot = await refreshRuntimeSnapshot().catch(() => null);
+          if (repairedSnapshot) {
+            latestDetails = repairedSnapshot.details ?? latestDetails;
+            latestSystem = repairedSnapshot.system ?? latestSystem;
+            latestBalances = repairedSnapshot.balances ?? latestBalances;
+            latestStake = repairedSnapshot.stake ?? latestStake;
+            latestMinerRegistered = repairedSnapshot.minerRegistered ?? latestMinerRegistered;
+            latestDeviceId = latestDetails?.devices?.find((device) => device.device_id?.trim())?.device_id?.trim() || latestDeviceId;
+          }
+        } catch {
+          // Leave the sync warning visible if the repair path cannot complete.
+        }
+      }
+
+      latestMinerRegisteredOnChain = Boolean(latestMinerRegistered ?? chainMinerRegistered);
+      latestBackendDeviceKnown = Array.isArray(latestDetails?.devices);
+      latestHasMatchingBackendDevice = latestBackendDeviceKnown
+        ? Boolean(latestDetails?.devices?.some((device) => device.device_id === latestDeviceId))
+        : hasBackendDevice;
+      const latestMinerSetupComplete = Boolean(latestMinerRegisteredOnChain && latestHasMatchingBackendDevice);
+      const report = buildSelfCheckReport({
+        apiHealthy,
+        walletAddress: serverWalletAddress,
+        userId: serverUserId,
+        deviceId: latestDeviceId,
+        minerSetupComplete: latestMinerSetupComplete,
+        minerRegisteredOnChain: latestMinerRegisteredOnChain,
+        userDetails: latestDetails,
+        systemStatus: latestSystem,
+        balances: latestBalances,
+        stakeRequirementReady: Boolean(latestStake) || stakeRequirementReady,
+        minSuperStakeForReward: latestStake?.minSuperStakeForReward ?? minSuperStakeForReward,
+        stakedSuper: latestStake?.stakedSuper ?? stakedSuper,
+        appVersion: APP_VERSION,
+        remoteAndroidVersion: downloadInfo?.android?.version ?? null,
+      });
+
+      setSelfCheckReport(report);
+      setStatus(
+        lang === 'zh'
+          ? `APP 自检完成：${report.score} 分`
+          : `App self-check complete: ${report.score}`,
+      );
+    } catch (error) {
+      const message = toFriendlyErrorMessage(error);
+      setSelfCheckError(message);
+      setStatus(lang === 'zh' ? `APP 自检失败：${message}` : `App self-check failed: ${message}`);
+    } finally {
+      setSelfCheckRunning(false);
     }
   };
 
@@ -2225,8 +2655,8 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
-    void refreshReferralMembers(userId, referralMembersPage);
-  }, [userId, referralMembersPage, t.referralMembersError]);
+    void refreshReferralMembers(userId, referralMembersPage, referralMembersMode);
+  }, [userId, referralMembersPage, referralMembersMode, t.referralMembersError]);
 
   const startMining = async () => {
     if (!identityReady) {
@@ -2248,45 +2678,39 @@ export default function App() {
     setActiveAction('mine');
     setLastTxHash('');
     const finalHashrate = deviceHashrate;
-    const snapshotDetails = snapshot.details;
-    const snapshotHasRegisteredMiner = Boolean(
-      snapshotDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-      || snapshotDetails?.rewards?.length
-      || Number(snapshotDetails?.totalRewardUsdt ?? 0) > 0
-      || Number(snapshotDetails?.totalRewardSuper ?? 0) > 0
-    );
+    const snapshotHasRegisteredMiner = Boolean(snapshot.minerRegistered ?? minerSetupComplete);
 
     try {
       if (snapshotHasRegisteredMiner) {
+        const device = await syncBackendMinerDevice({ refreshBalances: true });
+        const confirmed = snapshot.minerRegistered === true || await confirmMinerRegisteredOnChain(device);
+        if (!confirmed) {
+          await clearMinerReady();
+          setStatus(getMinerChainSyncPendingMessage(device?.oracleSkippedReason));
+          return;
+        }
         if (!minerReady) {
           await markMinerReady();
         }
-        setStatus(`${t.updateHashrate} ${t.gasAdminTopupNeeded}`);
+        setChainMinerRegistered(true);
+        setStatus(device ? `${t.minerRecovered}${t.deviceRecord}${device.id}` : t.minerRecovered);
         return;
       }
 
       setStatus(t.registerMiner);
-      const txHash = await registerMinerOnChain(finalHashrate, effectiveDeviceId);
-      const device = await registerDevice({
-        userId,
-        deviceId: effectiveDeviceId,
-        hashrate: finalHashrate,
-        wallet: walletAddress,
-      });
-
+      const device = await syncBackendMinerDevice({ refreshBalances: true });
+      const txHash = device?.oracleTxHash ?? '';
+      const confirmed = await confirmMinerRegisteredOnChain(device);
+      if (!confirmed) {
+        await clearMinerReady();
+        setLastTxHash(txHash);
+        setStatus(getMinerChainSyncPendingMessage(device?.oracleSkippedReason));
+        return;
+      }
+      setChainMinerRegistered(true);
       await markMinerReady();
       setLastTxHash(txHash);
-      setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
-      const [details, balances] = await Promise.all([
-        getUserDetails(userId),
-        getWalletBalances().catch(() => null),
-      ]);
-      setUserDetails(details);
-      if (balances) {
-        setBnbBalance(balances.bnb);
-        setSuperBalance(balances.super);
-        setUsdtBalance(balances.usdt);
-      }
+      setStatus(`${t.minerRegistered}${txHash ? shortHash(txHash) : ''}${device ? `${t.deviceRecord}${device.id}` : ''}`);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : '';
       const message = toFriendlyErrorMessage(error);
@@ -2295,14 +2719,16 @@ export default function App() {
 
       if (!minerReady && alreadyRegistered) {
         try {
-          await registerDevice({
-            userId,
-            deviceId: effectiveDeviceId,
-            hashrate: finalHashrate,
-            wallet: walletAddress,
-          });
+          const device = await syncBackendMinerDevice({ refreshBalances: true });
+          const confirmed = await confirmMinerRegisteredOnChain(device);
+          if (!confirmed) {
+            await clearMinerReady();
+            setStatus(getMinerChainSyncPendingMessage(device?.oracleSkippedReason));
+            return;
+          }
+          setChainMinerRegistered(true);
           await markMinerReady();
-          setStatus(t.minerRecovered);
+          setStatus(device ? `${t.minerRecovered}${t.deviceRecord}${device.id}` : t.minerRecovered);
         } catch (fallbackError) {
           const fallbackRaw = fallbackError instanceof Error ? fallbackError.message : '';
           const fallbackMsg = toFriendlyErrorMessage(fallbackError);
@@ -2321,15 +2747,29 @@ export default function App() {
                 setUserId(currentUser.id);
                 await AsyncStorage.setItem(USER_ID_KEY, currentUser.id).catch(() => null);
 
-                await registerDevice({
+                const device = await registerDevice({
                   userId: currentUser.id,
                   deviceId: effectiveDeviceId,
                   hashrate: finalHashrate,
                   wallet: currentWallet,
                 });
+                await reportDeviceHeartbeat({
+                  deviceId: effectiveDeviceId,
+                  userId: currentUser.id,
+                  wallet: currentWallet,
+                  status: 'active',
+                  hashrate: finalHashrate,
+                });
 
                 const details = await getUserDetails(currentUser.id);
                 setUserDetails(details);
+                const confirmed = await confirmMinerRegisteredOnChain(device, currentWallet);
+                if (!confirmed) {
+                  await clearMinerReady();
+                  setStatus(getMinerChainSyncPendingMessage(device?.oracleSkippedReason));
+                  return;
+                }
+                setChainMinerRegistered(true);
                 await markMinerReady();
                 setStatus(t.minerRecovered);
                 return;
@@ -2371,12 +2811,7 @@ export default function App() {
     }
 
     const freshDetails = snapshot.details;
-    const hasRegisteredMiner = minerReady || serverHasRegisteredMiner || Boolean(
-      freshDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-      || freshDetails?.rewards?.length
-      || Number(freshDetails?.totalRewardUsdt ?? 0) > 0
-      || Number(freshDetails?.totalRewardSuper ?? 0) > 0
-    );
+    const hasRegisteredMiner = Boolean(snapshot.minerRegistered ?? minerSetupComplete);
     if (!hasRegisteredMiner) {
       setStatus(freshDetails?.needsMinerSetup ? (lang === 'zh' ? '请完成矿机设置' : 'Please complete miner setup') : t.minerNotReady);
       return;
@@ -2396,18 +2831,33 @@ export default function App() {
     setStatus(t.claimDoing);
 
     try {
+      const claimAmountSuper = snapshot.onChainReward?.claimableSuper
+        ?? onChainRewardSummary.claimableSuper
+        ?? userDetails?.totalRewardSuper
+        ?? totalRewardSuper.toString();
+      const parsedClaimAmount = Number(claimAmountSuper);
+      if (!Number.isFinite(parsedClaimAmount) || parsedClaimAmount <= 0) {
+        setStatus(t.errNoReward);
+        return;
+      }
+
       const txHash = await claimRewardOnChain();
       setLastTxHash(txHash);
       setStatus(`${t.claimSuccess}${shortHash(txHash)}`);
-      const [details, balances] = await Promise.all([
+      const [details, balances, rewardSummary] = await Promise.all([
         getUserDetails(userId),
         getWalletBalances().catch(() => null),
+        getOnChainRewardSummary().catch(() => null),
       ]);
       setUserDetails(details);
       if (balances) {
         setBnbBalance(balances.bnb);
         setSuperBalance(balances.super);
         setUsdtBalance(balances.usdt);
+      }
+      if (rewardSummary) {
+        setOnChainRewardSummary(rewardSummary);
+        setSuperBalance(rewardSummary.superBalance);
       }
     } catch (error) {
       const message = toFriendlyErrorMessage(error);
@@ -2484,12 +2934,6 @@ export default function App() {
       return;
     }
 
-    const recipient = systemStatus?.exchangeSuperRecipientAddress;
-    if (!recipient || !isValidEvmAddress(recipient)) {
-      setStatus(lang === 'zh' ? '兑换收款地址未配置，请联系管理员。' : 'Exchange recipient is not configured. Contact support.');
-      return;
-    }
-
     setSwapConfirmVisible(true);
   };
 
@@ -2507,26 +2951,12 @@ export default function App() {
     }, 1200);
 
     try {
-      const recipient = systemStatus?.exchangeSuperRecipientAddress;
-      if (!recipient || !isValidEvmAddress(recipient)) {
-        throw new Error(lang === 'zh' ? '兑换收款地址未配置，请联系管理员。' : 'Exchange recipient is not configured. Contact support.');
-      }
-      const superTxHash = await sendSuperToAddressOnChain(recipient as Address, swapAmount);
-      const order = await createExchangeRequest({
-        userId,
-        wallet: walletAddress,
-        amountSuper: swapAmount,
-        amountUsdt: minReceiveUsdt.toFixed(6),
-        superTxHash,
-        note: `mobile_exchange_request; SUPER tx: ${superTxHash}`,
-      });
+      const txHashes = await swapSuperForUsdtOnChain(swapAmount);
+      const swapTxHash = txHashes[txHashes.length - 1] ?? txHashes[0];
       clearSwapConfirmTimer();
-      setLastTxHash(superTxHash);
+      setLastTxHash(swapTxHash);
       setSwapTxStage('success');
-      const modeHint = order.mode === 'auto'
-        ? (lang === 'zh' ? '自动处理' : 'auto')
-        : (lang === 'zh' ? '人工审核' : 'manual');
-      setStatus(`${t.swapSuccess}${order.id} (${modeHint})`);
+      setStatus(`${t.swapSuccess}${shortHash(swapTxHash)}`);
       await Promise.all([
         refreshExchangeOrders(),
         getUserDetails(userId).then(setUserDetails).catch(() => null),
@@ -2534,6 +2964,10 @@ export default function App() {
           setBnbBalance(balances.bnb);
           setSuperBalance(balances.super);
           setUsdtBalance(balances.usdt);
+        }).catch(() => null),
+        getOnChainRewardSummary().then((rewardSummary) => {
+          setOnChainRewardSummary(rewardSummary);
+          setSuperBalance(rewardSummary.superBalance);
         }).catch(() => null),
       ]);
     } catch (error) {
@@ -2642,7 +3076,6 @@ export default function App() {
   };
 
   // Whether miner is chain-registered but not yet admin-activated (contract not active yet)
-  const minerSetupComplete = minerReady || serverHasRegisteredMiner;
   const pendingActivation = identityReady && minerSetupComplete && !hasActiveContract && !contractExpired;
 
   // First available contact from systemStatus that has a link
@@ -2963,9 +3396,11 @@ export default function App() {
               identityReady={identityReady}
               isBusy={isBusy}
               contractExpired={contractExpired}
+              rewardAccrualReady={rewardAccrualReady}
+              rewardBlockText={rewardAccrualBlockText}
               totalOnlineMinutes={totalOnlineMinutes}
               monthProgressMinutes={monthProgressMinutes}
-              estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
+              estimatedRewardSuperPerDay={estimatedRewardSuperPerDay}
               lang={lang}
               guideCtaLabel={guideCtaLabel}
               guideDescription={guideDescription}
@@ -2995,15 +3430,17 @@ export default function App() {
                 marketTrend={marketTrend}
                 marketRisk={marketRisk}
                 marketHint={marketHint}
-                configuredRewardRateUsdtPerHour={configuredRewardRateUsdtPerHour}
-                effectiveRewardRateUsdtPerHour={effectiveRewardRateUsdtPerHour}
-                estimatedRewardUsdtPerDay={estimatedRewardUsdtPerDay}
-                totalRewardUsdt={totalRewardUsdt}
+                configuredRewardRateSuperPerHour={configuredRewardRateSuperPerHour}
+                effectiveRewardRateSuperPerHour={effectiveRewardRateSuperPerHour}
+                estimatedRewardSuperPerDay={estimatedRewardSuperPerDay}
                 totalRewardSuper={totalRewardSuper}
-                todayRewardUsdt={todayRewardUsdt}
-                yesterdayRewardUsdt={yesterdayRewardUsdt}
-                claimableRewardUsdt={claimableRewardUsdt}
-                rewardTokenSymbol="SUPER"
+                todayRewardSuper={todayRewardSuper}
+                yesterdayRewardSuper={yesterdayRewardSuper}
+                claimableRewardSuper={claimableRewardSuper}
+                chainClaimableSuper={onChainRewardSummary.claimableSuper}
+                chainTotalClaimedSuper={onChainRewardSummary.totalClaimedSuper}
+                superBalance={onChainRewardSummary.superBalance || superBalance}
+                convertibleSuper={onChainRewardSummary.convertibleSuper || superBalance}
                 lockCycleDays={lockCycleDays}
                 lockRemainingDays={lockRemainingDays}
                 lockStatusText={lockStatusText}
@@ -3011,6 +3448,8 @@ export default function App() {
                 monthProgressMinutes={monthProgressMinutes}
                 isBusy={isBusy}
                 identityReady={identityReady}
+                rewardAccrualReady={rewardAccrualReady}
+                rewardBlockText={rewardAccrualBlockText}
                 chartValues={chartValues}
                 chartMax={chartMax}
                 recentRewards={recentRewardItems}
@@ -3031,6 +3470,8 @@ export default function App() {
               estimatedUsdt={estimatedUsdt}
               feeUsdt={feeUsdt}
               minReceiveUsdt={minReceiveUsdt}
+              superBalance={onChainRewardSummary.superBalance || superBalance}
+              convertibleSuper={onChainRewardSummary.convertibleSuper || superBalance}
               isBusy={isBusy}
               identityReady={identityReady}
               swapTxStage={swapTxStage}
@@ -3094,12 +3535,21 @@ export default function App() {
               onImportWalletClick={() => setImportWalletVisible(true)}
               t={t}
               appVersion={APP_VERSION}
+              selfCheckReport={selfCheckReport}
+              selfCheckRunning={selfCheckRunning}
+              selfCheckError={selfCheckError}
+              onRunSelfCheck={handleRunSelfCheck}
               inviterInfo={userDetails?.parentUserId ? {
                 userId: userDetails.parentUserId,
                 wallet: inviterWalletFromServer ?? inviterUser?.wallet ?? null,
               } : null}
               onOpenReferralSetup={handleOpenReferralSetup}
               referralSummary={referralSummary}
+              referralMembersMode={referralMembersMode}
+              onReferralMembersModeChange={(mode) => {
+                setReferralMembersMode(mode);
+                setReferralMembersPage(1);
+              }}
               referralMembers={referralMembers}
               referralMembersTotal={referralMembersTotal}
               referralMembersPage={referralMembersPage}

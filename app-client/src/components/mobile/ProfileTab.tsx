@@ -1,5 +1,6 @@
 import React from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import type { SelfCheckReport } from '../../services/selfCheck';
 import { exportWalletPrivateKey } from '../../services/wallet';
 import { copyToClipboard } from '../../utils/clipboard';
 import s from './sharedStyles';
@@ -73,6 +74,16 @@ export interface ProfileTabProps {
     checkUpdateButton?: string;
     checkUpdateHint?: string;
     appVersionLabel?: string;
+    selfCheckTitle?: string;
+    selfCheckButton?: string;
+    selfCheckRunning?: string;
+    selfCheckHint?: string;
+    selfCheckScore?: string;
+    selfCheckLastAt?: string;
+    selfCheckOk?: string;
+    selfCheckWarn?: string;
+    selfCheckFail?: string;
+    selfCheckAligned?: string;
     inviterTitle?: string;
     inviterWallet?: string;
     inviterEmpty?: string;
@@ -119,6 +130,10 @@ export interface ProfileTabProps {
   };
   appVersion?: string;
   onCheckUpdate?: () => void;
+  selfCheckReport?: SelfCheckReport | null;
+  selfCheckRunning?: boolean;
+  selfCheckError?: string;
+  onRunSelfCheck?: () => void;
   inviterInfo?: {
     userId: string;
     wallet: string | null;
@@ -127,6 +142,10 @@ export interface ProfileTabProps {
   referralSummary?: {
     directCount: number;
     directAmountUsdt: string;
+    directAmountSuper?: string;
+    teamCount?: number;
+    teamAmountUsdt?: string;
+    teamAmountSuper?: string;
   } | null;
   referralMembers?: Array<{
     userId: string;
@@ -134,9 +153,12 @@ export interface ProfileTabProps {
     nickname: string | null;
     level: number;
     totalRewardUsdt: string;
+    totalRewardSuper?: string;
     contractActive: number;
     createdAt: string;
   }>;
+  referralMembersMode?: 'direct' | 'team';
+  onReferralMembersModeChange?: (mode: 'direct' | 'team') => void;
   referralMembersTotal?: number;
   referralMembersPage?: number;
   referralMembersPageSize?: number;
@@ -234,10 +256,16 @@ export default function ProfileTab({
   t,
   appVersion,
   onCheckUpdate,
+  selfCheckReport,
+  selfCheckRunning = false,
+  selfCheckError = '',
+  onRunSelfCheck,
   inviterInfo,
   onOpenReferralSetup,
   referralSummary,
   referralMembers,
+  referralMembersMode = 'direct',
+  onReferralMembersModeChange,
   referralMembersTotal = 0,
   referralMembersPage = 1,
   referralMembersPageSize = 20,
@@ -248,6 +276,12 @@ export default function ProfileTab({
   contractAgreement,
 }: ProfileTabProps) {
   const isZh = t.sendTransfer !== 'Send Transfer';
+  const rewardUnit = 'super';
+  const formatSuperAmount = (value: string | number | null | undefined) => {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed)) return '0';
+    return parsed.toLocaleString(isZh ? 'zh-CN' : 'en-US', { maximumFractionDigits: 4 });
+  };
   const copyLabel =
     copyState === 'copied' ? t.copied : copyState === 'failed' ? t.copyFailed : t.copyAddress;
   const contacts = (supportContacts ?? []).filter((item) => item.value && item.value.trim().length > 0);
@@ -298,6 +332,34 @@ export default function ProfileTab({
     : stakeEligible
       ? (isZh ? '链上抵押已满足挖矿门槛。' : 'On-chain stake meets the mining threshold.')
       : (isZh ? '链上已抵押数量不足，余额不会自动计入抵押。' : 'On-chain staked amount is below the threshold. Wallet balance does not count as stake.');
+
+  const selfCheckStatusLabel = selfCheckReport?.status === 'ok'
+    ? (t.selfCheckOk ?? (isZh ? '正常' : 'Normal'))
+    : selfCheckReport?.status === 'warn'
+      ? (t.selfCheckWarn ?? (isZh ? '需关注' : 'Needs attention'))
+      : selfCheckReport?.status === 'fail'
+        ? (t.selfCheckFail ?? (isZh ? '需处理' : 'Action required'))
+        : (isZh ? '未自检' : 'Not checked');
+  const selfCheckCheckedAt = selfCheckReport?.checkedAt
+    ? new Date(selfCheckReport.checkedAt).toLocaleString(isZh ? 'zh-CN' : 'en-US')
+    : '';
+  const selfCheckBadgeStyle = selfCheckReport?.status === 'ok'
+    ? styles.selfCheckBadgeOk
+    : selfCheckReport?.status === 'warn'
+      ? styles.selfCheckBadgeWarn
+      : selfCheckReport?.status === 'fail'
+        ? styles.selfCheckBadgeFail
+        : styles.selfCheckBadgeIdle;
+  const getSelfCheckItemBadgeStyle = (status: string) => {
+    if (status === 'ok') return styles.selfCheckItemBadgeOk;
+    if (status === 'warn') return styles.selfCheckItemBadgeWarn;
+    return styles.selfCheckItemBadgeFail;
+  };
+  const getSelfCheckItemStatusText = (status: string) => {
+    if (status === 'ok') return t.selfCheckOk ?? (isZh ? '正常' : 'Normal');
+    if (status === 'warn') return t.selfCheckWarn ?? (isZh ? '需关注' : 'Needs attention');
+    return t.selfCheckFail ?? (isZh ? '需处理' : 'Action required');
+  };
 
   const handleOpenExport = () => {
     setExportedKey(null);
@@ -427,7 +489,7 @@ export default function ProfileTab({
             </View>
             <View style={styles.balanceRow}>
               <Text style={styles.balanceLabel}>SUPER</Text>
-              <Text style={styles.balanceValue}>{superBalance}</Text>
+              <Text style={styles.balanceValue}>{superBalance} {rewardUnit}</Text>
             </View>
             <View style={styles.balanceRow}>
               <Text style={styles.balanceLabel}>USDT</Text>
@@ -448,15 +510,15 @@ export default function ProfileTab({
             <View style={styles.stakeMetricGrid}>
               <View style={styles.stakeMetric}>
                 <Text style={styles.stakeMetricLabel}>{isZh ? '钱包余额' : 'Balance'}</Text>
-                <Text style={styles.stakeMetricValue}>{superBalance} SUPER</Text>
+                <Text style={styles.stakeMetricValue}>{superBalance} {rewardUnit}</Text>
               </View>
               <View style={styles.stakeMetric}>
                 <Text style={styles.stakeMetricLabel}>{isZh ? '已抵押' : 'Staked'}</Text>
-                <Text style={styles.stakeMetricValue}>{stakedSuper} SUPER</Text>
+                <Text style={styles.stakeMetricValue}>{stakedSuper} {rewardUnit}</Text>
               </View>
               <View style={styles.stakeMetric}>
                 <Text style={styles.stakeMetricLabel}>{isZh ? '最低门槛' : 'Threshold'}</Text>
-                <Text style={styles.stakeMetricValue}>{minSuperStakeForReward} SUPER</Text>
+                <Text style={styles.stakeMetricValue}>{minSuperStakeForReward} {rewardUnit}</Text>
               </View>
             </View>
             <TextInput
@@ -491,6 +553,68 @@ export default function ProfileTab({
           </View>
         )}
       </View>
+
+      {onRunSelfCheck && (
+        <View style={s.actionCard}>
+          <View style={styles.selfCheckHeaderRow}>
+            <View style={styles.selfCheckTitleBlock}>
+              <Text style={s.sectionTitle}>{t.selfCheckTitle ?? (isZh ? 'APP 自检' : 'App Self-check')}</Text>
+              <Text style={styles.selfCheckHint}>
+                {t.selfCheckHint ?? (isZh
+                  ? '检查服务连接、身份、后台激活、在线心跳、抵押、Gas 和版本。'
+                  : 'Checks service connection, identity, admin activation, heartbeat, stake, gas, and version.')}
+              </Text>
+            </View>
+            <View style={[styles.selfCheckBadge, selfCheckBadgeStyle]}>
+              <Text style={styles.selfCheckBadgeText}>{selfCheckStatusLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.selfCheckMetaRow}>
+            <View style={styles.selfCheckScoreBox}>
+              <Text style={styles.selfCheckMetaLabel}>{t.selfCheckScore ?? (isZh ? '评分' : 'Score')}</Text>
+              <Text style={styles.selfCheckScoreValue}>{selfCheckReport ? selfCheckReport.score : '--'}</Text>
+            </View>
+            <View style={styles.selfCheckTimeBox}>
+              <Text style={styles.selfCheckMetaLabel}>{t.selfCheckLastAt ?? (isZh ? '上次自检' : 'Last checked')}</Text>
+              <Text style={styles.selfCheckTimeValue}>{selfCheckCheckedAt || '--'}</Text>
+            </View>
+          </View>
+
+          {selfCheckError ? <Text style={styles.selfCheckError}>{selfCheckError}</Text> : null}
+
+          {selfCheckReport?.items?.length ? (
+            <View style={styles.selfCheckList}>
+              {selfCheckReport.items.map((entry) => (
+                <View key={entry.id} style={styles.selfCheckItem}>
+                  <View style={styles.selfCheckItemHeader}>
+                    <Text style={styles.selfCheckItemTitle}>{isZh ? entry.labelZh : entry.labelEn}</Text>
+                    <Text style={[styles.selfCheckItemBadge, getSelfCheckItemBadgeStyle(entry.status)]}>
+                      {getSelfCheckItemStatusText(entry.status)}
+                    </Text>
+                  </View>
+                  <Text style={styles.selfCheckItemDetail}>{isZh ? entry.detailZh : entry.detailEn}</Text>
+                  {entry.adminAligned && (
+                    <Text style={styles.selfCheckAdminTag}>{t.selfCheckAligned ?? (isZh ? '已对齐 Admin' : 'Admin aligned')}</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.selfCheckBtn, selfCheckRunning && s.disabledBtn]}
+            onPress={onRunSelfCheck}
+            disabled={selfCheckRunning}
+          >
+            <Text style={styles.selfCheckBtnText}>
+              {selfCheckRunning
+                ? (t.selfCheckRunning ?? (isZh ? '自检中...' : 'Checking...'))
+                : (t.selfCheckButton ?? (isZh ? '开始自检' : 'Run Self-check'))}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={s.actionCard}>
         <Text style={s.sectionTitle}>{t.supportContactsTitle}</Text>
@@ -567,8 +691,16 @@ export default function ProfileTab({
               <Text style={styles.referralValue}>{referralSummary.directCount}</Text>
             </View>
             <View style={styles.referralItem}>
-              <Text style={styles.referralLabel}>{t.referralDirectAmount ?? 'Direct Amount (USDT)'}</Text>
-              <Text style={styles.referralValue}>{referralSummary.directAmountUsdt}</Text>
+              <Text style={styles.referralLabel}>{t.referralDirectAmount ?? 'Direct Amount (super)'}</Text>
+              <Text style={styles.referralValue}>{formatSuperAmount(referralSummary.directAmountSuper ?? referralSummary.directAmountUsdt)} {rewardUnit}</Text>
+            </View>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralTeamCount ?? 'Team Accounts'}</Text>
+              <Text style={styles.referralValue}>{referralSummary.teamCount ?? referralSummary.directCount}</Text>
+            </View>
+            <View style={styles.referralItem}>
+              <Text style={styles.referralLabel}>{t.referralTeamAmount ?? 'Team Amount (super)'}</Text>
+              <Text style={styles.referralValue}>{formatSuperAmount(referralSummary.teamAmountSuper ?? referralSummary.directAmountSuper ?? referralSummary.teamAmountUsdt ?? referralSummary.directAmountUsdt)} {rewardUnit}</Text>
             </View>
           </View>
         </View>
@@ -576,6 +708,20 @@ export default function ProfileTab({
 
       <View style={s.actionCard}>
         <Text style={s.sectionTitle}>{t.referralMembersTitle ?? 'Referral Members'}</Text>
+        <View style={styles.memberTabRow}>
+          <TouchableOpacity
+            style={[styles.memberTabBtn, referralMembersMode === 'direct' && styles.memberTabBtnActive]}
+            onPress={() => onReferralMembersModeChange?.('direct')}
+          >
+            <Text style={styles.memberTabText}>{t.referralMembersDirectTab ?? 'Direct'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.memberTabBtn, referralMembersMode === 'team' && styles.memberTabBtnActive]}
+            onPress={() => onReferralMembersModeChange?.('team')}
+          >
+            <Text style={styles.memberTabText}>{t.referralMembersTeamTab ?? 'Team'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {referralMembersLoading ? (
           <Text style={styles.contactEmpty}>{t.referralMembersLoading ?? 'Loading...'}</Text>
@@ -593,7 +739,7 @@ export default function ProfileTab({
                 </View>
                 <Text style={styles.memberWalletText}>{item.wallet}</Text>
                 <View style={styles.memberMetaRow}>
-                  <Text style={styles.memberMetaText}>{t.referralMembersReward ?? 'Reward'}: {item.totalRewardUsdt} USDT</Text>
+                  <Text style={styles.memberMetaText}>{t.referralMembersReward ?? 'Reward'}: {formatSuperAmount(item.totalRewardSuper ?? item.totalRewardUsdt)} {rewardUnit}</Text>
                   <Text style={styles.memberMetaText}>
                     {t.referralMembersContract ?? 'Contract'}: {item.contractActive ? (t.referralMembersContractActive ?? 'Active') : (t.referralMembersContractInactive ?? 'Inactive')}
                   </Text>
@@ -842,6 +988,159 @@ const styles = StyleSheet.create({
     color: '#fecdd3',
     fontSize: 12,
     lineHeight: 18,
+  },
+  selfCheckHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  selfCheckTitleBlock: {
+    flex: 1,
+    gap: 5,
+  },
+  selfCheckHint: {
+    color: '#b8dcff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selfCheckBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  selfCheckBadgeIdle: {
+    backgroundColor: '#0f213f',
+    borderColor: '#1f3b69',
+  },
+  selfCheckBadgeOk: {
+    backgroundColor: '#14532d',
+    borderColor: '#22c55e',
+  },
+  selfCheckBadgeWarn: {
+    backgroundColor: '#713f12',
+    borderColor: '#f59e0b',
+  },
+  selfCheckBadgeFail: {
+    backgroundColor: '#7f1d1d',
+    borderColor: '#ef4444',
+  },
+  selfCheckBadgeText: {
+    color: '#ecfeff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  selfCheckMetaRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  selfCheckScoreBox: {
+    width: 92,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    padding: 10,
+    gap: 4,
+  },
+  selfCheckTimeBox: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#0f213f',
+    padding: 10,
+    gap: 4,
+  },
+  selfCheckMetaLabel: {
+    color: '#93a9d1',
+    fontSize: 11,
+  },
+  selfCheckScoreValue: {
+    color: '#e8fbff',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  selfCheckTimeValue: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selfCheckError: {
+    color: '#fca5a5',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selfCheckList: {
+    gap: 8,
+  },
+  selfCheckItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1f3b69',
+    backgroundColor: '#082754',
+    padding: 10,
+    gap: 6,
+  },
+  selfCheckItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  selfCheckItemTitle: {
+    flex: 1,
+    color: '#e8fbff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  selfCheckItemBadge: {
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  selfCheckItemBadgeOk: {
+    color: '#bbf7d0',
+    backgroundColor: '#14532d',
+  },
+  selfCheckItemBadgeWarn: {
+    color: '#fde68a',
+    backgroundColor: '#713f12',
+  },
+  selfCheckItemBadgeFail: {
+    color: '#fecaca',
+    backgroundColor: '#7f1d1d',
+  },
+  selfCheckItemDetail: {
+    color: '#b8dcff',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  selfCheckAdminTag: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#1f4f96',
+    color: '#dbeafe',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  selfCheckBtn: {
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: '#22d3ee',
+  },
+  selfCheckBtnText: {
+    color: '#083344',
+    fontSize: 14,
+    fontWeight: '900',
   },
   copyBtn: {
     alignSelf: 'flex-start',
