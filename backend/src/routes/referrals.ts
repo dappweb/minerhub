@@ -1,5 +1,6 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { readOnChainReferrer, verifyReferralBindingOnChain } from "../lib/referralChain";
 import { badRequest, json, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -13,8 +14,10 @@ type ReferralSummary = {
   wallet: string;
   directCount: number;
   directAmountUsdt: string;
+  directAmountSuper: string;
   teamCount: number;
   teamAmountUsdt: string;
+  teamAmountSuper: string;
 };
 
 type ReferralMemberItem = {
@@ -23,6 +26,7 @@ type ReferralMemberItem = {
   nickname: string | null;
   level: number;
   totalRewardUsdt: string;
+  totalRewardSuper: string;
   contractActive: number;
   createdAt: string;
 };
@@ -67,16 +71,63 @@ async function ensureReferrerUser(env: Env, walletRaw: string): Promise<UserRow>
   return { id, wallet };
 }
 
+async function getReferralDescendantChain(env: Env, userId: string): Promise<Array<{ id: string; depthFromInvitee: number }>> {
+  const descendants = await env.DB.prepare(
+    `SELECT descendant_user_id, depth FROM referral_closure WHERE ancestor_user_id = ?`
+  )
+    .bind(userId)
+    .all<{ descendant_user_id: string; depth: number }>();
+
+  return [
+    { id: userId, depthFromInvitee: 0 },
+    ...(descendants.results ?? []).map((row) => ({
+      id: row.descendant_user_id,
+      depthFromInvitee: Number(row.depth ?? 0),
+    })),
+  ];
+}
+
+async function detachReferralSubtree(env: Env, inviteeId: string): Promise<void> {
+  const oldAncestors = await env.DB.prepare(
+    `SELECT ancestor_user_id FROM referral_closure WHERE descendant_user_id = ?`
+  )
+    .bind(inviteeId)
+    .all<{ ancestor_user_id: string }>();
+  const descendantChain = await getReferralDescendantChain(env, inviteeId);
+
+  for (const ancestor of oldAncestors.results ?? []) {
+    for (const descendant of descendantChain) {
+      await env.DB.prepare(
+        `DELETE FROM referral_closure WHERE ancestor_user_id = ? AND descendant_user_id = ?`
+      )
+        .bind(ancestor.ancestor_user_id, descendant.id)
+        .run();
+    }
+  }
+
+  await env.DB.prepare("DELETE FROM referral_edges WHERE invitee_user_id = ?")
+    .bind(inviteeId)
+    .run();
+}
+
 async function bindReferral(env: Env, invitee: UserRow, inviter: UserRow): Promise<void> {
   if (invitee.id === inviter.id) {
     throw new Error("Cannot bind self referral");
   }
 
-  const existingInvitee = await env.DB.prepare("SELECT id FROM referral_edges WHERE invitee_user_id = ?")
+  const existingInvitee = await env.DB.prepare(
+    "SELECT id, inviter_user_id, inviter_wallet FROM referral_edges WHERE invitee_user_id = ?"
+  )
     .bind(invitee.id)
-    .first<{ id: string }>();
+    .first<{ id: string; inviter_user_id: string; inviter_wallet: string }>();
   if (existingInvitee) {
-    throw new Error("Referral already bound");
+    if (
+      existingInvitee.inviter_user_id === inviter.id ||
+      existingInvitee.inviter_wallet.toLowerCase() === inviter.wallet.toLowerCase()
+    ) {
+      return;
+    }
+    await detachReferralSubtree(env, invitee.id);
   }
 
   const cycle = await env.DB.prepare(
@@ -105,21 +156,12 @@ async function bindReferral(env: Env, invitee: UserRow, inviter: UserRow): Promi
     .bind(inviter.id)
     .all<{ ancestor_user_id: string; depth: number }>();
 
-  const descendants = await env.DB.prepare(
-    `SELECT descendant_user_id, depth FROM referral_closure WHERE ancestor_user_id = ?`
-  )
-    .bind(invitee.id)
-    .all<{ descendant_user_id: string; depth: number }>();
-
   const ancestorChain: Array<{ id: string; depthToInviter: number }> = [
     { id: inviter.id, depthToInviter: 0 },
     ...(ancestors.results ?? []).map((row) => ({ id: row.ancestor_user_id, depthToInviter: Number(row.depth ?? 0) })),
   ];
 
-  const descendantChain: Array<{ id: string; depthFromInvitee: number }> = [
-    { id: invitee.id, depthFromInvitee: 0 },
-    ...(descendants.results ?? []).map((row) => ({ id: row.descendant_user_id, depthFromInvitee: Number(row.depth ?? 0) })),
-  ];
+  const descendantChain = await getReferralDescendantChain(env, invitee.id);
 
   for (const ancestor of ancestorChain) {
     for (const descendant of descendantChain) {
@@ -136,7 +178,7 @@ async function bindReferral(env: Env, invitee: UserRow, inviter: UserRow): Promi
   await env.DB.prepare(
     `UPDATE customer_profiles
      SET parent_user_id = ?, updated_at = ?
-     WHERE user_id = ? AND (parent_user_id IS NULL OR TRIM(parent_user_id) = '')`
+     WHERE user_id = ?`
   )
     .bind(inviter.id, now, invitee.id)
     .run();
@@ -146,32 +188,36 @@ async function getReferralSummary(env: Env, user: UserRow): Promise<ReferralSumm
   const direct = await env.DB.prepare(
     `SELECT
       COUNT(*) AS direct_count,
-      COALESCE(SUM(COALESCE(cp.total_reward_usdt, '0')), 0) AS direct_amount
+      COALESCE(SUM(COALESCE(cp.total_reward_usdt, '0')), 0) AS direct_amount_usdt,
+      COALESCE(SUM(COALESCE(cp.total_reward_super, '0')), 0) AS direct_amount_super
      FROM referral_closure rc
      LEFT JOIN customer_profiles cp ON cp.user_id = rc.descendant_user_id
      WHERE rc.ancestor_user_id = ? AND rc.depth = 1`
   )
     .bind(user.id)
-    .first<{ direct_count: number; direct_amount: string }>();
+    .first<{ direct_count: number; direct_amount_usdt: string; direct_amount_super: string }>();
 
   const team = await env.DB.prepare(
     `SELECT
       COUNT(*) AS team_count,
-      COALESCE(SUM(COALESCE(cp.total_reward_usdt, '0')), 0) AS team_amount
+      COALESCE(SUM(COALESCE(cp.total_reward_usdt, '0')), 0) AS team_amount_usdt,
+      COALESCE(SUM(COALESCE(cp.total_reward_super, '0')), 0) AS team_amount_super
      FROM referral_closure rc
      LEFT JOIN customer_profiles cp ON cp.user_id = rc.descendant_user_id
      WHERE rc.ancestor_user_id = ? AND rc.depth >= 1`
   )
     .bind(user.id)
-    .first<{ team_count: number; team_amount: string }>();
+    .first<{ team_count: number; team_amount_usdt: string; team_amount_super: string }>();
 
   return {
     userId: user.id,
     wallet: user.wallet,
     directCount: Number(direct?.direct_count ?? 0),
-    directAmountUsdt: String(direct?.direct_amount ?? "0"),
+    directAmountUsdt: String(direct?.direct_amount_usdt ?? "0"),
+    directAmountSuper: String(direct?.direct_amount_super ?? "0"),
     teamCount: Number(team?.team_count ?? 0),
-    teamAmountUsdt: String(team?.team_amount ?? "0"),
+    teamAmountUsdt: String(team?.team_amount_usdt ?? "0"),
+    teamAmountSuper: String(team?.team_amount_super ?? "0"),
   };
 }
 
@@ -199,6 +245,7 @@ async function getReferralMembers(
       cp.nickname AS nickname,
       rc.depth AS level,
       COALESCE(cp.total_reward_usdt, '0') AS totalRewardUsdt,
+      COALESCE(cp.total_reward_super, '0') AS totalRewardSuper,
       COALESCE(cp.contract_active, 0) AS contractActive,
       u.created_at AS createdAt
      FROM referral_closure rc
@@ -231,6 +278,8 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     const body = (await request.json().catch(() => null)) as {
       wallet?: string;
       referralWallet?: string;
+      referralTxHash?: string;
+      txHash?: string;
     } | null;
 
     if (!body?.wallet || !body.referralWallet) {
@@ -244,9 +293,21 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     const invitee = await findUserByWallet(env, body.wallet);
     if (!invitee) return json({ error: "Invitee user not found" }, 404);
 
+    let chainBinding: { invitee: string; inviter: string; txHash: string | null };
+    try {
+      chainBinding = await verifyReferralBindingOnChain(env, {
+        inviteeWallet: body.wallet,
+        inviterWallet: body.referralWallet,
+        txHash: body.referralTxHash ?? body.txHash ?? null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Referral chain verification failed";
+      return badRequest(message);
+    }
+
     let inviter: UserRow;
     try {
-      inviter = await ensureReferrerUser(env, body.referralWallet);
+      inviter = await ensureReferrerUser(env, chainBinding.inviter);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid referral wallet";
       return badRequest(message);
@@ -269,7 +330,69 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     }
 
     const summary = await getReferralSummary(env, inviter);
-    return json({ ok: true, inviterUserId: inviter.id, inviteeUserId: invitee.id, inviterSummary: summary });
+    return json({
+      ok: true,
+      onChain: true,
+      referralTxHash: chainBinding.txHash,
+      inviterUserId: inviter.id,
+      inviteeUserId: invitee.id,
+      inviterSummary: summary,
+    });
+  }
+
+  if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "sync") {
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { wallet?: string } | null;
+    if (!body?.wallet) {
+      return badRequest("wallet is required");
+    }
+
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch: body wallet must match signed wallet");
+    }
+
+    const invitee = await findUserByWallet(env, body.wallet);
+    if (!invitee) return json({ error: "Invitee user not found" }, 404);
+
+    let inviterWallet: string | null;
+    try {
+      inviterWallet = await readOnChainReferrer(env, body.wallet);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Referral chain sync failed";
+      return json({ error: message }, 503);
+    }
+
+    if (!inviterWallet) {
+      return json({ ok: true, onChain: true, bound: false, inviteeUserId: invitee.id });
+    }
+
+    const inviter = await ensureReferrerUser(env, inviterWallet);
+    try {
+      await bindReferral(env, invitee, inviter);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "sync referral failed";
+      if (message.includes("self")) {
+        return badRequest("Cannot bind self referral");
+      }
+      if (message.includes("cycle")) {
+        return badRequest("Referral cycle detected");
+      }
+      return json({ error: message }, 500);
+    }
+
+    const summary = await getReferralSummary(env, inviter);
+    return json({
+      ok: true,
+      onChain: true,
+      bound: true,
+      inviterUserId: inviter.id,
+      inviteeUserId: invitee.id,
+      inviterSummary: summary,
+    });
   }
 
   if (request.method === "GET" && pathParts.length === 2 && pathParts[1] === "summary") {

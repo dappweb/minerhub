@@ -24,6 +24,8 @@ export interface ExchangeTabProps {
   estimatedUsdt: number;
   feeUsdt: number;
   minReceiveUsdt: number;
+  superBalance: string;
+  convertibleSuper: string;
   isBusy: boolean;
   identityReady: boolean;
   swapTxStage: SwapTxStage;
@@ -74,6 +76,8 @@ export default function ExchangeTab({
   estimatedUsdt,
   feeUsdt,
   minReceiveUsdt,
+  superBalance,
+  convertibleSuper,
   isBusy,
   identityReady,
   swapTxStage,
@@ -90,6 +94,12 @@ export default function ExchangeTab({
   t,
 }: ExchangeTabProps) {
   const isZh = lang === 'zh';
+  const formatSuper = (value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return '0.0000';
+    return parsed.toLocaleString(isZh ? 'zh-CN' : 'en-US', { maximumFractionDigits: 4 });
+  };
+  const rewardUnit = 'super';
 
   const formatMode = (mode: string) => {
     if (mode === 'auto') return isZh ? '自动处理' : 'Auto';
@@ -119,8 +129,8 @@ export default function ExchangeTab({
   };
 
   const modeDetail = exchangeModeLabel.includes('自动')
-    ? (isZh ? '预计 1-5 分钟完成，结果会进入订单列表。' : 'Usually completes in 1-5 minutes and then appears in your orders.')
-    : (isZh ? '需等待人工审核，请留意订单状态更新。' : 'Manual review is required. Please follow the order status updates.');
+    ? (isZh ? '链上确认后由 MiningPool 直接兑出 USDT。' : 'After confirmation, USDT is paid directly from MiningPool.')
+    : (isZh ? '链上确认后由 MiningPool 直接兑出 USDT。' : 'After confirmation, USDT is paid directly from MiningPool.');
 
   return (
     <>
@@ -149,6 +159,14 @@ export default function ExchangeTab({
           <Text style={styles.quoteTitle}>确认到账信息</Text>
           <Text style={styles.modeHint}>{exchangeModeLabel}</Text>
           <Text style={styles.modeDetail}>{modeDetail}</Text>
+          <View style={s.rowBetween}>
+            <Text style={styles.previewLabel}>{isZh ? '余额' : 'Balance'}</Text>
+            <Text style={styles.previewValue}>{formatSuper(superBalance)} {rewardUnit}</Text>
+          </View>
+          <View style={s.rowBetween}>
+            <Text style={styles.previewLabel}>{isZh ? '可兑换余额' : 'Exchangeable balance'}</Text>
+            <Text style={styles.previewValue}>{formatSuper(convertibleSuper)} {rewardUnit}</Text>
+          </View>
           <View style={s.rowBetween}>
             <Text style={styles.previewLabel}>{t.quote}</Text>
             <Text style={styles.previewValue}>{estimatedUsdt.toFixed(6)} USDT</Text>
