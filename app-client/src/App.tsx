@@ -45,6 +45,7 @@ import {
     markAnnouncementRead as markAnnouncementReadApi,
     registerDevice,
     reportDeviceHeartbeat,
+    syncReferralFromChain,
     type AnnouncementDto,
     type ExchangeRequestDto,
     type ReferralMemberDto,
@@ -52,9 +53,11 @@ import {
 } from './services/api';
 import {
     claimRewardOnChain,
+    bindReferralOnChain,
     getMiningStakeRequirement,
     getWalletAddress,
     getWalletBalances,
+    isMinerRegisteredOnChain,
     registerMinerOnChain,
     sendNativeTokenOnChain,
     sendSuperToAddressOnChain,
@@ -68,7 +71,7 @@ import {
 } from './services/wallet';
 import { copyToClipboard } from './utils/clipboard';
 
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 
 type Lang = 'en' | 'zh';
 
@@ -86,12 +89,47 @@ const ONBOARDING_COMPLETED_KEY = 'coinplanet.onboarding_completed_v1';
 const ONBOARDING_MINIMIZED_KEY = 'coinplanet.onboarding_minimized_v1';
 const ANNOUNCEMENT_READ_KEY = 'coinplanet.announcements.read_ids';
 const REFERRAL_WALLET_KEY = 'coinplanet.referral_wallet';
+const REFERRAL_BIND_STATE_KEY = 'coinplanet.referral_bind_state_v1';
 const SWAP_FEE_RATE = 0.005;
 const SWAP_SLIPPAGE_RATE = 0.008;
 const INIT_RETRY_DELAY_MS = 8_000;
 const DEFAULT_DEVICE_HASHRATE = 1000;
 const DEFAULT_CONTRACT_TERM_DAYS = 1095;
 const REFERRAL_PAGE_SIZE = 20;
+
+type ReferralBindStatus = 'idle' | 'tx_submitted' | 'backend_pending' | 'failed';
+
+type ReferralBindState = {
+  referralWallet: string;
+  txHash?: string | null;
+  status: ReferralBindStatus;
+  lastError?: string | null;
+  retryCount?: number;
+  updatedAt: string;
+};
+
+function parseReferralBindState(raw: string | null): ReferralBindState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ReferralBindState>;
+    const referralWallet = typeof parsed.referralWallet === 'string' ? parsed.referralWallet.trim().toLowerCase() : '';
+    if (!referralWallet) return null;
+    const status: ReferralBindStatus =
+      parsed.status === 'tx_submitted' || parsed.status === 'backend_pending' || parsed.status === 'failed'
+        ? parsed.status
+        : 'idle';
+    return {
+      referralWallet,
+      txHash: typeof parsed.txHash === 'string' && parsed.txHash.trim() ? parsed.txHash.trim() : null,
+      status,
+      lastError: typeof parsed.lastError === 'string' ? parsed.lastError : null,
+      retryCount: Number.isFinite(Number(parsed.retryCount)) ? Number(parsed.retryCount) : 0,
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
 
 const translations = {
   en: {
@@ -250,6 +288,7 @@ const translations = {
     errMinerNotActive: 'Miner is not active.',
     errInvalidHashrate: 'Invalid hashrate value.',
     errDeviceIdRequired: 'Device ID is required.',
+    errDeviceAlreadyBound: 'This device is already bound to another account. Please contact support to unbind or migrate it.',
     errNetwork: 'Network is unstable. Please retry in a moment.',
     errMaintenance: 'System is under maintenance. Please try again later.',
     errAuthInvalid: 'Authentication expired or invalid. Please re-sync identity and retry.',
@@ -488,6 +527,7 @@ const translations = {
     errMinerNotActive: '矿机未激活。',
     errInvalidHashrate: '算力参数不合法。',
     errDeviceIdRequired: '缺少设备 ID。',
+    errDeviceAlreadyBound: '该设备已绑定其他账号，请联系客服解绑或迁移。',
     errNetwork: '网络不稳定，请稍后重试。',
     errMaintenance: '系统维护中，请稍后再试。',
     errAuthInvalid: '鉴权失效或登录状态过期，请重新同步身份后重试。',
@@ -727,6 +767,7 @@ export default function App() {
   const [transferAmount, setTransferAmount] = useState<string>('0.001');
   const [deviceId, setDeviceId] = useState<string>('');
   const [minerReady, setMinerReady] = useState<boolean>(false);
+  const [chainMinerRegistered, setChainMinerRegistered] = useState<boolean | null>(null);
   const [status, setStatus] = useState<string>('');
   const [lastTxHash, setLastTxHash] = useState<string>('');
   const [activeAction, setActiveAction] = useState<ActionType>('');
@@ -762,6 +803,7 @@ export default function App() {
   const [onboardingMinimized, setOnboardingMinimized] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [pendingReferralWallet, setPendingReferralWallet] = useState<string>('');
+  const [referralBindState, setReferralBindState] = useState<ReferralBindState | null>(null);
   const [inviterUser, setInviterUser] = useState<Awaited<ReturnType<typeof getUser>> | null>(null);
   const [referralSummary, setReferralSummary] = useState<ReferralSummaryDto | null>(null);
   const [referralMembers, setReferralMembers] = useState<ReferralMemberDto[]>([]);
@@ -803,10 +845,7 @@ export default function App() {
     || Number(userDetails?.totalRewardUsdt ?? 0) > 0
     || Number(userDetails?.totalRewardSuper ?? 0) > 0
   );
-  const serverHasRegisteredMiner = Boolean(
-    userDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-    || serverHasRewardActivity
-  );
+  const serverHasRegisteredMiner = Boolean(chainMinerRegistered === true || (chainMinerRegistered !== false && serverHasRewardActivity));
   const effectiveDeviceId = (serverDeviceId || deviceId).trim();
   const identityReady = Boolean(walletAddress && userId && effectiveDeviceId);
   const inviterWalletFromServer = (typeof userDetails?.inviterWallet === 'string' && userDetails.inviterWallet.trim())
@@ -905,6 +944,14 @@ export default function App() {
     }
     if (msg.includes('user rejected') || msg.includes('rejected') || msg.includes('denied')) {
       return t.errRejected;
+    }
+    if (
+      msg.includes('device_already_bound')
+      || msg.includes('uq_devices_device_id_normalized')
+      || (msg.includes('sqlite_constraint') && msg.includes('device'))
+      || (msg.includes('unique constraint failed') && msg.includes('device'))
+    ) {
+      return t.errDeviceAlreadyBound;
     }
 
     // Map well-known contract revert reasons to friendly localized text.
@@ -1441,11 +1488,24 @@ export default function App() {
     const check = async () => {
       try {
         const done = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        const savedReferralState = parseReferralBindState(await AsyncStorage.getItem(REFERRAL_BIND_STATE_KEY));
         const savedReferralWallet = await AsyncStorage.getItem(REFERRAL_WALLET_KEY);
         const savedMinimized = await AsyncStorage.getItem(ONBOARDING_MINIMIZED_KEY);
         if (cancelled) return;
-        if (savedReferralWallet) {
-          setPendingReferralWallet(savedReferralWallet);
+        if (savedReferralState) {
+          setReferralBindState(savedReferralState);
+          setPendingReferralWallet(savedReferralState.referralWallet);
+        } else if (savedReferralWallet) {
+          const normalized = savedReferralWallet.trim().toLowerCase();
+          setPendingReferralWallet(normalized);
+          setReferralBindState({
+            referralWallet: normalized,
+            status: 'idle',
+            txHash: null,
+            lastError: null,
+            retryCount: 0,
+            updatedAt: new Date().toISOString(),
+          });
         }
         setOnboardingMinimized(savedMinimized === '1');
         setOnboardingChecked(true);
@@ -1471,10 +1531,16 @@ export default function App() {
 
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, new Date().toISOString());
       await AsyncStorage.removeItem(ONBOARDING_MINIMIZED_KEY);
-      await AsyncStorage.setItem(REFERRAL_WALLET_KEY, normalized);
-      setPendingReferralWallet(normalized);
+      await persistReferralBindState({
+        referralWallet: normalized,
+        status: 'idle',
+        txHash: null,
+        lastError: null,
+        retryCount: 0,
+        updatedAt: new Date().toISOString(),
+      });
       if (walletAddress && userId) {
-        await tryBindReferralIfNeeded(walletAddress, normalized);
+        await syncReferralStateFromChain(walletAddress, normalized);
         const details = await getUserDetails(userId);
         setUserDetails(details);
         await refreshReferralSummary(userId);
@@ -1596,6 +1662,29 @@ export default function App() {
     } catch {
       // ignore
     }
+  };
+
+  const clearMinerReady = async () => {
+    setMinerReady(false);
+    try {
+      await AsyncStorage.removeItem(MINER_READY_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const persistReferralBindState = async (next: ReferralBindState | null) => {
+    setReferralBindState(next);
+    if (next) {
+      setPendingReferralWallet(next.referralWallet);
+      await AsyncStorage.setItem(REFERRAL_BIND_STATE_KEY, JSON.stringify(next)).catch(() => null);
+      await AsyncStorage.setItem(REFERRAL_WALLET_KEY, next.referralWallet).catch(() => null);
+      return;
+    }
+
+    setPendingReferralWallet('');
+    await AsyncStorage.removeItem(REFERRAL_BIND_STATE_KEY).catch(() => null);
+    await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
   };
 
   const persistAnnouncementReads = async (ids: string[]) => {
@@ -1826,14 +1915,64 @@ export default function App() {
     if (referralWallet === wallet.toLowerCase()) {
       return false;
     }
+
+    const now = new Date().toISOString();
+    const currentState = referralBindState?.referralWallet === referralWallet ? referralBindState : null;
+    const nextRetryCount = Number(currentState?.retryCount ?? 0) + 1;
+
     try {
-      await bindReferral(wallet, referralWallet);
-      setPendingReferralWallet('');
-      await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
+      let referralTxHash = currentState?.txHash ?? null;
+      let inviterWallet = referralWallet;
+
+      if (!referralTxHash) {
+        const chainBinding = await bindReferralOnChain(referralWallet);
+        referralTxHash = chainBinding.txHash;
+        inviterWallet = chainBinding.inviter;
+        await persistReferralBindState({
+          referralWallet,
+          txHash: referralTxHash,
+          status: 'tx_submitted',
+          lastError: null,
+          retryCount: nextRetryCount,
+          updatedAt: now,
+        });
+      }
+
+      const result = await bindReferral(wallet, inviterWallet, referralTxHash);
+      if (result.pending) {
+        await persistReferralBindState({
+          referralWallet,
+          txHash: result.referralTxHash ?? referralTxHash,
+          status: 'backend_pending',
+          lastError: result.message ?? null,
+          retryCount: nextRetryCount,
+          updatedAt: new Date().toISOString(),
+        });
+        return false;
+      }
+
+      await persistReferralBindState(null);
       return true;
-    } catch {
-      // keep local referral wallet for future retry
+    } catch (error) {
+      await persistReferralBindState({
+        referralWallet,
+        txHash: currentState?.txHash ?? null,
+        status: 'failed',
+        lastError: error instanceof Error ? error.message : String(error),
+        retryCount: nextRetryCount,
+        updatedAt: new Date().toISOString(),
+      });
       return false;
+    }
+  };
+
+  const syncReferralStateFromChain = async (wallet: string, referralWalletOverride?: string): Promise<void> => {
+    const boundFromPending = await tryBindReferralIfNeeded(wallet, referralWalletOverride);
+    if (boundFromPending) return;
+
+    const result = await syncReferralFromChain(wallet).catch(() => null);
+    if (result?.bound) {
+      await persistReferralBindState(null);
     }
   };
 
@@ -1873,7 +2012,7 @@ export default function App() {
           if (existing.wallet.toLowerCase() !== address.toLowerCase()) {
             await AsyncStorage.removeItem(USER_ID_KEY).catch(() => null);
           } else {
-          await tryBindReferralIfNeeded(existing.wallet);
+          await syncReferralStateFromChain(existing.wallet);
           setUserId(existing.id);
           const details = await getUserDetails(existing.id);
           setUserDetails(details);
@@ -1893,7 +2032,7 @@ export default function App() {
       // 2. 本地无缓存或服务端已不存在，尝试按钱包地址查找
       const existingByWallet = await getUserByWallet(address);
       if (existingByWallet) {
-        await tryBindReferralIfNeeded(existingByWallet.wallet);
+        await syncReferralStateFromChain(existingByWallet.wallet);
         setUserId(existingByWallet.id);
         await AsyncStorage.setItem(USER_ID_KEY, existingByWallet.id).catch(() => null);
         const details = await getUserDetails(existingByWallet.id);
@@ -1910,7 +2049,7 @@ export default function App() {
       }
 
       // 3. 全新用户，注册并持久化（并发/重试场景下做幂等兜底）
-      let user = await createUser(address, pendingReferralWallet || undefined).catch(async (err) => {
+      let user = await createUser(address).catch(async (err) => {
         const message = err instanceof Error ? err.message.toLowerCase() : '';
         if (message.includes('unique') || message.includes('already exists') || message.includes('constraint')) {
           return await getUserByWallet(address);
@@ -1922,8 +2061,7 @@ export default function App() {
       }
       setUserId(user.id);
       await AsyncStorage.setItem(USER_ID_KEY, user.id).catch(() => null);
-      setPendingReferralWallet('');
-      await AsyncStorage.removeItem(REFERRAL_WALLET_KEY).catch(() => null);
+      await syncReferralStateFromChain(user.wallet);
       const details = await getUserDetails(user.id);
       setUserDetails(details);
       await refreshReferralSummary(user.id);
@@ -1983,6 +2121,32 @@ export default function App() {
       setStatus(t.minerRecovered);
     }
   }, [minerReady, serverHasRegisteredMiner, status, t.minerFail, t.minerRecoverFail, t.minerRecovered]);
+
+  useEffect(() => {
+    if (!walletAddress) {
+      setChainMinerRegistered(null);
+      return;
+    }
+
+    let cancelled = false;
+    void isMinerRegisteredOnChain()
+      .then((registered) => {
+        if (cancelled) return;
+        setChainMinerRegistered(registered);
+        if (registered) {
+          if (!minerReady) void markMinerReady();
+          return;
+        }
+        if (minerReady) void clearMinerReady();
+      })
+      .catch(() => {
+        if (!cancelled) setChainMinerRegistered(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, minerReady]);
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -2249,23 +2413,41 @@ export default function App() {
     setLastTxHash('');
     const finalHashrate = deviceHashrate;
     const snapshotDetails = snapshot.details;
-    const snapshotHasRegisteredMiner = Boolean(
-      snapshotDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-      || snapshotDetails?.rewards?.length
-      || Number(snapshotDetails?.totalRewardUsdt ?? 0) > 0
-      || Number(snapshotDetails?.totalRewardSuper ?? 0) > 0
-    );
+    const snapshotHasServerMinerRecord = Boolean(snapshotDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim()));
 
     try {
-      if (snapshotHasRegisteredMiner) {
-        if (!minerReady) {
-          await markMinerReady();
+      setStatus(lang === 'zh' ? '正在确认链上矿机注册状态...' : 'Checking on-chain miner registration...');
+      const alreadyRegisteredOnChain = await isMinerRegisteredOnChain();
+      setChainMinerRegistered(alreadyRegisteredOnChain);
+
+      if (alreadyRegisteredOnChain) {
+        const device = await registerDevice({
+          userId,
+          deviceId: effectiveDeviceId,
+          hashrate: finalHashrate,
+          wallet: walletAddress,
+        });
+        await markMinerReady();
+        setStatus(`${t.minerRecovered} ${t.deviceRecord}${device.id}`);
+        const [details, balances] = await Promise.all([
+          getUserDetails(userId),
+          getWalletBalances().catch(() => null),
+        ]);
+        setUserDetails(details);
+        if (balances) {
+          setBnbBalance(balances.bnb);
+          setSuperBalance(balances.super);
+          setUsdtBalance(balances.usdt);
         }
-        setStatus(`${t.updateHashrate} ${t.gasAdminTopupNeeded}`);
         return;
       }
 
-      setStatus(t.registerMiner);
+      if (minerReady) {
+        await clearMinerReady();
+      }
+      setStatus(snapshotHasServerMinerRecord
+        ? (lang === 'zh' ? '后台已有设备记录，正在补发链上矿机注册...' : 'Backend device exists; retrying on-chain miner registration...')
+        : t.registerMiner);
       const txHash = await registerMinerOnChain(finalHashrate, effectiveDeviceId);
       const device = await registerDevice({
         userId,
@@ -2275,6 +2457,7 @@ export default function App() {
       });
 
       await markMinerReady();
+      setChainMinerRegistered(true);
       setLastTxHash(txHash);
       setStatus(`${t.minerRegistered}${shortHash(txHash)}${t.deviceRecord}${device.id}`);
       const [details, balances] = await Promise.all([
@@ -2293,7 +2476,7 @@ export default function App() {
       const combined = `${rawMessage} ${message}`.toLowerCase();
       const alreadyRegistered = combined.includes('already') && combined.includes('register');
 
-      if (!minerReady && alreadyRegistered) {
+      if (alreadyRegistered) {
         try {
           await registerDevice({
             userId,
@@ -2302,6 +2485,7 @@ export default function App() {
             wallet: walletAddress,
           });
           await markMinerReady();
+          setChainMinerRegistered(true);
           setStatus(t.minerRecovered);
         } catch (fallbackError) {
           const fallbackRaw = fallbackError instanceof Error ? fallbackError.message : '';
@@ -2371,9 +2555,8 @@ export default function App() {
     }
 
     const freshDetails = snapshot.details;
-    const hasRegisteredMiner = minerReady || serverHasRegisteredMiner || Boolean(
-      freshDetails?.devices?.some((item) => typeof item?.device_id === 'string' && item.device_id.trim())
-      || freshDetails?.rewards?.length
+    const hasRegisteredMiner = minerReady || serverHasRegisteredMiner || chainMinerRegistered === true || Boolean(
+      freshDetails?.rewards?.length
       || Number(freshDetails?.totalRewardUsdt ?? 0) > 0
       || Number(freshDetails?.totalRewardSuper ?? 0) > 0
     );
@@ -2642,7 +2825,7 @@ export default function App() {
   };
 
   // Whether miner is chain-registered but not yet admin-activated (contract not active yet)
-  const minerSetupComplete = minerReady || serverHasRegisteredMiner;
+  const minerSetupComplete = Boolean((chainMinerRegistered === false ? false : minerReady) || serverHasRegisteredMiner);
   const pendingActivation = identityReady && minerSetupComplete && !hasActiveContract && !contractExpired;
 
   // First available contact from systemStatus that has a link

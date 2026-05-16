@@ -1,6 +1,6 @@
 {
   "network": "bsc",
-  "timestamp": "2026-05-02T14:43:27.308Z",
+  "timestamp": "2026-05-16T03:31:18.145Z",
   "deployer": "0x7123A25d205190e6844712Cb18e39d6DD5316143",
   "contracts": {
     "SUPER": "0x22E76deCF9c558c8716FF7c20C0813429cBe805B",
@@ -9,7 +9,7 @@
   },
   "implementations": {
     "SUPER": "0x7619e912FeC7c37346D36A6c313C91e28c9ED360",
-    "MiningPool": "0xF07897385B134A46226846B2deAdB003e199d32f"
+    "MiningPool": "0x029E859E80b8B639912FAE797167f2f9b4763ab0"
   },
   "initialization": {
     "chainAdmins": [

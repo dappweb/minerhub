@@ -33,6 +33,7 @@ export interface MiningPoolInterface extends Interface {
       | "adjustDifficulty"
       | "adminCount"
       | "availableRewardBalance"
+      | "bindReferral"
       | "calculatePendingReward"
       | "claimCooldown"
       | "claimReward"
@@ -54,6 +55,7 @@ export interface MiningPoolInterface extends Interface {
       | "miners"
       | "owner"
       | "proxiableUUID"
+      | "referrerOf"
       | "registerMiner"
       | "registeredMiners"
       | "removeAdmin"
@@ -91,6 +93,7 @@ export interface MiningPoolInterface extends Interface {
       | "MinerEligibilityUpdated"
       | "MinerRegistered"
       | "OwnershipTransferred"
+      | "ReferralBound"
       | "RewardClaimed"
       | "RewardParametersUpdated"
       | "SuperStaked"
@@ -126,6 +129,10 @@ export interface MiningPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "availableRewardBalance",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "bindReferral",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "calculatePendingReward",
@@ -201,6 +208,10 @@ export interface MiningPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "proxiableUUID",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "referrerOf",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "registerMiner",
@@ -310,6 +321,10 @@ export interface MiningPoolInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "bindReferral",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "calculatePendingReward",
     data: BytesLike
   ): Result;
@@ -378,6 +393,7 @@ export interface MiningPoolInterface extends Interface {
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "referrerOf", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "registerMiner",
     data: BytesLike
@@ -626,6 +642,19 @@ export namespace OwnershipTransferredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace ReferralBoundEvent {
+  export type InputTuple = [invitee: AddressLike, inviter: AddressLike];
+  export type OutputTuple = [invitee: string, inviter: string];
+  export interface OutputObject {
+    invitee: string;
+    inviter: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace RewardClaimedEvent {
   export type InputTuple = [miner: AddressLike, amount: BigNumberish];
   export type OutputTuple = [miner: string, amount: bigint];
@@ -789,6 +818,12 @@ export interface MiningPool extends BaseContract {
 
   availableRewardBalance: TypedContractMethod<[], [bigint], "view">;
 
+  bindReferral: TypedContractMethod<
+    [_inviter: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   calculatePendingReward: TypedContractMethod<
     [_miner: AddressLike],
     [bigint],
@@ -896,6 +931,8 @@ export interface MiningPool extends BaseContract {
   owner: TypedContractMethod<[], [string], "view">;
 
   proxiableUUID: TypedContractMethod<[], [string], "view">;
+
+  referrerOf: TypedContractMethod<[arg0: AddressLike], [string], "view">;
 
   registerMiner: TypedContractMethod<
     [_hashrate: BigNumberish, _deviceId: string],
@@ -1009,6 +1046,9 @@ export interface MiningPool extends BaseContract {
     nameOrSignature: "availableRewardBalance"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "bindReferral"
+  ): TypedContractMethod<[_inviter: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "calculatePendingReward"
   ): TypedContractMethod<[_miner: AddressLike], [bigint], "view">;
   getFunction(
@@ -1121,6 +1161,9 @@ export interface MiningPool extends BaseContract {
   getFunction(
     nameOrSignature: "proxiableUUID"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "referrerOf"
+  ): TypedContractMethod<[arg0: AddressLike], [string], "view">;
   getFunction(
     nameOrSignature: "registerMiner"
   ): TypedContractMethod<
@@ -1284,6 +1327,13 @@ export interface MiningPool extends BaseContract {
     OwnershipTransferredEvent.InputTuple,
     OwnershipTransferredEvent.OutputTuple,
     OwnershipTransferredEvent.OutputObject
+  >;
+  getEvent(
+    key: "ReferralBound"
+  ): TypedContractEvent<
+    ReferralBoundEvent.InputTuple,
+    ReferralBoundEvent.OutputTuple,
+    ReferralBoundEvent.OutputObject
   >;
   getEvent(
     key: "RewardClaimed"
@@ -1459,6 +1509,17 @@ export interface MiningPool extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
+    >;
+
+    "ReferralBound(address,address)": TypedContractEvent<
+      ReferralBoundEvent.InputTuple,
+      ReferralBoundEvent.OutputTuple,
+      ReferralBoundEvent.OutputObject
+    >;
+    ReferralBound: TypedContractEvent<
+      ReferralBoundEvent.InputTuple,
+      ReferralBoundEvent.OutputTuple,
+      ReferralBoundEvent.OutputObject
     >;
 
     "RewardClaimed(address,uint256)": TypedContractEvent<

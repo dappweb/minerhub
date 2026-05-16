@@ -62,6 +62,9 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
     address[] public minerAddresses;
     uint256 public totalEligibleHashrate;
     uint256 public totalStakedSuper;
+
+    // Referral binding state. Appended for UUPS storage compatibility.
+    mapping(address => address) public referrerOf;
     
     // 浜嬩欢
     event MinerRegistered(address indexed miner, uint256 hashrate);
@@ -75,6 +78,7 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
     event SuperStaked(address indexed miner, uint256 amount, uint256 totalStakedByMiner);
     event SuperUnstaked(address indexed miner, uint256 amount, uint256 totalStakedByMiner);
     event MinerEligibilityUpdated(address indexed miner, bool eligible, uint256 hashrate);
+    event ReferralBound(address indexed invitee, address indexed inviter);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -123,6 +127,15 @@ contract MiningPool is Initializable, AdminAccess, ReentrancyGuardUpgradeable, U
         _refreshEligibility(msg.sender);
         
         emit MinerRegistered(msg.sender, _hashrate);
+    }
+
+    function bindReferral(address _inviter) external {
+        require(_inviter != address(0), "Invalid inviter");
+        require(_inviter != msg.sender, "Cannot bind self referral");
+        require(referrerOf[msg.sender] == address(0), "Referral already bound");
+
+        referrerOf[msg.sender] = _inviter;
+        emit ReferralBound(msg.sender, _inviter);
     }
     
     /**

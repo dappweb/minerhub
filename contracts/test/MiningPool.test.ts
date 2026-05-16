@@ -96,6 +96,23 @@ describe("Coin Planet Contracts", () => {
         .to.be.revertedWith("Invalid hashrate");
     });
 
+    it("Should bind referral once", async () => {
+      await expect(miningPool.connect(miner1).bindReferral(miner2.address))
+        .to.emit(miningPool, "ReferralBound")
+        .withArgs(miner1.address, miner2.address);
+
+      expect(await miningPool.referrerOf(miner1.address)).to.equal(miner2.address);
+      await expect(miningPool.connect(miner1).bindReferral(deployer.address))
+        .to.be.revertedWith("Referral already bound");
+    });
+
+    it("Should reject invalid referral binding", async () => {
+      await expect(miningPool.connect(miner1).bindReferral(ethers.ZeroAddress))
+        .to.be.revertedWith("Invalid inviter");
+      await expect(miningPool.connect(miner1).bindReferral(miner1.address))
+        .to.be.revertedWith("Cannot bind self referral");
+    });
+
     it("Should allow admins to run owner operations", async () => {
       await miningPool.addAdmin(admin1.address);
 

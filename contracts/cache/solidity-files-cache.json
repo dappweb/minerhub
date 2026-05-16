@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Administrator\\Documents\\GitHub\\minerhub\\contracts\\contracts\\MiningPool.sol": {
-      "lastModificationDate": 1778675491160,
-      "contentHash": "31f9cb50d34df6a73a2dfa451bff323d",
+      "lastModificationDate": 1778901205400,
+      "contentHash": "33b0a5f7824df5186074c26bba471208",
       "sourceName": "contracts/MiningPool.sol",
       "solcConfig": {
         "version": "0.8.24",
