@@ -423,9 +423,15 @@ export function isExchangeOrderPendingStatus(status: string): boolean {
 
 export type BindReferralResultDto = {
   ok: boolean;
-  inviterUserId: string;
+  pending?: boolean;
+  onChain?: boolean;
+  bound?: boolean;
+  referralTxHash?: string | null;
+  jobId?: string;
+  message?: string;
+  inviterUserId?: string;
   inviteeUserId: string;
-  inviterSummary: ReferralSummaryDto;
+  inviterSummary?: ReferralSummaryDto;
 };
 
 export async function createUser(wallet: string, referralWallet?: string): Promise<UserDto> {
@@ -435,10 +441,17 @@ export async function createUser(wallet: string, referralWallet?: string): Promi
   });
 }
 
-export async function bindReferral(wallet: string, referralWallet: string): Promise<BindReferralResultDto> {
+export async function bindReferral(wallet: string, referralWallet: string, referralTxHash?: string | null): Promise<BindReferralResultDto> {
   return signedRequest<BindReferralResultDto>('/api/referrals/bind', 'POST', {
     wallet,
     referralWallet,
+    ...(referralTxHash ? { referralTxHash } : {}),
+  });
+}
+
+export async function syncReferralFromChain(wallet: string): Promise<BindReferralResultDto> {
+  return signedRequest<BindReferralResultDto>('/api/referrals/sync', 'POST', {
+    wallet,
   });
 }
 

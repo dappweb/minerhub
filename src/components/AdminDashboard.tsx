@@ -259,6 +259,13 @@ type CustomerItem = {
   bnbBalance?: string | null;
   usdtBalance?: string | null;
   superBalance?: string | null;
+  devices?: Array<{
+    id: string;
+    deviceId: string;
+    machineCode?: string | null;
+    hashrate: number;
+    status: string;
+  }>;
 };
 
 type CustomerRecommendation = {
@@ -1308,6 +1315,13 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
   useEffect(() => {
     if (section !== 'customers') return;
     void loadDevices();
+    const timer = window.setInterval(() => {
+      void loadDevices();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
   }, [section, loadDevices]);
 
   useEffect(() => {
@@ -2425,9 +2439,17 @@ export default function AdminDashboard({ fullScreen = false, adminWallet, signMe
         customer.nickname ?? '',
         customer.email ?? '',
         customer.machineCode ?? '',
+        ...(customer.devices ?? []).flatMap((device) => [
+          device.id,
+          device.deviceId,
+          device.machineCode ?? '',
+          device.status,
+        ]),
       ].join(' ').toLowerCase();
 
       if (keyword && !haystack.includes(keyword)) return false;
+
+      if (keyword) return true;
 
       if (customerStatusFilter === 'needs_action') return entry.score >= 35;
       if (customerStatusFilter === 'expired') return entry.expired;

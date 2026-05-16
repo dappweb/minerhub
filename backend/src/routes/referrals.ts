@@ -1,5 +1,7 @@
 import { extractAndVerifyAuth } from "../lib/auth";
 import { createId, nowIso } from "../lib/id";
+import { createReferralBindJob, markReferralBindJobBound } from "../lib/referralJobs";
+import { readOnChainReferrer, verifyReferralBindingOnChain } from "../lib/referralChain";
 import { badRequest, json, unauthorized } from "../lib/response";
 import type { Env } from "../types/env";
 
@@ -45,6 +47,18 @@ async function findUserById(env: Env, userId: string): Promise<UserRow | null> {
     .first<UserRow>();
 }
 
+function isPendingChainVerificationError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("transaction not found") ||
+    lower.includes("all bsc rpc upstreams failed") ||
+    lower.includes("timeout") ||
+    lower.includes("network") ||
+    lower.includes("rate limit") ||
+    lower.includes("temporarily")
+  );
+}
+
 async function ensureReferrerUser(env: Env, walletRaw: string): Promise<UserRow> {
   const wallet = walletRaw.trim().toLowerCase();
   if (!wallet) {
@@ -67,15 +81,40 @@ async function ensureReferrerUser(env: Env, walletRaw: string): Promise<UserRow>
   return { id, wallet };
 }
 
+async function ensureCustomerProfile(env: Env, userId: string): Promise<void> {
+  const now = nowIso();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO customer_profiles (
+      user_id, contract_term_days, monthly_card_days, contract_active,
+      activation_status, exchange_auto_enabled, payout_wallets_json,
+      reward_rate_usdt_per_hour, total_reward_usdt, total_reward_super,
+      online_status, created_at, updated_at
+    ) VALUES (?, 1095, 30, 0, 'pending', 1, '[]', '0.084', '0', '0', 'offline', ?, ?)`
+  )
+    .bind(userId, now, now)
+    .run();
+}
+
 async function bindReferral(env: Env, invitee: UserRow, inviter: UserRow): Promise<void> {
   if (invitee.id === inviter.id) {
     throw new Error("Cannot bind self referral");
   }
 
-  const existingInvitee = await env.DB.prepare("SELECT id FROM referral_edges WHERE invitee_user_id = ?")
+  await ensureCustomerProfile(env, invitee.id);
+  await ensureCustomerProfile(env, inviter.id);
+
+  const existingInvitee = await env.DB.prepare(
+    "SELECT id, inviter_user_id, inviter_wallet FROM referral_edges WHERE invitee_user_id = ?"
+  )
     .bind(invitee.id)
-    .first<{ id: string }>();
+    .first<{ id: string; inviter_user_id: string; inviter_wallet: string }>();
   if (existingInvitee) {
+    if (
+      existingInvitee.inviter_user_id === inviter.id ||
+      existingInvitee.inviter_wallet.toLowerCase() === inviter.wallet.toLowerCase()
+    ) {
+      return;
+    }
     throw new Error("Referral already bound");
   }
 
@@ -231,6 +270,8 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     const body = (await request.json().catch(() => null)) as {
       wallet?: string;
       referralWallet?: string;
+      referralTxHash?: string;
+      txHash?: string;
     } | null;
 
     if (!body?.wallet || !body.referralWallet) {
@@ -244,9 +285,40 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     const invitee = await findUserByWallet(env, body.wallet);
     if (!invitee) return json({ error: "Invitee user not found" }, 404);
 
+    const requestedTxHash = body.referralTxHash ?? body.txHash ?? null;
+    let chainBinding: { invitee: string; inviter: string; txHash: string | null };
+    try {
+      chainBinding = await verifyReferralBindingOnChain(env, {
+        inviteeWallet: body.wallet,
+        inviterWallet: body.referralWallet,
+        txHash: requestedTxHash,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Referral chain verification failed";
+      if (requestedTxHash && isPendingChainVerificationError(message)) {
+        const job = await createReferralBindJob(env, {
+          inviteeWallet: body.wallet,
+          inviterWallet: body.referralWallet,
+          txHash: requestedTxHash,
+          error: message,
+        });
+
+        return json({
+          ok: true,
+          pending: true,
+          onChain: false,
+          referralTxHash: requestedTxHash,
+          inviteeUserId: invitee.id,
+          jobId: job.id,
+          message,
+        }, 202);
+      }
+      return badRequest(message);
+    }
+
     let inviter: UserRow;
     try {
-      inviter = await ensureReferrerUser(env, body.referralWallet);
+      inviter = await ensureReferrerUser(env, chainBinding.inviter);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid referral wallet";
       return badRequest(message);
@@ -254,6 +326,7 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
 
     try {
       await bindReferral(env, invitee, inviter);
+      await markReferralBindJobBound(env, invitee.wallet, inviter.wallet);
     } catch (error) {
       const message = error instanceof Error ? error.message : "bind referral failed";
       if (message.includes("already bound")) {
@@ -269,7 +342,71 @@ export async function handleReferrals(request: Request, env: Env, pathParts: str
     }
 
     const summary = await getReferralSummary(env, inviter);
-    return json({ ok: true, inviterUserId: inviter.id, inviteeUserId: invitee.id, inviterSummary: summary });
+    return json({
+      ok: true,
+      onChain: true,
+      bound: true,
+      referralTxHash: chainBinding.txHash,
+      inviterUserId: inviter.id,
+      inviteeUserId: invitee.id,
+      inviterSummary: summary,
+    });
+  }
+
+  if (request.method === "POST" && pathParts.length === 1 && pathParts[0] === "sync") {
+    const authResult = await extractAndVerifyAuth(request, env);
+    if (!authResult.valid) {
+      return unauthorized(authResult.error || "Signature verification failed");
+    }
+
+    const body = (await request.json().catch(() => null)) as { wallet?: string } | null;
+    if (!body?.wallet) {
+      return badRequest("wallet is required");
+    }
+
+    if (body.wallet.toLowerCase() !== authResult.wallet?.toLowerCase()) {
+      return badRequest("Wallet mismatch: body wallet must match signed wallet");
+    }
+
+    const invitee = await findUserByWallet(env, body.wallet);
+    if (!invitee) return json({ error: "Invitee user not found" }, 404);
+
+    let inviterWallet: string | null;
+    try {
+      inviterWallet = await readOnChainReferrer(env, body.wallet);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Referral chain sync failed";
+      return json({ error: message }, 503);
+    }
+
+    if (!inviterWallet) {
+      return json({ ok: true, onChain: true, bound: false, inviteeUserId: invitee.id });
+    }
+
+    const inviter = await ensureReferrerUser(env, inviterWallet);
+    try {
+      await bindReferral(env, invitee, inviter);
+      await markReferralBindJobBound(env, invitee.wallet, inviter.wallet);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "sync referral failed";
+      if (message.includes("self")) {
+        return badRequest("Cannot bind self referral");
+      }
+      if (message.includes("cycle")) {
+        return badRequest("Referral cycle detected");
+      }
+      return json({ error: message }, 500);
+    }
+
+    const summary = await getReferralSummary(env, inviter);
+    return json({
+      ok: true,
+      onChain: true,
+      bound: true,
+      inviterUserId: inviter.id,
+      inviteeUserId: invitee.id,
+      inviterSummary: summary,
+    });
   }
 
   if (request.method === "GET" && pathParts.length === 2 && pathParts[1] === "summary") {

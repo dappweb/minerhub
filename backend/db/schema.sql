@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   device_id TEXT NOT NULL,
+  device_id_normalized TEXT,
   hashrate INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL,
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS devices (
 
 CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet);
 CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_devices_device_id_normalized
+  ON devices(lower(trim(device_id)));
 
 CREATE TABLE IF NOT EXISTS gas_quotes (
   id TEXT PRIMARY KEY,
@@ -460,3 +463,18 @@ CREATE INDEX IF NOT EXISTS idx_referral_edges_inviter ON referral_edges(inviter_
 CREATE INDEX IF NOT EXISTS idx_referral_edges_invitee ON referral_edges(invitee_user_id);
 CREATE INDEX IF NOT EXISTS idx_referral_closure_ancestor ON referral_closure(ancestor_user_id, depth);
 CREATE INDEX IF NOT EXISTS idx_referral_closure_descendant ON referral_closure(descendant_user_id);
+
+CREATE TABLE IF NOT EXISTS referral_bind_jobs (
+  id TEXT PRIMARY KEY,
+  invitee_wallet TEXT NOT NULL,
+  inviter_wallet TEXT NOT NULL,
+  tx_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  last_error TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(invitee_wallet, inviter_wallet)
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_bind_jobs_status ON referral_bind_jobs(status, updated_at);

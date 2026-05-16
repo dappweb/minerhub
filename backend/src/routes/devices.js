@@ -7,6 +7,49 @@ import { getRewardRateUsdtPerHour, isMaintenanceEnabled, readSystemStatus } from
 const HEARTBEAT_CONTINUITY_MS = 90_000;
 const MAX_HEARTBEAT_REWARD_MS = 90_000;
 let heartbeatColumnsReady = false;
+function normalizeDeviceId(value) {
+    return value.trim().toLowerCase();
+}
+async function hasDeviceIdNormalizedColumn(env) {
+    const info = await env.DB.prepare("PRAGMA table_info(devices)").all();
+    return (info.results ?? []).some((row) => row.name === "device_id_normalized");
+}
+async function readDeviceByNormalizedId(env, normalizedDeviceId, hasNormalizedColumn) {
+    const statement = hasNormalizedColumn
+        ? `SELECT id, user_id, device_id, device_id_normalized, hashrate, status
+       FROM devices
+       WHERE device_id_normalized = ? OR lower(trim(device_id)) = ?
+       LIMIT 1`
+        : `SELECT id, user_id, device_id, hashrate, status
+       FROM devices
+       WHERE lower(trim(device_id)) = ?
+       LIMIT 1`;
+    const bound = hasNormalizedColumn
+        ? env.DB.prepare(statement).bind(normalizedDeviceId, normalizedDeviceId)
+        : env.DB.prepare(statement).bind(normalizedDeviceId);
+    return await bound.first();
+}
+function isDeviceUniqueConstraintError(error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (message.includes("uq_devices_device_id_normalized")
+        || (message.includes("unique constraint failed") && message.includes("device"))
+        || (message.includes("sqlite_constraint") && message.includes("device")));
+}
+async function updateDeviceRegistration(env, device, deviceId, deviceIdNormalized, hasNormalizedColumn, hashrate, updatedAt) {
+    const statement = hasNormalizedColumn
+        ? device.status === "inactive"
+            ? "UPDATE devices SET device_id = ?, device_id_normalized = ?, hashrate = ?, updated_at = ? WHERE id = ?"
+            : "UPDATE devices SET device_id = ?, device_id_normalized = ?, hashrate = ?, status = 'active', updated_at = ? WHERE id = ?"
+        : device.status === "inactive"
+            ? "UPDATE devices SET device_id = ?, hashrate = ?, updated_at = ? WHERE id = ?"
+            : "UPDATE devices SET device_id = ?, hashrate = ?, status = 'active', updated_at = ? WHERE id = ?";
+    const values = hasNormalizedColumn
+        ? [deviceId, deviceIdNormalized, hashrate, updatedAt, device.id]
+        : [deviceId, hashrate, updatedAt, device.id];
+    await env.DB.prepare(statement)
+        .bind(...values)
+        .run();
+}
 function isContractExpiredAt(profile, referenceMs) {
     const endTimes = [profile.contract_end_at, profile.monthly_card_end_at]
         .map((value) => (value ? new Date(value).getTime() : NaN))
@@ -345,25 +388,50 @@ export async function handleDevices(request, env, pathParts) {
         }
         const id = createId("dev");
         const now = nowIso();
-        const existingDevice = await env.DB.prepare("SELECT id, status FROM devices WHERE user_id = ? AND device_id = ?")
-            .bind(body.userId, body.deviceId)
-            .first();
+        const deviceId = body.deviceId.trim();
+        const deviceIdNormalized = normalizeDeviceId(deviceId);
+        const hasNormalizedColumn = await hasDeviceIdNormalizedColumn(env);
+        const existingDevice = await readDeviceByNormalizedId(env, deviceIdNormalized, hasNormalizedColumn);
+        if (existingDevice && existingDevice.user_id !== body.userId) {
+            return json({
+                error: "device_already_bound",
+                message: "该设备已绑定其他账号，请联系客服解绑或迁移",
+            }, 409);
+        }
         if (existingDevice) {
-            await env.DB.prepare(existingDevice.status === "inactive"
-                ? "UPDATE devices SET hashrate = ?, updated_at = ? WHERE id = ?"
-                : "UPDATE devices SET hashrate = ?, status = 'active', updated_at = ? WHERE id = ?")
-                .bind(body.hashrate, now, existingDevice.id)
-                .run();
+            await updateDeviceRegistration(env, existingDevice, deviceId, deviceIdNormalized, hasNormalizedColumn, body.hashrate, now);
         }
         else {
-            await env.DB.prepare("INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                .bind(id, body.userId, body.deviceId, body.hashrate, "active", now, now)
-                .run();
+            const statement = hasNormalizedColumn
+                ? "INSERT INTO devices (id, user_id, device_id, device_id_normalized, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                : "INSERT INTO devices (id, user_id, device_id, hashrate, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            const values = hasNormalizedColumn
+                ? [id, body.userId, deviceId, deviceIdNormalized, body.hashrate, "active", now, now]
+                : [id, body.userId, deviceId, body.hashrate, "active", now, now];
+            try {
+                await env.DB.prepare(statement)
+                    .bind(...values)
+                    .run();
+            }
+            catch (error) {
+                if (!isDeviceUniqueConstraintError(error))
+                    throw error;
+                const conflictedDevice = await readDeviceByNormalizedId(env, deviceIdNormalized, hasNormalizedColumn);
+                if (conflictedDevice && conflictedDevice.user_id === body.userId) {
+                    await updateDeviceRegistration(env, conflictedDevice, deviceId, deviceIdNormalized, hasNormalizedColumn, body.hashrate, now);
+                }
+                else {
+                    return json({
+                        error: "device_already_bound",
+                        message: "该设备已绑定其他账号，请联系客服解绑或迁移",
+                    }, 409);
+                }
+            }
         }
         await ensureCustomerProfile(env, body.userId);
         await env.DB.prepare(`INSERT INTO device_status_history (id, device_id, user_id, status, hashrate, observed_at, note)
        VALUES (?, ?, ?, 'active', ?, ?, ?)`)
-            .bind(createId("dst"), body.deviceId, body.userId, body.hashrate, now, "register")
+            .bind(createId("dst"), deviceId, body.userId, body.hashrate, now, "register")
             .run();
         await env.DB.prepare(`UPDATE customer_profiles SET last_seen_at = ?, online_status = 'online', updated_at = ? WHERE user_id = ?`)
             .bind(now, now, body.userId)
@@ -371,7 +439,7 @@ export async function handleDevices(request, env, pathParts) {
         return json({
             id: existingDevice?.id ?? id,
             userId: body.userId,
-            deviceId: body.deviceId,
+            deviceId,
             hashrate: body.hashrate,
             status: existingDevice?.status === "inactive" ? "inactive" : "active",
         }, existingDevice ? 200 : 201);

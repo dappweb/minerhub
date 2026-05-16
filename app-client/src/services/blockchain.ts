@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import { createPublicClient, createWalletClient, defineChain, fallback, formatUnits, http, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, fallback, formatUnits, getAddress, http, parseUnits, zeroAddress } from 'viem';
 import { getWalletAddress as getLocalWalletAddress, getWalletAccount } from './wallet';
 
 const chainId = Number(process.env.EXPO_PUBLIC_CHAIN_ID ?? '56');
@@ -217,6 +217,13 @@ const minerAbi = [
   },
   {
     type: 'function',
+    name: 'registeredMiners',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'stakedSuper',
     stateMutability: 'view',
     inputs: [{ name: '', type: 'address' }],
@@ -228,6 +235,20 @@ const minerAbi = [
     stateMutability: 'view',
     inputs: [{ name: '_miner', type: 'address' }],
     outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'referrerOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'invitee', type: 'address' }],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'bindReferral',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_inviter', type: 'address' }],
+    outputs: [],
   },
   {
     type: 'function',
@@ -247,6 +268,99 @@ const minerAbi = [
 
 export async function getWalletAddress(): Promise<Address> {
   return getLocalWalletAddress();
+}
+
+export async function isMinerRegisteredOnChain(wallet?: Address): Promise<boolean> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const { account, publicClient } = await getWalletClients();
+  const miner = wallet ?? account.address;
+  const registered = await publicClient.readContract({
+    address: pool,
+    abi: minerAbi,
+    functionName: 'registeredMiners',
+    args: [miner],
+  });
+
+  return Boolean(registered);
+}
+
+function normalizeAddressInput(value: string, label: string): Address {
+  try {
+    return getAddress(value.trim()) as Address;
+  } catch {
+    throw new Error(`Invalid ${label} address.`);
+  }
+}
+
+function isZeroAddress(value: string): boolean {
+  return value.toLowerCase() === zeroAddress.toLowerCase();
+}
+
+export async function getReferrerOnChain(wallet?: Address): Promise<Address | null> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const { account, publicClient } = await getWalletClients();
+  const invitee = wallet ?? account.address;
+  const referrer = await publicClient.readContract({
+    address: pool,
+    abi: minerAbi,
+    functionName: 'referrerOf',
+    args: [invitee],
+  });
+
+  const referrerAddress = String(referrer);
+  return isZeroAddress(referrerAddress) ? null : getAddress(referrerAddress) as Address;
+}
+
+export async function bindReferralOnChain(referralWallet: string): Promise<{
+  inviter: Address;
+  txHash: Hex | null;
+  alreadyBound: boolean;
+}> {
+  const pool = requireAddress(miningPoolAddress, 'EXPO_PUBLIC_MINING_POOL_ADDRESS');
+  const inviter = normalizeAddressInput(referralWallet, 'referral wallet');
+
+  try {
+    const { account, walletClient, publicClient } = await getWalletClients();
+    if (inviter.toLowerCase() === account.address.toLowerCase()) {
+      throw new Error('Cannot bind self referral.');
+    }
+
+    const existing = await publicClient.readContract({
+      address: pool,
+      abi: minerAbi,
+      functionName: 'referrerOf',
+      args: [account.address],
+    });
+    const existingAddress = String(existing);
+    if (!isZeroAddress(existingAddress)) {
+      if (existingAddress.toLowerCase() === inviter.toLowerCase()) {
+        return { inviter: getAddress(existingAddress) as Address, txHash: null, alreadyBound: true };
+      }
+      throw new Error('Referral already bound to another wallet on-chain.');
+    }
+
+    const args = [inviter] as const;
+    const gas = await assertSufficientBalanceForContractTx({
+      account: account.address,
+      contractAddress: pool,
+      abi: minerAbi,
+      functionName: 'bindReferral',
+      args,
+    });
+    const hash = await walletClient.writeContract({
+      account,
+      address: pool,
+      abi: minerAbi,
+      functionName: 'bindReferral',
+      args,
+      gas,
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash: hash as Hex, timeout: 120_000 });
+    return { inviter, txHash: hash as Hex, alreadyBound: false };
+  } catch (error) {
+    throw normalizeTxError(error);
+  }
 }
 
 export async function registerMinerOnChain(hashrate: number, deviceId: string) {

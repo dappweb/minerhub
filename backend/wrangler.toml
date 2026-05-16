@@ -10,11 +10,11 @@ custom_domain = true
 [[d1_databases]]
 binding = "DB"
 database_name = "coin-planet-db"
-database_id = "6fc57b82-5ec7-47b8-a3a4-4b00a23af41c"
+database_id = "425fe8b8-efc5-437e-9f02-e59ca13e8867"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "06f37a3d8b3d4880ad2061397ddd4bb2"
+id = "dcc7dd1b7a0240efbcbc09fd31740391"
 
 [vars]
 CHAIN_ID = "56"

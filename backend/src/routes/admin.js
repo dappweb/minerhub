@@ -592,9 +592,9 @@ async function readAdminDevices(env, url, scopeUserId, allowedTypes) {
     const clauses = [];
     const params = [];
     if (search) {
-        clauses.push("(LOWER(d.device_id) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ? OR LOWER(d.id) LIKE ?)");
+        clauses.push("(LOWER(d.device_id) LIKE ? OR LOWER(COALESCE(cp.machine_code, '')) LIKE ? OR LOWER(u.wallet) LIKE ? OR LOWER(u.id) LIKE ? OR LOWER(COALESCE(cp.nickname, '')) LIKE ? OR LOWER(d.id) LIKE ?)");
         const like = `%${search}%`;
-        params.push(like, like, like, like);
+        params.push(like, like, like, like, like, like);
     }
     if (status === "online") {
         clauses.push("COALESCE(cp.online_status, 'offline') = 'online'");
